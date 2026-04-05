@@ -189,6 +189,10 @@ PARSER_REGISTRY['hematology'] = templateFallbackStrategy(parseHematologyPdfEntri
   templatePrefix: 'hematology',
 });
 
+PARSER_REGISTRY['ent'] = templateFallbackStrategy(parseEntPdfEntries, {
+  templatePrefix: 'ent',
+});
+
 PARSER_REGISTRY['picu'] = function(text, deptKey) {
   const picuParsed = parsePicuPdfEntries(text, deptKey);
   if (picuParsed._templateDetected) {

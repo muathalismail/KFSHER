@@ -1952,6 +1952,25 @@ async function parseUploadedPdf(file, deptKey) {
     } catch (err) {
       console.warn('[HOSPITALIST] Server schedule extraction failed, using client-side:', err.message);
     }
+  } else if (deptKey === 'ent') {
+    try {
+      const buffer = await file.arrayBuffer();
+      const b64 = btoa(new Uint8Array(buffer).reduce((s, b) => s + String.fromCharCode(b), ''));
+      const resp = await fetch('/api/extract-table', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pdf_base64: b64, specialty: 'ent' }),
+      });
+      if (resp.ok) {
+        const result = await resp.json();
+        if (result.rows && result.rows.length) {
+          console.log(`[ENT] Server extracted ${result.rows.length} schedule rows`);
+          parseEntPdfEntries._serverSchedule = result.rows;
+        }
+      }
+    } catch (err) {
+      console.warn('[ENT] Server schedule extraction failed, using client-side:', err.message);
+    }
   } else if (deptKey === 'radiology_oncall') {
     // Use server-side pdfplumber table extraction — handles empty cells and column alignment correctly
     try {
@@ -2058,6 +2077,9 @@ async function parseUploadedPdf(file, deptKey) {
   }
   if (deptKey === 'hospitalist' && typeof parseHospitalistPdfEntries !== 'undefined') {
     delete parseHospitalistPdfEntries._serverSchedule;
+  }
+  if (deptKey === 'ent' && typeof parseEntPdfEntries !== 'undefined') {
+    delete parseEntPdfEntries._serverSchedule;
   }
 
   const parseDebug = {
