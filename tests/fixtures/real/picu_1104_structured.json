@@ -1,0 +1,37 @@
+{
+  "id": "picu_1104_structured",
+  "specialty": "picu",
+  "sourcePdf": "assets/pdfs/PICU 1st Rev April 2026.pdf",
+  "pages": [1],
+  "checks": [
+    {
+      "dateKey": "11/04",
+      "at": "2026-04-11T12:00:00+03:00",
+      "allowExtra": false,
+      "expectedRows": [
+        { "name": "Dr. Ghadeer", "role": "Resident — Day Shift" },
+        { "name": "Dr. Alaa", "role": "Assistant 1st — Day Shift" },
+        { "name": "Dr. Ali", "role": "Assistant 2nd — Day Shift" },
+        { "name": "Dr. Ghadeer", "role": "Resident 24h" },
+        { "name": "Dr. A. Wahab", "role": "Consultant On-Call 24h", "phone": "0504150451" }
+      ],
+      "forbiddenNames": [
+        "Dr. Hoda Abdelhamid"
+      ]
+    },
+    {
+      "dateKey": "11/04",
+      "at": "2026-04-11T17:00:00+03:00",
+      "allowExtra": false,
+      "expectedRows": [
+        { "name": "Dr. Ghadeer", "role": "Resident 24h" },
+        { "name": "Dr. Mohamed", "role": "After-Hours On-Call", "phone": "0544473530" },
+        { "name": "Dr. A. Wahab", "role": "Consultant On-Call 24h", "phone": "0504150451" }
+      ],
+      "forbiddenNames": [
+        "Dr. Hoda Abdelhamid",
+        "Dr. Alaa"
+      ]
+    }
+  ]
+}

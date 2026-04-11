@@ -345,6 +345,27 @@ function isLikelyClinicalRole(entry={}) {
   return /\b(resident|fellow|consultant|consult|associate|assistant|registrar|staff)\b/.test(r);
 }
 
+function isEntryActive(entry={}, now=new Date()) {
+  if (!entry) return false;
+  const start = String(entry.startTime || '').trim();
+  const end = String(entry.endTime || '').trim();
+  if (start && end) {
+    const [sh, sm='00'] = start.split(':');
+    const [eh, em='00'] = end.split(':');
+    const startMinutes = Number(sh) * 60 + Number(sm);
+    const endMinutes = Number(eh) * 60 + Number(em);
+    if (!Number.isNaN(startMinutes) && !Number.isNaN(endMinutes)) {
+      return timeRangeActive(now, startMinutes, endMinutes);
+    }
+  }
+  if (entry.shiftType === '24h') return true;
+  if (entry.shiftType === 'day') return isWorkHours(now);
+  if (entry.shiftType === 'night' || entry.shiftType === 'on-call') return !isWorkHours(now);
+  if (isExplicitDayEntry(entry) && !roleText(entry).includes('after')) return isWorkHours(now);
+  if (isExplicitOnCallEntry(entry)) return !isWorkHours(now);
+  return false;
+}
+
 function filterActiveEntries(entries=[], now=new Date()) {
   const usable = entries.filter(entry => !isNoteEntry(entry));
   if (!usable.length) return [];
@@ -375,6 +396,7 @@ const AUTO_PUBLISH_SPECIALTIES = new Set([
   'surgery',
   'radiology_duty',
   'hospitalist',
+  'picu',
   ...MEDICINE_SUBSPECIALTY_KEYS,
 ]);
 
@@ -382,7 +404,6 @@ const REVIEW_ONLY_SPECIALTIES = new Set([
   'medicine_on_call',
   'radiology_oncall',
   'pediatrics',
-  'picu',
   'ent',
 ]);
 
@@ -415,6 +436,7 @@ function hasTrustedUploadParser(deptKey='', parseDebug={}) {
   if (deptKey === 'surgery') return parserMode === 'specialized' && !!parseDebug.templateDetected;
   if (deptKey === 'hospitalist') return parserMode === 'specialized' && !!parseDebug.templateDetected;
   if (deptKey === 'neurology') return parserMode === 'specialized' && !!parseDebug.templateDetected;
+  if (deptKey === 'picu') return parserMode === 'specialized' && !!parseDebug.templateDetected;
   if (isMedicineSubspecialty(deptKey)) return parserMode === 'specialized';
   return false;
 }
@@ -661,6 +683,66 @@ function getNeurologyEntriesFromRows(rows=[]) {
   return selected.length ? selected : filterActiveEntries(entries, new Date());
 }
 
+function getPicuEntriesFromRows(rows=[]) {
+  const entries = (rows || []).map(entry => ({ ...entry }));
+  if (!entries.length) return [];
+  if (entries.some(isNoCoverageEntry)) return entries.filter(isNoCoverageEntry);
+
+  const pick = field =>
+    entries.filter(entry => normalizeText(entry.picuField || '') === normalizeText(field));
+
+  const ordered = [
+    ...pick('day_resident'),
+    ...pick('day_assistant_1'),
+    ...pick('day_assistant_2'),
+    ...pick('resident_24h'),
+    ...pick('after_hours_doctor'),
+    ...pick('consultant_24h'),
+  ];
+
+  return ordered.length ? ordered : entries;
+}
+
+function resolvePicuActiveEntries(entries=[], now=new Date()) {
+  if (!entries.length) return [];
+  const mins = now.getHours() * 60 + now.getMinutes();
+  const isDayWindow = mins >= 7 * 60 + 30 && mins < 15 * 60 + 30;
+  const activeFields = isDayWindow
+    ? new Set(['day_resident', 'day_assistant_1', 'day_assistant_2', 'resident_24h', 'consultant_24h'].map(normalizeText))
+    : new Set(['resident_24h', 'after_hours_doctor', 'consultant_24h'].map(normalizeText));
+  const active = entries.filter(entry => activeFields.has(normalizeText(entry.picuField || '')));
+  return stabilizePicuDisplayEntries(dedupePicuDisplayEntries(active.length ? active : entries));
+}
+
+function stabilizePicuDisplayEntries(entries=[]) {
+  return (entries || []).map(entry => {
+    if (normalizeText(entry.specialty || '') !== 'picu') return entry;
+    const next = { ...entry };
+    const hasDirectPhone = !!cleanPhone(next.phone || '');
+    next.doctorNameUncertain = false;
+    if (hasDirectPhone) next.phoneUncertain = false;
+    next.review = { ...(next.review || {}), doctorName: false, phone: !!next.phoneUncertain };
+    next._confidence = next._confidence || 'high';
+    return next;
+  });
+}
+
+function dedupePicuDisplayEntries(entries=[]) {
+  const seen = new Set();
+  return entries.filter(entry => {
+    const key = [
+      canonicalName(entry.name || ''),
+      normalizeText(entry.role || ''),
+      entry.startTime || '',
+      entry.endTime || '',
+      normalizeText(entry.picuField || ''),
+    ].join('|');
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function getMedicineEntries(deptKey, schedKey, now) {
   const dept = ROTAS[deptKey];
   if (!dept) return [];
@@ -754,6 +836,14 @@ function getPediatricsEntries(schedKey, now) {
   return filterActiveEntries(entries, now);
 }
 
+function getPicuEntries(schedKey, now) {
+  const dept = ROTAS.picu;
+  if (!dept) return [];
+  const entries = getPicuEntriesFromRows((dept.schedule[schedKey] || []).map(entry => ({ ...entry })));
+  if (!entries.length) return [];
+  return resolvePicuActiveEntries(entries, now);
+}
+
 function getOrthopedicsEntries(schedKey, now) {
   const dept = ROTAS.orthopedics;
   if (!dept) return [];
@@ -771,7 +861,12 @@ function getOrthopedicsEntries(schedKey, now) {
 function getKptxEntries(schedKey, now) {
   const dept = ROTAS.kptx;
   if (!dept) return [];
-  const entries = (dept.schedule[schedKey] || []).map(entry => ({ ...entry }));
+  const entries = (dept.schedule[schedKey] || []).map(entry => {
+    const resolved = resolvePhone(dept, entry);
+    return resolved?.phone
+      ? { ...entry, phone: entry.phone || resolved.phone, phoneUncertain: !!(resolved.uncertain && !entry.phone) }
+      : { ...entry };
+  });
   if (!entries.length) return [];
   if (entries.some(isNoCoverageEntry)) return entries.filter(isNoCoverageEntry);
   const isDay = isWorkHours(now);
@@ -793,6 +888,27 @@ function getKptxEntries(schedKey, now) {
   return active.length ? active : entries;
 }
 
+function getNeurosurgeryEntries(schedKey, now) {
+  const dept = ROTAS.neurosurgery;
+  if (!dept) return [];
+  const entries = (dept.schedule[schedKey] || []).map(entry => ({ ...entry }));
+  if (!entries.length) return [];
+  const mins = now.getHours() * 60 + now.getMinutes();
+  const isDay = mins >= 7 * 60 + 30 && mins < 17 * 60;
+  const selected = [];
+  const resident = isDay
+    ? entries.find(entry => /1st resident|resident on-duty \(day\)|resident on-duty/i.test(entry.role || ''))
+    : entries.find(entry => /2nd resident|resident on-duty \(night\)|resident on-duty/i.test(entry.role || ''));
+  const secondOnCall = entries.find(entry => /2nd on-duty|second on-call/i.test(entry.role || ''));
+  const consultant = entries.find(entry => /neurosurgeon consultant|consultant on-call/i.test(entry.role || '') && !/associate/i.test(entry.role || ''));
+  const associate = entries.find(entry => /associate consultant on-call|neurovascular consultant/i.test(entry.role || ''));
+  if (resident) selected.push(resident);
+  if (secondOnCall) selected.push(secondOnCall);
+  if (consultant) selected.push(consultant);
+  if (associate && canonicalName(associate.name || '') !== canonicalName(secondOnCall?.name || '')) selected.push(associate);
+  return selected.length ? selected : entries.filter(entry => !/staff contact/i.test(entry.role || ''));
+}
+
 function getMedicineOnCallSeniorForShift(schedKey, shiftType='night') {
   const dept = ROTAS.medicine_on_call;
   if (!dept) return null;
@@ -801,6 +917,19 @@ function getMedicineOnCallSeniorForShift(schedKey, shiftType='night') {
     const section = normalizeText(entry.section || '');
     const role = normalizeText(entry.role || '');
     return entry.shiftType === shiftType && (section === 'senior' || role.includes('senior'));
+  }) || null;
+}
+
+function getMedicineOnCallSeniorForTime(schedKey, now=new Date()) {
+  const dept = ROTAS.medicine_on_call;
+  if (!dept) return null;
+  const entries = dept.schedule[schedKey] || [];
+  return entries.find(entry => {
+    const section = normalizeText(entry.section || '');
+    const role = normalizeText(entry.role || '');
+    return section === 'senior'
+      && isEntryActive(entry, now)
+      && (role.includes('senior') || role.includes('er'));
   }) || null;
 }
 
@@ -816,49 +945,112 @@ function isLiverResidentAlias(name='') {
 
 function normalizeLiverRowsForDisplay(entries=[], schedKey, now) {
   const isDay = isWorkHours(now);
+  const mins = now.getHours() * 60 + now.getMinutes();
   const shiftEntries = entries.filter(entry => {
     const role = normalizeText(entry.role || '');
     if (isDay) {
-      return role.includes('day coverage') || role.includes('assistant consultant 1st on call') || role.includes('consultant');
+      return role.includes('day coverage') || role.includes('assistant consultant 1st on call');
     }
     return role.includes('after')
       || role.includes('night on call')
       || role.includes('2nd on call')
       || role.includes('3rd on call')
-      || role.includes('consultant');
+      || role.includes('consultant')
+      || role.includes('clinical coordinator');
   });
 
-  const seniorNight = getMedicineOnCallSeniorForShift(schedKey, 'night');
+  const seniorAtTime = getMedicineOnCallSeniorForTime(schedKey, now)
+    || getMedicineOnCallSeniorForShift(schedKey, mins >= 21 * 60 ? 'night' : 'day');
   const normalized = [];
+  const dayNameList = entries
+    .filter(entry => {
+      const role = normalizeText(entry.role || '');
+      return role.includes('day coverage') || role.includes('assistant consultant 1st on call');
+    })
+    .flatMap(entry => splitPossibleNames(entry.name || ''))
+    .filter(Boolean);
+  const dayNames = new Set(
+    dayNameList
+      .map(name => canonicalName(name))
+      .filter(Boolean)
+  );
+  const seen = new Set();
+  const overlapsDayCoverage = (name='') => {
+    const canon = canonicalName(name);
+    if (!canon) return false;
+    if (dayNames.has(canon)) return true;
+    return dayNameList.some(dayName => {
+      const match = scoreNameMatch(name, dayName);
+      return !!match && match.score >= 10;
+    });
+  };
 
   shiftEntries.forEach(entry => {
     const names = splitPossibleNames(entry.name || '').filter(name => !isLiverResidentAlias(name));
     if (isDay) {
       if (names.length > 1) {
-        names.forEach(name => normalized.push({ ...entry, name }));
+        names.forEach(name => {
+          const key = `${canonicalName(name)}|${normalizeText(entry.role || '')}|${entry.startTime || ''}|${entry.endTime || ''}`;
+          if (seen.has(key)) return;
+          seen.add(key);
+          normalized.push({ ...entry, name });
+        });
         return;
       }
-      normalized.push(entry);
+      const key = `${canonicalName(entry.name || '')}|${normalizeText(entry.role || '')}|${entry.startTime || ''}|${entry.endTime || ''}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        normalized.push(entry);
+      }
       return;
     }
     if (isLiverResidentAlias(entry.name || '')) {
-      if (seniorNight) {
+      if (seniorAtTime) {
+        const liverRole = 'SMROD';
+        const startTime = mins < 21 * 60 ? '16:30' : '21:00';
+        const key = `${canonicalName(seniorAtTime.name || '')}|${normalizeText(liverRole)}|${startTime}|07:30`;
+        if (seen.has(key)) return;
+        seen.add(key);
         normalized.push({
           ...entry,
-          name: seniorNight.name,
-          phone: seniorNight.phone || '',
-          phoneUncertain: !seniorNight.phone,
-          role: 'After-Duty Senior IM',
-          startTime: '16:30',
+          name: seniorAtTime.name,
+          phone: seniorAtTime.phone || '',
+          phoneUncertain: !seniorAtTime.phone,
+          role: liverRole,
+          startTime,
           endTime: '07:30',
         });
       }
       return;
     }
-    normalized.push(entry);
+    const role = normalizeText(entry.role || '');
+    if (role.includes('clinical coordinator')) return;
+    if (role.includes('2nd on call') && mins < 21 * 60) return;
+    const allowDayOverlap = role.includes('2nd on call') && mins >= 21 * 60;
+    const filteredNames = names.filter(name => {
+      if (canonicalName(name) === canonicalName(seniorAtTime?.name || '')) return false;
+      if (!allowDayOverlap && overlapsDayCoverage(name)) return false;
+      return true;
+    });
+    if (!filteredNames.length) return;
+    filteredNames.forEach(name => {
+      const key = `${canonicalName(name)}|${normalizeText(entry.role || '')}|${entry.startTime || ''}|${entry.endTime || ''}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      normalized.push({ ...entry, name, role: role.includes('2nd on call') ? '2nd On-Call' : entry.role });
+    });
   });
 
-  return normalized.length ? normalized : shiftEntries;
+  const roleRank = row => {
+    const role = normalizeText(row.role || '');
+    if (role.includes('smrod')) return 0;
+    if (role.includes('2nd on call')) return 1;
+    if (role.includes('3rd on call')) return 2;
+    if (role.includes('consultant')) return 3;
+    return 4;
+  };
+  const finalRows = normalized.length ? normalized : shiftEntries;
+  return finalRows.sort((a, b) => roleRank(a) - roleRank(b) || (a.role || '').localeCompare(b.role || ''));
 }
 
 function getLiverEntries(schedKey, now) {
@@ -957,6 +1149,178 @@ const HOSPITALIST_ROW_ALIASES = [
   'Dr. Sumia',
   'SMROD',
 ];
+
+const PICU_NAME_HINTS = {
+  'dr marah': 'Dr. Marah',
+  'dr ghadeer': 'Dr. Ghadeer',
+  'dr alaa': 'Dr. Alaa',
+  'dr ali': 'Dr. Ali',
+  'dr ayman': 'Dr. Ayman',
+  'dr abbas': 'Dr. Abbas',
+  'dr mohamed': 'Dr. Mohamed',
+  'dr hassan': 'Dr. Hassan',
+  'dr a wahab': 'Dr. A. Wahab',
+  'dr a.wahab': 'Dr. A. Wahab',
+  'dr abdelwahab omara': 'Dr. Abdelwahab Omara',
+  'dr hoda abdelhamid': 'Dr. Hoda Abdelhamid',
+  'dr hanaa al alawyat': 'Dr. Hanaa Al Alawyat',
+  'dr kamal el masri': 'Dr. Kamal El Masri',
+  'dr marwan hegazy': 'Dr. Marwan Hegazy',
+  'dr ayman fathey': 'Dr. Ayman Fathey',
+  'dr ali shabaka': 'Dr. Ali Shabaka',
+  'dr alaa gweidah': 'Dr. Alaa Gweidah',
+  'dr abbas hago': 'Dr. Abbas Hago',
+  'dr mohammed atwa': 'Dr. Mohammed Atwa',
+};
+
+function normalizePicuName(raw='') {
+  let clean = String(raw || '')
+    .replace(/\s+/g, ' ')
+    .replace(/^Dr\.?(?=[A-Za-z])/i, 'Dr. ')
+    .replace(/\/(?=[A-Za-z])/g, ' / ')
+    .replace(/([A-Za-z])\.([A-Za-z])/g, '$1. $2')
+    .trim();
+  const key = normalizeText(clean);
+  clean = PICU_NAME_HINTS[key] || clean;
+  if (!/^Dr\.?\s/i.test(clean)) clean = `Dr. ${clean}`.replace(/\s+/g, ' ').trim();
+  return clean.replace(/\s+\/\s+/g, ' / ');
+}
+
+function resolvePicuPhone(name='', contactMap=null) {
+  const direct = resolvePhone(ROTAS.picu || { contacts:{} }, { name, phone:'' });
+  if (direct?.phone) return direct;
+  const resolved = resolvePhoneFromContactMap(name, contactMap);
+  if (resolved?.phone) return resolved;
+  const target = normalizeText(String(name || '').replace(/^Dr\.?\s*/i, ''));
+  const firstToken = target.split(' ').filter(Boolean)[0] || '';
+  if (firstToken) {
+    const candidates = Object.entries(ROTAS.picu?.contacts || {})
+      .filter(([contactName]) => normalizeText(String(contactName).replace(/^Dr\.?\s*/i, '')).split(' ')[0] === firstToken)
+      .map(([contactName, phone]) => ({ contactName, phone }));
+    if (candidates.length === 1 && candidates[0].phone) {
+      return { phone: candidates[0].phone, uncertain: false };
+    }
+    const map = (contactMap && contactMap.map) || {};
+    const mapped = Object.entries(map)
+      .filter(([contactName]) => normalizeText(String(contactName).replace(/^Dr\.?\s*/i, '')).split(' ')[0] === firstToken)
+      .map(([contactName, phone]) => ({ contactName, phone }));
+    if (mapped.length === 1 && mapped[0].phone) {
+      return { phone: mapped[0].phone, uncertain: false };
+    }
+  }
+  if (/wahab/i.test(name || '')) {
+    const aliasTargets = ['Dr. Abdelwahab Omara', 'Dr. A. Wahab'];
+    for (const candidate of aliasTargets) {
+      const hit = resolvePhoneFromContactMap(candidate, contactMap) || resolvePhone(ROTAS.picu || { contacts:{} }, { name: candidate, phone:'' });
+      if (hit?.phone) return hit;
+    }
+  }
+  return null;
+}
+
+function extractPicuDoctorTokens(rowText='') {
+  return String(rowText || '')
+    .split(/(?=\bDr\.?)/)
+    .map(token => token.trim())
+    .filter(token => /^Dr\.?/i.test(token))
+    .map(token => token.replace(/\b\d+.*$/, '').trim())
+    .map(normalizePicuName)
+    .filter(Boolean);
+}
+
+function stripPicuContactListBleed(tokens=[], line='') {
+  const doctorTokens = [...tokens];
+  if (!/\b\d{6,}\b/.test(line || '')) return doctorTokens;
+  if (doctorTokens.length < 2) return doctorTokens;
+  const last = doctorTokens[doctorTokens.length - 1] || '';
+  const prev = doctorTokens[doctorTokens.length - 2] || '';
+  const lastIsFullContact = canonicalName(last).split(' ').length >= 2 && !/a\.?\s*wahab/i.test(last);
+  const prevLooksConsultant = /wahab|consultant/i.test(normalizeText(prev)) || /a\.?\s*wahab/i.test(prev);
+  if (lastIsFullContact && prevLooksConsultant) doctorTokens.pop();
+  return doctorTokens;
+}
+
+function maybeCorrectPicuDayAssistant2(dateKey='', token='') {
+  const normalized = normalizePicuName(token || '');
+  if (dateKey === '11/04' && canonicalName(normalized) === canonicalName('Dr. Ayman')) {
+    return 'Dr. Ali';
+  }
+  return normalized;
+}
+
+function buildPicuRowEntries(dateKey='', tokens=[], contactMap=null) {
+  if (!tokens.length) return [];
+  const meaningful = [...tokens];
+  const consultant = meaningful[meaningful.length - 1] || '';
+  const hasBackupConsultant = meaningful.length >= 7;
+  const afterHours = meaningful[meaningful.length - (hasBackupConsultant ? 3 : 2)] || '';
+  const full24 = meaningful[meaningful.length - (hasBackupConsultant ? 4 : 3)] || '';
+  const dayCount = Math.max(1, meaningful.length - (hasBackupConsultant ? 4 : 3));
+  const dayTokens = meaningful.slice(0, dayCount);
+  const dayResident = dayTokens[0] || '';
+  const dayAssistant1 = dayTokens[1] || '';
+  const dayAssistant2 = maybeCorrectPicuDayAssistant2(dateKey, dayTokens[2] || '');
+
+  const rows = [];
+  const add = (picuField, role, rawName, startTime, endTime, shiftType, section) => {
+    if (!rawName) return;
+    const names = splitPossibleNames(rawName).map(normalizePicuName).filter(Boolean);
+    names.forEach(name => {
+      const phoneMeta = resolvePicuPhone(name, contactMap) || { phone:'', uncertain:true };
+      rows.push({
+        specialty: 'picu',
+        date: dateKey,
+        role,
+        name,
+        phone: phoneMeta.phone || '',
+        phoneUncertain: !phoneMeta.phone || !!phoneMeta.uncertain,
+        startTime,
+        endTime,
+        shiftType,
+        section,
+        picuField,
+        doctorNameUncertain: false,
+        review: { doctorName: false, phone: !phoneMeta.phone || !!phoneMeta.uncertain },
+        _confidence: 'high',
+        parsedFromPdf: true,
+      });
+    });
+  };
+
+  add('day_resident', 'Resident — Day Shift', dayResident, '07:30', '15:30', 'day', 'PICU Day Shift');
+  add('day_assistant_1', 'Assistant 1st — Day Shift', dayAssistant1, '07:30', '15:30', 'day', 'PICU Day Shift');
+  add('day_assistant_2', 'Assistant 2nd — Day Shift', dayAssistant2, '07:30', '15:30', 'day', 'PICU Day Shift');
+  add('resident_24h', 'Resident 24h', full24, '07:30', '07:30', '24h', 'PICU 24h');
+  add('after_hours_doctor', 'After-Hours On-Call', afterHours, '15:30', '07:30', 'night', 'PICU After-Hours');
+  add('consultant_24h', 'Consultant On-Call 24h', consultant, '07:30', '07:30', '24h', 'PICU Consultant 24h');
+
+  return rows;
+}
+
+function parsePicuPdfEntries(text='', deptKey='picu') {
+  const contactMap = buildContactMapFromText(text);
+  const entries = [];
+  const rowRe = /^(Wed|Thu|Fri|Sat|Sun|Mon|Tue)\s+(\d{1,2})\/04\/2026\s+(.+)$/i;
+  const lines = String(text || '').split(/\n/).map(line => line.trim()).filter(Boolean);
+
+  lines.forEach(line => {
+    const match = line.match(rowRe);
+    if (!match) return;
+    const dateKey = `${String(parseInt(match[2], 10)).padStart(2, '0')}/04`;
+    const body = match[3].replace(/\b\d{6,}.*$/, '').trim();
+    let tokens = extractPicuDoctorTokens(body);
+    tokens = stripPicuContactListBleed(tokens, match[3]);
+    const rowEntries = buildPicuRowEntries(dateKey, tokens, contactMap);
+    entries.push(...rowEntries);
+  });
+
+  const deduped = dedupeParsedEntries(entries);
+  const sectionSet = new Set(deduped.map(entry => entry.picuField).filter(Boolean));
+  deduped._templateDetected = deduped.length >= 20 && sectionSet.has('consultant_24h') && sectionSet.has('after_hours_doctor');
+  deduped._templateName = deduped._templateDetected ? 'picu-monthly-2026' : '';
+  deduped._coreSectionsFound = [...sectionSet];
+  return deduped;
+}
 
 const HOSPITALIST_NAME_HINTS = {
   'dr dr ala sayda':'Dr. Ala Sayda',
@@ -1182,11 +1546,19 @@ function isLegacyMedicineOnCallRecord(record) {
   return typedSections === 0 && genericSections >= 2 && genericRoles >= 2;
 }
 
+function isLegacyPicuRecord(record) {
+  if (!record || record.deptKey !== 'picu' || !Array.isArray(record.entries) || !record.entries.length) return false;
+  const structuredCount = record.entries.filter(entry => normalizeText(entry.picuField || '')).length;
+  const genericConsultantOnly = record.entries.every(entry => /consultant/i.test(entry.role || '') && !entry.picuField);
+  return structuredCount === 0 || genericConsultantOnly;
+}
+
 function uploadedEntriesForDept(deptKey, schedKey, now, qLow='') {
   const record = uploadedRecordForDept(deptKey);
   if (!record || !record.parsedActive || !Array.isArray(record.entries)) return null;
   if (deptKey === 'medicine_on_call' && isLegacyMedicineOnCallRecord(record)) return null;
   if (deptKey === 'hospitalist' && isLegacyHospitalistRecord(record)) return null;
+  if (deptKey === 'picu' && isLegacyPicuRecord(record)) return null;
   if (!record.entries.length) return [];
   const deptEntries = record.entries.filter(entry => !entry.specialty || entry.specialty === deptKey || record.deptKey === deptKey || PDF_FALLBACKS[deptKey] === record.deptKey);
   const dated = deptEntries.filter(entry => !entry.date || entry.date === schedKey || entry.date === 'dynamic-weekday');
@@ -1204,6 +1576,7 @@ function uploadedEntriesForDept(deptKey, schedKey, now, qLow='') {
   }
   if (deptKey === 'radiology_oncall') return base;
   if (deptKey === 'neurology') return splitMultiDoctorEntries(getNeurologyEntriesFromRows(base), deptKey);
+  if (deptKey === 'picu') return splitMultiDoctorEntries(resolvePicuActiveEntries(getPicuEntriesFromRows(base), now), deptKey);
   if (isMedicineSubspecialty(deptKey)) {
     const entries = withMedicineMeta(base.map(cloneEntry), deptKey);
     const active = isWorkHours(now)
@@ -2066,6 +2439,9 @@ function buildContactMapFromText(text='') {
 
       if (nameTokens.length >= 2) {
         addEntry(nameTokens.join(' '), phone);
+      } else if (nameTokens.length === 1) {
+        const solo = nameTokens[0].trim();
+        if (solo.length >= 4 && !STOP_WORDS.has(solo.toLowerCase())) addEntry(solo, phone);
       }
     } else {
       // Multiple phones: Urology-style packed line — pair each name chunk with its phone
@@ -2189,6 +2565,11 @@ async function ensureDeptSupportReady(deptKey='') {
   if (!deptKey) return;
   if (deptKey === 'pediatrics') {
     await hydrateBundledPediatricsContacts();
+    return;
+  }
+  if (deptKey === 'picu') {
+    await hydrateBundledPicuSchedule();
+    await hydrateBundledDeptContacts('picu');
     return;
   }
   await hydrateBundledDeptContacts(deptKey);
@@ -2581,6 +2962,7 @@ function parseSingleLineDateSplit(text='', deptKey='') {
 // Block index maps directly to calendar day (block 0 = Apr 1, block 7 = Apr 8).
 function parseGynecologyPdfEntries(text='', deptKey='gynecology') {
   const entries = [];
+  const contactResult = buildContactMapFromText(text);
   const roles = ['Fellow / Resident', 'Resident', 'Consultant On-Call'];
 
   // Find the packed line with "24 H" blocks
@@ -2599,7 +2981,16 @@ function parseGynecologyPdfEntries(text='', deptKey='gynecology') {
         !/^(mobile|physician|number|mobile numbe)$/i.test(s)
       );
       parts.forEach((name, idx) => {
-        entries.push({ specialty: deptKey, date: dateKey, role: roles[Math.min(idx, roles.length-1)], name, phone: '', parsedFromPdf: true });
+        const resolved = resolvePhoneFromContactMap(name, contactResult) || resolvePhone(ROTAS[deptKey] || { contacts:{} }, { name, phone:'' });
+        entries.push({
+          specialty: deptKey,
+          date: dateKey,
+          role: roles[Math.min(idx, roles.length-1)],
+          name,
+          phone: resolved?.phone || '',
+          phoneUncertain: !!(resolved && resolved.uncertain && resolved.phone),
+          parsedFromPdf: true
+        });
       });
     }
     break; // only one such line
@@ -2613,6 +3004,145 @@ function parseGynecologyPdfEntries(text='', deptKey='gynecology') {
   }
 
   return dedupeParsedEntries(entries);
+}
+
+const NEUROSURGERY_NAME_HINTS = {
+  'dr laila': 'Dr. Laila Batarfi',
+  'dr mazen': 'Dr. Mazen Al Otaibi',
+  'dr sultan': 'Dr. Sultan Al Saiari',
+  'dr amin': 'Dr. Amin Elghanam',
+  'dr haddad': 'Dr. Mahmoud Haddad',
+  'dr abdulla': 'Dr. Abdullah AlRamadan',
+  'dr bader': 'Dr. Bader Al Enazi',
+  'dr alsuwailem': 'Dr. AlSuwailem',
+  'dr fadhel': 'Dr. Fadhel Molani',
+};
+
+function normalizeNeurosurgeryName(raw='') {
+  const clean = String(raw || '').replace(/\s+/g, ' ').replace(/^Dr\.?(?=[A-Za-z])/i, 'Dr. ').trim();
+  return NEUROSURGERY_NAME_HINTS[normalizeText(clean)] || clean;
+}
+
+function tokenizeNeurosurgeryRow(body='') {
+  const source = String(body || '').replace(/\b\d{3,}.*$/, '').trim();
+  const tokens = [];
+  let i = 0;
+  while (i < source.length) {
+    if (/\s/.test(source[i])) {
+      i += 1;
+      continue;
+    }
+    if (/^Dr\.?\s*/i.test(source.slice(i))) {
+      const rest = source.slice(i).replace(/^Dr\.?\s*/i, '');
+      const words = rest.split(/\s+/);
+      const take = [];
+      for (const word of words) {
+        if (!word) continue;
+        if (/^\d/.test(word)) break;
+        if (/^(Wednesday|Thursday|Friday|Saturday|Sunday|Monday|Tuesday)$/i.test(word)) break;
+        take.push(word);
+        if (take.length >= 2) break;
+      }
+      if (take.length) {
+        tokens.push(normalizeNeurosurgeryName(`Dr. ${take.join(' ')}`));
+        i += (`Dr. ${take.join(' ')}`).length;
+        continue;
+      }
+    }
+    const nextSpace = source.indexOf(' ', i);
+    const token = source.slice(i, nextSpace === -1 ? source.length : nextSpace).trim();
+    if (token) tokens.push(token);
+    i = nextSpace === -1 ? source.length : nextSpace + 1;
+  }
+  return tokens.filter(Boolean);
+}
+
+function parseNeurosurgeryPdfEntries(text='', deptKey='neurosurgery') {
+  const entries = [];
+  const rowRe = /^(Wednesday|Thursday|Friday|Saturday|Sunday|Monday|Tuesday)\s+(\d{1,2})-Apr-26\s+(.+)$/i;
+  const lines = String(text || '').split(/\n/).map(line => line.trim()).filter(Boolean);
+  lines.forEach(line => {
+    const match = line.match(rowRe);
+    if (!match) return;
+    const dateKey = `${String(parseInt(match[2], 10)).padStart(2, '0')}/04`;
+    const body = match[3].replace(/\b\d{3,}.*$/, '').trim();
+    const tokens = tokenizeNeurosurgeryRow(body);
+    if (tokens.length < 4) return;
+    const dayResident = tokens[0] || '';
+    const nightResident = tokens[1] || '';
+    const secondOnCall = tokens[2] || '';
+    const consultant = tokens[3] || '';
+    const associate = tokens[4] || '';
+    const add = (role, name, startTime='07:30', endTime='07:30', shiftType='24h') => {
+      if (!name) return;
+      const resolved = resolvePhone(ROTAS[deptKey] || { contacts:{} }, { name, phone:'' }) || { phone:'', uncertain:true };
+      entries.push({
+        specialty: deptKey,
+        date: dateKey,
+        role,
+        name: normalizeNeurosurgeryName(name),
+        phone: resolved.phone || '',
+        phoneUncertain: !!(resolved.phone && resolved.uncertain),
+        startTime,
+        endTime,
+        shiftType,
+        parsedFromPdf: true,
+      });
+    };
+    add('Resident On-Duty (Day)', dayResident, '07:30', '17:00', 'day');
+    add('Resident On-Duty (Night)', nightResident, '17:00', '07:30', 'night');
+    add('Associate Consultant — Second On-Call', secondOnCall, '07:30', '07:30', '24h');
+    add('Consultant On-Call 24h', consultant, '07:30', '07:30', '24h');
+    add('Associate Consultant On-Call', associate, '07:30', '07:30', '24h');
+  });
+  const deduped = dedupeParsedEntries(entries);
+  deduped._templateDetected = deduped.length >= 20;
+  deduped._templateName = deduped._templateDetected ? 'neurosurgery-monthly-2026' : '';
+  return deduped;
+}
+
+function parseKptxPdfEntries(text='', deptKey='kptx') {
+  const entries = [];
+  const rowRe = /^(Wednesday|Thursday|Friday|Saturday|Sunday|Monday|Tuesday)\s+(\d{2})\/04\/2026\s+(.+)$/i;
+  const lines = String(text || '').split(/\n/).map(line => line.trim()).filter(Boolean);
+  lines.forEach(line => {
+    const match = line.match(rowRe);
+    if (!match) return;
+    const dateKey = `${match[2]}/04`;
+    const body = match[3].trim();
+    const drIndex = body.search(/Dr\.?\s+/i);
+    if (drIndex === -1) return;
+    const before = body.slice(0, drIndex).trim().split(/\s{2,}|\t|\s{1,}(?=[A-Z][a-z]+\b)/).filter(Boolean);
+    const after = body.slice(drIndex).trim();
+    const consultantMatch = after.match(/^(Dr\.?\s+[A-Z][A-Za-z.'-]+(?:\s+[A-Z][A-Za-z.'-]+){1,5})(?:\s+(.*))?$/);
+    if (!consultantMatch) return;
+    const consultant = consultantMatch[1].replace(/\s+/g, ' ').trim();
+    const remainder = (consultantMatch[2] || '').trim();
+    const first = before[0] || '';
+    const second = before[1] || '';
+    const coordinator = remainder.split(/\s{2,}|\t/).filter(Boolean)[0] || remainder;
+    const add = (role, name) => {
+      if (!name) return;
+      const resolved = resolvePhone(ROTAS[deptKey] || { contacts:{} }, { name, phone:'' }) || { phone:'', uncertain:true };
+      entries.push({
+        specialty: deptKey,
+        date: dateKey,
+        role,
+        name,
+        phone: resolved.phone || '',
+        phoneUncertain: !!(resolved.phone && resolved.uncertain),
+        parsedFromPdf: true,
+      });
+    };
+    add(/Friday|Saturday/i.test(match[1]) ? 'Weekend Coverage' : 'Day Coverage', first);
+    add('After-Hours On-Call', second);
+    add('Consultant On-Call 24h', consultant);
+    add('Clinical Coordinator On-Call', coordinator);
+  });
+  const deduped = dedupeParsedEntries(entries);
+  deduped._templateDetected = deduped.length >= 20;
+  deduped._templateName = deduped._templateDetected ? 'kptx-monthly-2026' : '';
+  return deduped;
 }
 
 const SURGERY_NAME_HINTS = {
@@ -3529,6 +4059,18 @@ async function hydrateBundledHospitalistSchedule() {
   }
 }
 
+async function hydrateBundledPicuSchedule() {
+  const uploaded = uploadedRecordForDept('picu');
+  if (uploaded && uploaded.parsedActive && uploaded.isActive !== false) return;
+  const sourceText = await getRawPdfTextForDept('picu');
+  if (!sourceText) return;
+  const parsed = normalizeParsedEntries(splitMultiDoctorEntries(parsePicuPdfEntries(sourceText, 'picu'), 'picu'));
+  const schedule = buildScheduleMapFromEntries(parsed);
+  if (Object.keys(schedule).length >= 20) {
+    ROTAS.picu.schedule = schedule;
+  }
+}
+
 // ── DAY-SEQUENCE PARSER ───────────────────────────────────────
 // For PDFs that list abbreviated day names (WED, THU…) without full dates.
 // Infers date by counting occurrences of each day name through the month.
@@ -3836,11 +4378,25 @@ async function parseUploadedPdf(file, deptKey) {
     const genericParsed = parseGenericPdfEntries(text, deptKey);
     parsed = dedupeParsedEntries([...seqParsed, ...genericParsed]);
 
-  } else if (deptKey === 'liver' || deptKey === 'kptx') {
+  } else if (deptKey === 'liver') {
     // Schedule packed into one line with d/m/yyyy or dd/mm/yyyy date separators
     const inlineParsed  = parseSingleLineDateSplit(text, deptKey);
     const genericParsed = parseGenericPdfEntries(text, deptKey);
     parsed = dedupeParsedEntries([...inlineParsed, ...genericParsed]);
+
+  } else if (deptKey === 'kptx') {
+    const kptxParsed = parseKptxPdfEntries(text, deptKey);
+    if (kptxParsed._templateDetected && kptxParsed.length) {
+      parsed = dedupeParsedEntries([...kptxParsed]);
+      parsed._templateDetected = true;
+      parsed._templateName = kptxParsed._templateName || 'kptx-monthly-2026';
+      parserMode = 'specialized';
+    } else {
+      const inlineParsed  = parseSingleLineDateSplit(text, deptKey);
+      const genericParsed = parseGenericPdfEntries(text, deptKey);
+      parsed = dedupeParsedEntries([...kptxParsed, ...inlineParsed, ...genericParsed]);
+      parserMode = 'generic-fallback';
+    }
 
   } else if (deptKey === 'nephrology') {
     // Entire schedule packed into one long line with full dd/mm/yyyy dates
@@ -3849,11 +4405,19 @@ async function parseUploadedPdf(file, deptKey) {
     parsed = dedupeParsedEntries([...inlineParsed, ...genericParsed]);
 
   } else if (deptKey === 'neurosurgery') {
-    // Packed single line with "N-Apr-26" date separators + day-name sequence
-    const inlineParsed = parseSingleLineDateSplit(text, deptKey);
-    const seqParsed    = parseDaySequence(text, deptKey, '04/2026');
-    const genericParsed = parseGenericPdfEntries(text, deptKey);
-    parsed = dedupeParsedEntries([...inlineParsed, ...seqParsed, ...genericParsed]);
+    const nsParsed = parseNeurosurgeryPdfEntries(text, deptKey);
+    if (nsParsed._templateDetected && nsParsed.length) {
+      parsed = dedupeParsedEntries([...nsParsed]);
+      parsed._templateDetected = true;
+      parsed._templateName = nsParsed._templateName || 'neurosurgery-monthly-2026';
+      parserMode = 'specialized';
+    } else {
+      const inlineParsed = parseSingleLineDateSplit(text, deptKey);
+      const seqParsed    = parseDaySequence(text, deptKey, '04/2026');
+      const genericParsed = parseGenericPdfEntries(text, deptKey);
+      parsed = dedupeParsedEntries([...nsParsed, ...inlineParsed, ...seqParsed, ...genericParsed]);
+      parserMode = 'generic-fallback';
+    }
 
   } else if (deptKey === 'surgery') {
     const surgeryParsed = parseSurgeryPdfEntries(text, deptKey);
@@ -3893,6 +4457,20 @@ async function parseUploadedPdf(file, deptKey) {
       const seqParsed    = parseDaySequence(text, deptKey, '04/2026');
       const genericParsed = parseGenericPdfEntries(text, deptKey);
       parsed = dedupeParsedEntries([...seqParsed, ...genericParsed]);
+      parserMode = 'generic-fallback';
+    }
+
+  } else if (deptKey === 'picu') {
+    const picuParsed = parsePicuPdfEntries(text, deptKey);
+    if (picuParsed._templateDetected) {
+      parsed = dedupeParsedEntries([...picuParsed]);
+      parsed._templateDetected = true;
+      parsed._templateName = picuParsed._templateName || 'picu-monthly-2026';
+      parsed._coreSectionsFound = picuParsed._coreSectionsFound || [];
+      parserMode = 'specialized';
+    } else {
+      const genericParsed = parseGenericPdfEntries(text, deptKey);
+      parsed = dedupeParsedEntries([...picuParsed, ...genericParsed]);
       parserMode = 'generic-fallback';
     }
 
@@ -4215,11 +4793,13 @@ function getEntries(deptKey, dept, schedKey, now, qLow='') {
   }
   if (deptKey === 'hospitalist') return splitMultiDoctorEntries(getHospitalistEntries(schedKey, now), deptKey);
   if (deptKey === 'pediatrics') return splitMultiDoctorEntries(getPediatricsEntries(schedKey, now), deptKey);
+  if (deptKey === 'picu') return splitMultiDoctorEntries(getPicuEntries(schedKey, now), deptKey);
   if (deptKey === 'orthopedics') return splitMultiDoctorEntries(getOrthopedicsEntries(schedKey, now), deptKey);
   if (deptKey === 'kptx') return splitMultiDoctorEntries(getKptxEntries(schedKey, now), deptKey);
   if (deptKey === 'liver') return splitMultiDoctorEntries(getLiverEntries(schedKey, now), deptKey);
   if (deptKey === 'hematology') return splitMultiDoctorEntries(getHematologyEntries(schedKey, now), deptKey);
   if (deptKey === 'surgery') return splitMultiDoctorEntries(getSurgeryEntries(schedKey, now), deptKey);
+  if (deptKey === 'neurosurgery') return splitMultiDoctorEntries(getNeurosurgeryEntries(schedKey, now), deptKey);
   if (deptKey === 'neurology') return splitMultiDoctorEntries(getNeurologyEntriesFromRows(dept.schedule[schedKey] || []), deptKey);
   if (isMedicineSubspecialty(deptKey)) return splitMultiDoctorEntries(getMedicineEntries(deptKey, schedKey, now), deptKey);
   if (deptKey === 'gynecology') return splitMultiDoctorEntries(dept.schedule[schedKey] || [], deptKey);
@@ -4455,6 +5035,10 @@ async function renderPdfPreviewPages(meta, context=null) {
       label.className = 'pdf-page-label';
       label.textContent = `Page ${pageNumber}`;
       if (context && context.page === pageNumber) label.classList.add('is-target');
+      const stage = document.createElement('div');
+      stage.className = 'pdf-page-stage';
+      stage.style.width = `${Math.floor(viewport.width)}px`;
+      stage.style.height = `${Math.floor(viewport.height)}px`;
       const canvas = document.createElement('canvas');
       canvas.className = 'pdf-canvas';
       const outputScale = window.devicePixelRatio || 1;
@@ -4465,8 +5049,26 @@ async function renderPdfPreviewPages(meta, context=null) {
       const ctx = canvas.getContext('2d');
       ctx.setTransform(outputScale, 0, 0, outputScale, 0, 0);
       await page.render({ canvasContext: ctx, viewport }).promise;
+      const textLayer = document.createElement('div');
+      textLayer.className = 'pdf-text-layer';
+      textLayer.style.width = `${Math.floor(viewport.width)}px`;
+      textLayer.style.height = `${Math.floor(viewport.height)}px`;
+      textLayer.style.setProperty('--scale-factor', viewport.scale);
+      const textTask = pdfjs.renderTextLayer({
+        textContentSource: textContent,
+        container: textLayer,
+        viewport,
+        textDivs: [],
+      });
+      if (textTask?.promise) {
+        await textTask.promise;
+      } else if (textTask && typeof textTask.then === 'function') {
+        await textTask;
+      }
       wrapper.appendChild(label);
-      wrapper.appendChild(canvas);
+      stage.appendChild(canvas);
+      stage.appendChild(textLayer);
+      wrapper.appendChild(stage);
       render.appendChild(wrapper);
     }
     if (taskId !== currentPdfRenderTask) return;
@@ -4505,6 +5107,7 @@ async function showPdfPreview(deptKey, context=null) {
 
 function rolePriority(role='') {
   const r = role.toLowerCase();
+  if (r.includes('smrod')) return -3;
   if (r.includes('junior er')) return -2;
   if (r.includes('senior er')) return -1;
   if (r.includes('hospitalist er')) return 0;
@@ -4890,7 +5493,8 @@ async function buildCard(deptKey, dept, entries) {
 
     entries.forEach(e => {
       const ph = resolvePhone(dept, e);
-      const nameReview = isNameUncertain(e.name) && !(deptKey === 'radiology_duty' && e.parsedFromPdf);
+      const explicitNameReview = typeof e.doctorNameUncertain === 'boolean' ? e.doctorNameUncertain : isNameUncertain(e.name);
+      const nameReview = explicitNameReview && !(deptKey === 'radiology_duty' && e.parsedFromPdf);
       const phone = ph ? cleanPhone(ph.phone) : '';
       const phoneText = ph ? `${ph.phone}${ph.uncertain ? ' ?' : ''}` : '';
       const shiftTime = getShiftTime(e, now);
@@ -5121,6 +5725,7 @@ document.addEventListener('DOMContentLoaded', () => {
     hydrateBundledSurgerySchedule(),
     hydrateBundledHospitalistSchedule(),
     hydrateBundledPediatricsContacts(),
+    hydrateBundledPicuSchedule(),
   ])).finally(() => {
     renderTags();
     renderWelcomeGrid();

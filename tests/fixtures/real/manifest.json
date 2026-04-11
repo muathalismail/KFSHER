@@ -4,6 +4,7 @@
     "tests/fixtures/real/radiology_oncall_1004_night.json",
     "tests/fixtures/real/medicine_on_call_0104_day.json",
     "tests/fixtures/real/pediatrics_1004_morning_evening.json",
+    "tests/fixtures/real/picu_1104_structured.json",
     "tests/fixtures/real/liver_0904_day.json",
     "tests/fixtures/real/liver_1004_day.json",
     "tests/fixtures/real/kptx_0904_day.json",

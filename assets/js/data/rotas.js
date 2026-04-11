@@ -300,9 +300,9 @@ liver:{
     '06/04':[{role:'Day Coverage',name:'May Magdy / Dr. Attalaah',phone:'0549443186'},{role:'After-Hours On-Call',name:'Hala Khalifa Mohamed',phone:'0582334727'},{role:'Consultant On-Call 24h',name:'Eyad Gadour',phone:'0543124646'}],
     '07/04':[{role:'Day Coverage',name:'May Magdy / Dr. Attalaah',phone:'0549443186'},{role:'After-Hours On-Call',name:'Hala Khalifa Mohamed',phone:'0582334727'},{role:'Consultant On-Call 24h',name:'Eyad Gadour',phone:'0543124646'}],
     '08/04':[{role:'Day Coverage',name:'May Magdy',phone:'0549443186'},{role:'Day Coverage',name:'Dr. Attalaah'},{role:'After-Hours On-Call',name:'Hala Khalifa Mohamed',phone:'0582334727'},{role:'2nd On-Call',name:'Noora'},{role:'3rd On-Call',name:'Rehab'}],
-    '09/04':[{role:'Assistant Consultant 1st On-Call (07:30–16:30)',name:'May Magdy',phone:'0549443186'},{role:'Assistant Consultant 1st On-Call (07:30–16:30)',name:'Dr. Attalaah'},{role:'Night On-Call (9PM–9AM)',name:'SMRO'},{role:'2nd On-Call',name:'May'},{role:'3rd On-Call',name:'Noora'}],
-    '10/04':[{role:'Assistant Consultant 1st On-Call (07:30–16:30)',name:'May Magdy',phone:'0549443186'},{role:'Assistant Consultant 1st On-Call (07:30–16:30)',name:'Dr. Attalaah'},{role:'Night On-Call (9PM–9AM)',name:'SMRO'},{role:'2nd On-Call',name:'May'},{role:'3rd On-Call',name:'Noora'}],
-    '11/04':[{role:'Assistant Consultant 1st On-Call (07:30–16:30)',name:'May Magdy',phone:'0549443186'},{role:'Assistant Consultant 1st On-Call (07:30–16:30)',name:'Dr. Attalaah'},{role:'Night On-Call (9PM–9AM)',name:'SMRO'},{role:'2nd On-Call',name:'May'},{role:'3rd On-Call',name:'Noora'}],
+    '09/04':[{role:'Assistant Consultant 1st On-Call (07:30–16:30)',name:'May Magdy',phone:'0549443186'},{role:'Assistant Consultant 1st On-Call (07:30–16:30)',name:'Dr. Attalaah'},{role:'Night On-Call (9PM–9AM)',name:'SMRO'},{role:'2nd On-Call',name:'May'},{role:'3rd On-Call',name:'Noora'},{role:'Clinical Coordinator 24h',name:'Rehab'}],
+    '10/04':[{role:'Assistant Consultant 1st On-Call (07:30–16:30)',name:'May Magdy',phone:'0549443186'},{role:'Assistant Consultant 1st On-Call (07:30–16:30)',name:'Dr. Attalaah'},{role:'Night On-Call (9PM–9AM)',name:'SMRO'},{role:'2nd On-Call',name:'May'},{role:'3rd On-Call',name:'Noora'},{role:'Clinical Coordinator 24h',name:'Rehab'}],
+    '11/04':[{role:'Assistant Consultant 1st On-Call (07:30–16:30)',name:'May Magdy',phone:'0549443186'},{role:'Assistant Consultant 1st On-Call (07:30–16:30)',name:'Dr. Attalaah'},{role:'Night On-Call (9PM–9AM)',name:'SMRO'},{role:'2nd On-Call',name:'May'},{role:'3rd On-Call',name:'Noora'},{role:'Clinical Coordinator 24h',name:'Rehab'}],
   }
 },
 
@@ -347,6 +347,8 @@ gynecology:{
     'Tawfeeq Tawfeeq':'0540695111','Mohammad Al Ruwaisan':'0581222825',
     'Horiya':'0555788215','Heba':'0548196291','Noor':'0549742580',
     'Faisal':'0535453821','Maryam':'0537333500','Haider':'0582711260',
+    'Amnah':'0531524143','Amna':'0531524143','Dr. Amna Al-Failo':'0531524143',
+    'Maria':'0546558532','Assaf':'0563305548',
   },
   schedule:{
     '01/04':[{role:'Fellow',name:'Maria'},{role:'Consultant On-Call',name:'Susan AlGhamdi'}],
@@ -449,7 +451,7 @@ neurosurgery:{
     '07/04':[{role:'Neurosurgeon Consultant 24h',name:'Dr. Sultan Al Saiari'},{role:'Neurovascular Consultant',name:'Dr. AlSuwailem'},{role:'2nd On-Duty Fellow',name:'Dr. Amin Elghanam'},{role:'Resident On-Duty',name:'Abdulelah AL Mutairi'}],
     '08/04':[{role:'Neurosurgeon Consultant 24h',name:'Dr. Sultan Al Saiari'},{role:'Neurovascular Consultant',name:'Dr. AlSuwailem'},{role:'Neurosurgeon (Staff Contact)',name:'Dr. Mazen Al Otaibi'},{role:'Resident On-Duty',name:'Basma Al Zahrani'}],
     '09/04':[{role:'Neurosurgeon Consultant 24h',name:'Dr. Sultan Al Saiari'},{role:'Neurovascular Consultant',name:'Dr. AlSuwailem'},{role:'Neurosurgeon (Staff Contact)',name:'Dr. Abdulrahman Abdulwahhab'},{role:'Resident On-Duty',name:'Faisal AL Habib'}],
-    '11/04':[{role:'Neurosurgeon Consultant',name:'Dr. Laila / Dr. Mazen Al Otaibi'},{role:'Neurovascular Consultant',name:'Dr. AlSuwailem'},{role:'Neurosurgeon (Staff Contact)',name:'Dr. Mahmoud Haddad'},{role:'Resident On-Duty',name:'Faisal AL Habib'}],
+    '11/04':[{role:'Resident On-Duty',name:'Faisal AL Habib'},{role:'Associate Consultant — Second On-Call',name:'Dr. Laila Batarfi'},{role:'Consultant On-Call 24h',name:'Dr. Mazen Al Otaibi'},{role:'Associate Consultant On-Call',name:'Dr. AlSuwailem'}],
     '12/04':[{role:'Neurosurgeon Consultant',name:'Dr. Laila / Dr. Mazen Al Otaibi'},{role:'Neurovascular Consultant',name:'Dr. Mazen Al Otaibi'},{role:'Neurosurgeon (Staff Contact)',name:'Dr. Amin Elghanam'},{role:'2nd On-Duty Fellow',name:'Dr. Amin Elghanam'},{role:'Resident On-Duty',name:'Abdulelah AL Mutairi'}],
     '14/04':[{role:'Neurosurgeon Consultant 24h',name:'Dr. Mazen Al Otaibi'},{role:'Neurovascular Consultant',name:'Dr. Mazen Al Otaibi'},{role:'Resident On-Duty',name:'Faisal AL Habib'}],
     '15/04':[{role:'Neurosurgeon Consultant 24h',name:'Dr. Mazen Al Otaibi'},{role:'Neurovascular Consultant',name:'Dr. Mazen Al Otaibi'},{role:'2nd On-Duty Fellow',name:'Dr. Amin Elghanam'},{role:'Resident On-Duty',name:'Abdulelah AL Mutairi'}],
@@ -493,7 +495,7 @@ psychiatry:{
     'Dr. Lubna Al Bassam':'0555828497','Dr. Saleh Al Mulhim':'0504839897',
     'Abdulilah AlMulhim':'0535222588','Rahiq Al Yahya':'0541331903',
     'Jawad':'0569772810','Ahad':'0550938038','Rahaf':'0599926509',
-    'Mishari':'0546502266','ALI':'0540380224','Heba':'0595226855','Amro':'',
+    'Mishari':'0546502266','ALI':'0540380224','Heba':'0595226855','Amro':'0535971741',
   },
   schedule:{
     '01/04':[{role:'IP Adult Consultation',name:'Dr. Abdull ELAH'},{role:'Resident On-Duty 24h',name:'ALI'},{role:'CL Consultant',name:'Dr. Saleh Al Mulhim'},{role:'Consultant On-Duty',name:'Dr. Lubna Al Bassam'}],
@@ -823,6 +825,8 @@ picu:{
     'Dr. Ayman Fathey':'0501414849','Dr. Ali Shabaka':'0507950866',
     'Dr. Alaa Gweidah':'0552803443','Dr. Abbas Hago':'0598508176',
     'Dr. Hoda Abdelhamid':'0597911953','Dr. Mohammed Atwa':'0544473530',
+    'Dr. Mohamed':'0544473530',
+    'Dr. A. Wahab':'0504150451','Dr. A.wahab':'0504150451',
   },
   schedule:{
     '01/04':[{role:'Consultant On-Call 24h',name:'Dr. Hanaa Al Alawyat',phone:'0505877431'}],

@@ -201,12 +201,15 @@ const Auditor = (() => {
       id: 'picu_0804',
       specialty: 'picu',
       dateKey: '08/04',
-      requiredTiers: ['resident', '1st', '2nd'],
+      requiredTiers: ['resident', 'assistant', 'consultant'],
       expectedRows: [
-        { name: 'Dr. Marah', roleIncludes: 'Resident Assistant' },
-        { name: 'Dr. Ghadeer', roleIncludes: 'Resident Assistant' },
-        { name: 'Dr. Abbas', roleIncludes: '1st', phone: '0598508176' },
-        { name: 'Dr. Ayman', roleIncludes: '2nd', phone: '0501414849' },
+        { name: 'Dr. Marah', roleIncludes: 'Resident — Day Shift' },
+        { name: 'Dr. Ghadeer', roleIncludes: 'Resident — Day Shift' },
+        { name: 'Dr. Abbas', roleIncludes: 'Assistant 1st' },
+        { name: 'Dr. Ayman', roleIncludes: 'Assistant 2nd', phone: '0501414849' },
+        { name: 'Dr. Marwan', roleIncludes: 'Resident 24h' },
+        { name: 'Dr. Hoda', roleIncludes: 'After-Hours' },
+        { name: 'Dr. A. Wahab', roleIncludes: 'Consultant On-Call 24h', phone: '0504150451' },
       ],
     },
     {
@@ -396,6 +399,63 @@ Othman Alessa 568916700`,
       at: '2026-04-10T20:00:00+03:00',
       forbiddenRole: '3rd On-Call',
     },
+    picu_structured_parser_1104: {
+      type: 'mock-parser-fixture',
+      line: 'Sat 11/04/2026 Dr.Ghadeer Dr.Alaa Dr.Ayman Dr.Ghadeer Dr.Mohamed Dr.A.wahab Dr. Hoda Abdelhamid 51618655 0597911953 3031',
+      dateKey: '11/04',
+      expectedRows: [
+        { name: 'Dr. Ghadeer', role: 'Resident — Day Shift' },
+        { name: 'Dr. Alaa', role: 'Assistant 1st — Day Shift' },
+        { name: 'Dr. Ali', role: 'Assistant 2nd — Day Shift' },
+        { name: 'Dr. Ghadeer', role: 'Resident 24h' },
+        { name: 'Dr. Mohamed', role: 'After-Hours On-Call' },
+        { name: 'Dr. A. Wahab', role: 'Consultant On-Call 24h', phone: '0504150451' },
+      ],
+      forbiddenNames: ['Dr. Hoda Abdelhamid'],
+    },
+    picu_current_time_behavior: {
+      type: 'mock-structured-fixture',
+      dateKey: '11/04',
+      morningAt: '2026-04-11T10:00:00+03:00',
+      eveningAt: '2026-04-11T17:00:00+03:00',
+      expectedMorning: [
+        { name: 'Dr. Ghadeer', role: 'Resident — Day Shift' },
+        { name: 'Dr. Alaa', role: 'Assistant 1st — Day Shift' },
+        { name: 'Dr. Ali', role: 'Assistant 2nd — Day Shift' },
+        { name: 'Dr. Ghadeer', role: 'Resident 24h' },
+        { name: 'Dr. A. Wahab', role: 'Consultant On-Call 24h', phone: '0504150451' },
+      ],
+      expectedEvening: [
+        { name: 'Dr. Ghadeer', role: 'Resident 24h' },
+        { name: 'Dr. Mohamed', role: 'After-Hours On-Call', phone: '0544473530' },
+        { name: 'Dr. A. Wahab', role: 'Consultant On-Call 24h', phone: '0504150451' },
+      ],
+      forbiddenEvening: [
+        'Resident — Day Shift',
+        'Assistant 1st — Day Shift',
+        'Assistant 2nd — Day Shift',
+      ],
+    },
+    picu_phone_binding_and_confidence: {
+      type: 'mock-structured-fixture',
+      dateKey: '11/04',
+      at: '2026-04-11T17:00:00+03:00',
+      expectedRows: [
+        { name: 'Dr. Ghadeer', role: 'Resident 24h' },
+        { name: 'Dr. Mohamed', role: 'After-Hours On-Call', phone: '0544473530' },
+        { name: 'Dr. A. Wahab', role: 'Consultant On-Call 24h', phone: '0504150451' },
+      ],
+    },
+    non_picu_medicine_on_call_unchanged: {
+      type: 'mock-structured-fixture',
+      specialty: 'medicine_on_call',
+      dateKey: '01/04',
+      at: '2026-04-01T10:00:00+03:00',
+      expectedRows: [
+        { name: 'Dr. Mohammed Hadadd', role: 'Junior ER', phone: '0549095077' },
+        { name: 'Dr. Ali Ayman Bazroon', role: 'Senior ER', phone: '0546488997' },
+      ],
+    },
     radiology_weekend_banner_text: {
       type: 'mock-ui-fixture',
       fridayAt: '2026-04-10T10:00:00+03:00',
@@ -425,6 +485,76 @@ Othman Alessa 568916700`,
     pdf_search_removed_if_not_standard: {
       type: 'mock-ui-fixture',
       forbiddenIds: ['pdfSearchInput', 'pdfSearchBtn', 'pdfSearchStatus', 'pdfSearchResults'],
+    },
+    gyne_amna_phone_exists: {
+      type: 'mock-structured-fixture',
+      dateKey: '10/04',
+      expectedName: 'Amnah',
+      expectedPhone: '0531524143',
+    },
+    psychiatry_amro_phone_exists: {
+      type: 'mock-structured-fixture',
+      dateKey: '10/04',
+      expectedName: 'Amro',
+      expectedPhone: '0535971741',
+    },
+    neurosurgery_laila_and_mazen_present: {
+      type: 'mock-structured-fixture',
+      dateKey: '11/04',
+      at: '2026-04-11T20:00:00+03:00',
+      expectedRows: [
+        { name: 'Dr. Laila Batarfi', roleIncludes: 'second on-call' },
+        { name: 'Dr. Mazen Al Otaibi', roleIncludes: 'consultant' },
+      ],
+    },
+    liver_before_9pm_smor_active: {
+      type: 'mock-structured-fixture',
+      dateKey: '11/04',
+      at: '2026-04-11T20:00:00+03:00',
+      mustInclude: ['Dr. Mujtaba Almishqab', 'Noora'],
+      mustExclude: ['Dr. Naseer Alenezi', 'May Magdy', 'Dr. Attalaah', 'May'],
+      expectedRole: 'SMROD',
+    },
+    kptx_consultant_khalid_present: {
+      type: 'mock-structured-fixture',
+      dateKey: '10/04',
+      at: '2026-04-10T10:00:00+03:00',
+      expectedName: 'Dr. Khalid B. Akkari',
+      expectedRole: 'consultant',
+      expectedPhone: '0599932293',
+    },
+    liver_smrod_ordering_before_9pm: {
+      type: 'mock-structured-fixture',
+      dateKey: '11/04',
+      at: '2026-04-11T20:00:00+03:00',
+      firstName: 'Dr. Mujtaba Almishqab',
+      firstRole: 'SMROD',
+      mustExclude: ['May', 'May Magdy', 'Dr. Attalaah', 'Rehab', 'Dr. Naseer Alenezi'],
+    },
+    liver_after_9pm_second_oncall: {
+      type: 'mock-structured-fixture',
+      dateKey: '11/04',
+      at: '2026-04-11T21:30:00+03:00',
+      expectedRows: [
+        { name: 'Dr. Naseer Alenezi', role: 'SMROD' },
+        { name: 'May', role: '2nd On-Call' },
+        { name: 'Noora', role: '3rd On-Call' }
+      ],
+      forbiddenNames: ['Rehab'],
+    },
+    header_beta_typography: {
+      type: 'mock-ui-fixture',
+      selector: 'footer .mono',
+      maxLetterSpacingPx: 1,
+    },
+    meta_info_order: {
+      type: 'mock-ui-fixture',
+      expectedLabels: ['التوقيت', 'اليوم', 'التاريخ'],
+    },
+    pdf_viewer_text_layer_enabled: {
+      type: 'mock-ui-fixture',
+      requiredSelectors: ['.pdf-page-stage', '.pdf-text-layer'],
+      requiredSourceSnippets: ['renderTextLayer', 'pdf-text-layer'],
     },
   };
 
@@ -518,6 +648,50 @@ Othman Alessa 568916700`,
       }
       return { failures, affectedRows: rows.map(_summarizeRow) };
     },
+    picuStructuredParsing(fixture) {
+      const tokens = stripPicuContactListBleed(extractPicuDoctorTokens(fixture.line || ''), fixture.line || '');
+      const rows = buildPicuRowEntries(fixture.dateKey, tokens, { map: { 'Dr. Abdelwahab Omara':'0504150451' }, altMap:{} });
+      const failures = _validateExpectedRows(rows, fixture.expectedRows || [], false);
+      (fixture.forbiddenNames || []).forEach(name => {
+        if (rows.some(row => canonicalName(row.name || '') === canonicalName(name))) {
+          failures.push(`PICU parser incorrectly kept ${name} from the contact-list bleed.`);
+        }
+      });
+      return { failures, affectedRows: rows.map(_summarizeRow) };
+    },
+    picuCurrentTimeBehavior(fixture) {
+      const morningRows = getEntries('picu', ROTAS.picu, fixture.dateKey, new Date(fixture.morningAt), '');
+      const eveningRows = getEntries('picu', ROTAS.picu, fixture.dateKey, new Date(fixture.eveningAt), '');
+      const failures = [];
+      failures.push(..._validateExpectedRows(morningRows, fixture.expectedMorning || [], false));
+      failures.push(..._validateExpectedRows(eveningRows, fixture.expectedEvening || [], false));
+      (fixture.forbiddenEvening || []).forEach(role => {
+        if (eveningRows.some(row => normalizeText(row.role || '') === normalizeText(role))) {
+          failures.push(`PICU evening view still includes expired day-shift role ${role}.`);
+        }
+      });
+      return {
+        failures,
+        affectedRows: ['Morning'].concat(morningRows.map(_summarizeRow)).concat(['Evening']).concat(eveningRows.map(_summarizeRow)),
+      };
+    },
+    picuPhoneBindingAndConfidence(fixture) {
+      const rows = getEntries('picu', ROTAS.picu, fixture.dateKey, new Date(fixture.at), '');
+      const failures = _validateExpectedRows(rows, fixture.expectedRows || [], false);
+      (fixture.expectedRows || []).forEach(expected => {
+        const match = _findExpectedRow(rows, expected);
+        if (!match) return;
+        if (expected.phone && match.phoneUncertain) failures.push(`PICU valid phone for ${expected.name} is still marked uncertain.`);
+        if (match.doctorNameUncertain) failures.push(`PICU valid structured name for ${expected.name} is still marked uncertain.`);
+      });
+      return { failures, affectedRows: rows.map(_summarizeRow) };
+    },
+    nonPicuSpecialtyUnchanged(fixture) {
+      const specialty = fixture.specialty || 'medicine_on_call';
+      const rows = getEntries(specialty, ROTAS[specialty], fixture.dateKey, new Date(fixture.at), '');
+      const failures = _validateExpectedRows(rows, fixture.expectedRows || [], false);
+      return { failures, affectedRows: rows.map(_summarizeRow) };
+    },
     radiologyWeekendBanner(fixture) {
       const fridayBanner = getRadiologyForcedBannerHtml('radiology_oncall', new Date(fixture.fridayAt));
       const sundayBanner = getRadiologyForcedBannerHtml('radiology_oncall', new Date(fixture.sundayAt));
@@ -561,6 +735,131 @@ Othman Alessa 568916700`,
       });
       return { failures, affectedRows };
     },
+    gynePhonePresent(fixture) {
+      const rows = getEntries('gynecology', ROTAS.gynecology, fixture.dateKey, new Date('2026-04-10T10:00:00+03:00'), '');
+      const match = rows.find(row => canonicalName(row.name || '') === canonicalName(fixture.expectedName));
+      const failures = [];
+      if (!match) failures.push(`Gynecology is missing ${fixture.expectedName} on ${fixture.dateKey}.`);
+      const actualPhone = cleanPhone((match && (match.phone || resolvePhone(ROTAS.gynecology, match)?.phone)) || '');
+      if (actualPhone !== cleanPhone(fixture.expectedPhone)) failures.push(`Gynecology phone binding failed for ${fixture.expectedName}.`);
+      return { failures, affectedRows: rows.map(_summarizeRow) };
+    },
+    psychiatryPhonePresent(fixture) {
+      const rows = getEntries('psychiatry', ROTAS.psychiatry, fixture.dateKey, new Date('2026-04-10T10:00:00+03:00'), '');
+      const match = rows.find(row => canonicalName(row.name || '') === canonicalName(fixture.expectedName));
+      const failures = [];
+      if (!match) failures.push(`Psychiatry is missing ${fixture.expectedName} on ${fixture.dateKey}.`);
+      const actualPhone = cleanPhone((match && (match.phone || resolvePhone(ROTAS.psychiatry, match)?.phone)) || '');
+      if (actualPhone !== cleanPhone(fixture.expectedPhone)) failures.push(`Psychiatry phone binding failed for ${fixture.expectedName}.`);
+      return { failures, affectedRows: rows.map(_summarizeRow) };
+    },
+    neurosurgerySecondaryCoverage(fixture) {
+      const rows = getEntries('neurosurgery', ROTAS.neurosurgery, fixture.dateKey, new Date(fixture.at), '');
+      const failures = [];
+      fixture.expectedRows.forEach(expected => {
+        const match = rows.find(row =>
+          canonicalName(row.name || '') === canonicalName(expected.name) &&
+          (row.role || '').toLowerCase().includes(String(expected.roleIncludes || '').toLowerCase())
+        );
+        if (!match) failures.push(`Neurosurgery is missing ${expected.name} (${expected.roleIncludes}).`);
+      });
+      return { failures, affectedRows: rows.map(_summarizeRow) };
+    },
+    liverBefore9PmResolver(fixture) {
+      const rows = getEntries('liver', ROTAS.liver, fixture.dateKey, new Date(fixture.at), '');
+      const failures = [];
+      fixture.mustInclude.forEach(name => {
+        if (!rows.some(row => canonicalName(row.name || '') === canonicalName(name))) {
+          failures.push(`Liver before 9 PM is missing ${name}.`);
+        }
+      });
+      fixture.mustExclude.forEach(name => {
+        if (rows.some(row => canonicalName(row.name || '') === canonicalName(name))) {
+          failures.push(`Liver before 9 PM still incorrectly shows ${name}.`);
+        }
+      });
+      const smor = rows.find(row => canonicalName(row.name || '') === canonicalName('Dr. Mujtaba Almishqab'));
+      if (!smor || normalizeText(smor.role || '') !== normalizeText(fixture.expectedRole)) {
+        failures.push('Liver before 9 PM did not resolve the active SMOR doctor correctly.');
+      }
+      return { failures, affectedRows: rows.map(_summarizeRow) };
+    },
+    kptxConsultantPresence(fixture) {
+      const rows = getEntries('kptx', ROTAS.kptx, fixture.dateKey, new Date(fixture.at), '');
+      const failures = [];
+      const match = rows.find(row =>
+        canonicalName(row.name || '') === canonicalName(fixture.expectedName) &&
+        (row.role || '').toLowerCase().includes(String(fixture.expectedRole || '').toLowerCase())
+      );
+      if (!match) failures.push(`KPTx is missing consultant ${fixture.expectedName}.`);
+      const actualPhone = cleanPhone((match && (match.phone || resolvePhone(ROTAS.kptx, match)?.phone)) || '');
+      if (actualPhone !== cleanPhone(fixture.expectedPhone)) failures.push(`KPTx consultant phone binding failed for ${fixture.expectedName}.`);
+      return { failures, affectedRows: rows.map(_summarizeRow) };
+    },
+    liverSmrodOrdering(fixture) {
+      const rows = sortEntries(getEntries('liver', ROTAS.liver, fixture.dateKey, new Date(fixture.at), ''));
+      const failures = [];
+      const first = rows[0];
+      if (!first || canonicalName(first.name || '') !== canonicalName(fixture.firstName) || normalizeText(first.role || '') !== normalizeText(fixture.firstRole)) {
+        failures.push(`Liver should show ${fixture.firstName} as the first active ${fixture.firstRole} row before 9 PM.`);
+      }
+      fixture.mustExclude.forEach(name => {
+        if (rows.some(row => canonicalName(row.name || '') === canonicalName(name))) {
+          failures.push(`Liver before 9 PM still incorrectly shows ${name}.`);
+        }
+      });
+      return { failures, affectedRows: rows.map(_summarizeRow) };
+    },
+    liverAfter9PmSecondOnCall(fixture) {
+      const rows = sortEntries(getEntries('liver', ROTAS.liver, fixture.dateKey, new Date(fixture.at), ''));
+      const failures = _validateExpectedRows(rows, fixture.expectedRows || [], false);
+      (fixture.forbiddenNames || []).forEach(name => {
+        if (rows.some(row => canonicalName(row.name || '') === canonicalName(name))) {
+          failures.push(`Liver after 9 PM still incorrectly shows ${name}.`);
+        }
+      });
+      return { failures, affectedRows: rows.map(_summarizeRow) };
+    },
+    headerBetaTypography(fixture) {
+      const failures = [];
+      const node = document.querySelector(fixture.selector);
+      if (!node) {
+        failures.push(`Missing beta typography node ${fixture.selector}.`);
+        return { failures, affectedRows: [] };
+      }
+      const style = window.getComputedStyle(node);
+      const spacing = parseFloat(style.letterSpacing || '0');
+      if (!(spacing <= fixture.maxLetterSpacingPx)) {
+        failures.push(`Beta footer letter spacing is still too wide: ${style.letterSpacing}`);
+      }
+      return { failures, affectedRows: [`letter-spacing=${style.letterSpacing}`, `font-family=${style.fontFamily}`] };
+    },
+    metaInfoOrder(fixture) {
+      const failures = [];
+      const labels = Array.from(document.querySelectorAll('.tbar .tl')).map(node => node.textContent.trim());
+      if (JSON.stringify(labels) !== JSON.stringify(fixture.expectedLabels)) {
+        failures.push(`Meta info order mismatch: got ${labels.join(' | ')}`);
+      }
+      return { failures, affectedRows: labels };
+    },
+    pdfViewerTextLayerEnabled(fixture) {
+      const failures = [];
+      const renderSource = typeof renderPdfPreviewPages === 'function' ? String(renderPdfPreviewPages) : '';
+      fixture.requiredSourceSnippets.forEach(snippet => {
+        if (!renderSource.includes(snippet)) {
+          failures.push(`PDF viewer renderer is missing text-layer snippet: ${snippet}`);
+        }
+      });
+      const styles = Array.from(document.styleSheets).flatMap(sheet => {
+        try { return Array.from(sheet.cssRules || []); } catch (err) { return []; }
+      }).map(rule => rule.cssText || '');
+      fixture.requiredSelectors.forEach(selector => {
+        if (!styles.some(text => text.includes(selector))) {
+          failures.push(`PDF viewer styles are missing ${selector}.`);
+        }
+      });
+      return { failures, affectedRows: fixture.requiredSelectors };
+    },
   };
 
   function _findExpectedRow(rows=[], expected={}) {
@@ -580,7 +879,10 @@ Othman Alessa 568916700`,
         return;
       }
       if (expected.phone) {
-        const actualPhone = cleanPhone(match.phone || resolvePhone(ROTAS[match.specialty] || { contacts:{} }, match)?.phone || '');
+        const dept = ROTAS[match.specialty]
+          || Object.values(ROTAS).find(candidate => candidate?.label === match.section)
+          || { contacts:{} };
+        const actualPhone = cleanPhone(match.phone || resolvePhone(dept, match)?.phone || '');
         if (actualPhone !== cleanPhone(expected.phone)) {
           failures.push(`Wrong phone for ${expected.name}: expected ${expected.phone}, got ${actualPhone || 'none'}`);
         }
@@ -760,6 +1062,34 @@ Othman Alessa 568916700`,
       },
     },
     {
+      id: 'picu_structured_parser_1104',
+      specialty: 'picu',
+      run() {
+        return REGRESSION_VALIDATORS.picuStructuredParsing(BUG_REGRESSION_FIXTURES.picu_structured_parser_1104);
+      },
+    },
+    {
+      id: 'picu_current_time_behavior',
+      specialty: 'picu',
+      run() {
+        return REGRESSION_VALIDATORS.picuCurrentTimeBehavior(BUG_REGRESSION_FIXTURES.picu_current_time_behavior);
+      },
+    },
+    {
+      id: 'picu_phone_binding_and_confidence',
+      specialty: 'picu',
+      run() {
+        return REGRESSION_VALIDATORS.picuPhoneBindingAndConfidence(BUG_REGRESSION_FIXTURES.picu_phone_binding_and_confidence);
+      },
+    },
+    {
+      id: 'non_picu_medicine_on_call_unchanged',
+      specialty: 'medicine_on_call',
+      run() {
+        return REGRESSION_VALIDATORS.nonPicuSpecialtyUnchanged(BUG_REGRESSION_FIXTURES.non_picu_medicine_on_call_unchanged);
+      },
+    },
+    {
       id: 'radiology_weekend_banner_text',
       specialty: 'radiology_oncall',
       run() {
@@ -834,11 +1164,14 @@ Othman Alessa 568916700`,
           { role:'3rd On-Call', name:'Noora' },
         ], '09/04', mockNow);
         const failures = [];
-        if (!rows.some(row => /after-duty senior im/i.test(row.role || ''))) {
-          failures.push('Liver after-hours logic did not resolve the SMR alias into a senior medicine resident row.');
+        if (!rows.some(row => canonicalName(row.name || '') === canonicalName('Dr. Naseer Alenezi') && /smrod/i.test(row.role || ''))) {
+          failures.push('Liver after-hours logic did not hand off to the active SMROD doctor after 9 PM.');
         }
         if (rows.some(row => /smro|im\.resident|im resident/i.test(row.name || ''))) {
           failures.push('Liver after-hours view still exposes the unresolved SMR/IM.Resident alias.');
+        }
+        if (!rows.some(row => canonicalName(row.name || '') === canonicalName('May') && /2nd on-call/i.test(row.role || ''))) {
+          failures.push('Liver after-hours view did not show the valid 2nd on-call doctor after 9 PM.');
         }
         return { failures, affectedRows: rows.map(_summarizeRow) };
       },
@@ -855,6 +1188,76 @@ Othman Alessa 568916700`,
       specialty: 'system',
       run() {
         return REGRESSION_VALIDATORS.pdfSearchRemovedIfNotStandard(BUG_REGRESSION_FIXTURES.pdf_search_removed_if_not_standard);
+      },
+    },
+    {
+      id: 'gyne_amna_phone_exists',
+      specialty: 'gynecology',
+      run() {
+        return REGRESSION_VALIDATORS.gynePhonePresent(BUG_REGRESSION_FIXTURES.gyne_amna_phone_exists);
+      },
+    },
+    {
+      id: 'psychiatry_amro_phone_exists',
+      specialty: 'psychiatry',
+      run() {
+        return REGRESSION_VALIDATORS.psychiatryPhonePresent(BUG_REGRESSION_FIXTURES.psychiatry_amro_phone_exists);
+      },
+    },
+    {
+      id: 'neurosurgery_laila_and_mazen_present',
+      specialty: 'neurosurgery',
+      run() {
+        return REGRESSION_VALIDATORS.neurosurgerySecondaryCoverage(BUG_REGRESSION_FIXTURES.neurosurgery_laila_and_mazen_present);
+      },
+    },
+    {
+      id: 'liver_before_9pm_smor_active',
+      specialty: 'liver',
+      run() {
+        return REGRESSION_VALIDATORS.liverBefore9PmResolver(BUG_REGRESSION_FIXTURES.liver_before_9pm_smor_active);
+      },
+    },
+    {
+      id: 'kptx_consultant_khalid_present',
+      specialty: 'kptx',
+      run() {
+        return REGRESSION_VALIDATORS.kptxConsultantPresence(BUG_REGRESSION_FIXTURES.kptx_consultant_khalid_present);
+      },
+    },
+    {
+      id: 'liver_smrod_ordering_before_9pm',
+      specialty: 'liver',
+      run() {
+        return REGRESSION_VALIDATORS.liverSmrodOrdering(BUG_REGRESSION_FIXTURES.liver_smrod_ordering_before_9pm);
+      },
+    },
+    {
+      id: 'liver_after_9pm_second_oncall',
+      specialty: 'liver',
+      run() {
+        return REGRESSION_VALIDATORS.liverAfter9PmSecondOnCall(BUG_REGRESSION_FIXTURES.liver_after_9pm_second_oncall);
+      },
+    },
+    {
+      id: 'header_beta_typography',
+      specialty: 'system',
+      run() {
+        return REGRESSION_VALIDATORS.headerBetaTypography(BUG_REGRESSION_FIXTURES.header_beta_typography);
+      },
+    },
+    {
+      id: 'meta_info_order',
+      specialty: 'system',
+      run() {
+        return REGRESSION_VALIDATORS.metaInfoOrder(BUG_REGRESSION_FIXTURES.meta_info_order);
+      },
+    },
+    {
+      id: 'pdf_viewer_text_layer_enabled',
+      specialty: 'system',
+      run() {
+        return REGRESSION_VALIDATORS.pdfViewerTextLayerEnabled(BUG_REGRESSION_FIXTURES.pdf_viewer_text_layer_enabled);
       },
     },
   ];
@@ -1048,7 +1451,7 @@ Othman Alessa 568916700`,
     picu:             ['resident', '1st', '2nd'],
     orthopedics:      ['resident', '2nd', 'consultant'],
     surgery:          ['1st', '2nd', 'associate', 'consultant'],
-    neurosurgery:     ['resident', 'consultant'],
+    neurosurgery:     ['resident', '2nd', 'consultant', 'associate'],
     ent:              ['1st', '2nd', 'consultant'],
     gynecology:       ['resident', 'fellow', 'consultant'],
     urology:          ['resident', '2nd', 'consultant'],
@@ -1056,7 +1459,7 @@ Othman Alessa 568916700`,
     radonc:           ['1st', 'consultant'],
     nephrology:       ['1st', '2nd', 'consultant'],
     kptx:             ['1st', 'consultant'],
-    liver:            ['day', 'after-hours'],
+    liver:            ['day', 'after-hours', '3rd'],
     psychiatry:       ['resident', 'consultant'],
     pediatrics:       ['1st', '2nd'],
     pediatric_heme_onc: ['1st', '2nd', 'consultant'],
@@ -1228,6 +1631,37 @@ Othman Alessa 568916700`,
         });
       }
     });
+    return issues;
+  }
+
+  function _checkPicuStructuredCoverage(record, entries=[]) {
+    if (record.deptKey !== 'picu' || !entries.length) return [];
+    const fields = new Set(entries.map(entry => normalizeText(entry.picuField || '')).filter(Boolean));
+    const issues = [];
+    if (!fields.has('consultant_24h')) {
+      issues.push({
+        severity: 'error',
+        issueType: 'row-mapping',
+        explanation: 'PICU consultant 24h row was not extracted from the consultant-specific field.',
+        affectedRows: entries.slice(0, 6).map(_summarizeRow),
+      });
+    }
+    if (!fields.has('after_hours_doctor')) {
+      issues.push({
+        severity: 'error',
+        issueType: 'row-mapping',
+        explanation: 'PICU after-hours coverage row was not extracted.',
+        affectedRows: entries.slice(0, 6).map(_summarizeRow),
+      });
+    }
+    if (!fields.has('resident_24h')) {
+      issues.push({
+        severity: 'warn',
+        issueType: 'missing-tiers',
+        explanation: 'PICU 24h primary/resident coverage is missing.',
+        affectedRows: entries.slice(0, 6).map(_summarizeRow),
+      });
+    }
     return issues;
   }
 
@@ -1417,6 +1851,7 @@ Othman Alessa 568916700`,
     }
     issues.push(..._checkRawTextAlignment(usableAnnotated, sourceText));
     issues.push(..._checkDateColumnMapping(record, usableAnnotated));
+    issues.push(..._checkPicuStructuredCoverage(record, usableAnnotated));
 
     if (noCoverageOnly) {
       issues.push({ severity: 'info', issueType: 'no-coverage', explanation: 'PDF explicitly indicates no coverage for this schedule.' });
