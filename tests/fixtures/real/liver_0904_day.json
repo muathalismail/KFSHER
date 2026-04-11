@@ -1,0 +1,12 @@
+{
+  "id": "liver_0904_day",
+  "specialty": "liver",
+  "sourcePdf": "assets/pdfs/April 2026 Adult Liver Transplant Call Schedule.pdf",
+  "pages": [1, 2],
+  "dateKey": "09/04",
+  "at": "2026-04-09T10:00:00+03:00",
+  "expectedRows": [
+    { "name": "May Magdy", "role": "Assistant Consultant 1st On-Call (07:30–16:30)", "phone": "0549443186" },
+    { "name": "Dr. Attalaah", "role": "Assistant Consultant 1st On-Call (07:30–16:30)" }
+  ]
+}

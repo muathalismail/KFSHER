@@ -1,0 +1,12 @@
+{
+  "id": "hematology_0904_day",
+  "specialty": "hematology",
+  "sourcePdf": "assets/pdfs/April 2026 - Adult Hematology-Oncology & SCT Department On-Call and Duty Rota.pdf",
+  "pages": [1, 2],
+  "dateKey": "09/04",
+  "at": "2026-04-09T10:00:00+03:00",
+  "expectedRows": [
+    { "name": "Dr. Reem Alsudairi", "role": "2nd On-Call", "phone": "0553818170" },
+    { "name": "Dr. Wael Al Anazi", "role": "Consultant On-Call", "phone": "0569713810" }
+  ]
+}

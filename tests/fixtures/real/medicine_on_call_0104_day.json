@@ -1,0 +1,12 @@
+{
+  "id": "medicine_on_call_0104_day",
+  "specialty": "medicine_on_call",
+  "sourcePdf": "assets/pdfs/Block 7 (Mar 15 - Apr 11).pdf",
+  "pages": [1, 2, 3],
+  "dateKey": "01/04",
+  "at": "2026-04-01T10:00:00+03:00",
+  "expectedRows": [
+    { "name": "Dr. Mohammed Hadadd", "role": "Junior ER", "phone": "0549095077" },
+    { "name": "Dr. Ali Ayman Bazroon", "role": "Senior ER", "phone": "0546488997" }
+  ]
+}

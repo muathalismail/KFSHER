@@ -1,0 +1,13 @@
+{
+  "id": "kptx_0904_day",
+  "specialty": "kptx",
+  "sourcePdf": "assets/pdfs/April 2026 of KPTx Call Schedule.pdf",
+  "pages": [1, 2],
+  "dateKey": "09/04",
+  "at": "2026-04-09T10:00:00+03:00",
+  "expectedRows": [
+    { "name": "Ali", "role": "Day Coverage" },
+    { "name": "Abdullah", "role": "Day Coverage" },
+    { "name": "Dr. Khalid B. Akkari", "role": "Consultant On-Call 24h", "phone": "0599932293" }
+  ]
+}

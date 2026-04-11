@@ -1,0 +1,96 @@
+{
+  "version": 1,
+  "fixtures": [
+    {
+      "id": "radiology_oncall_split_1004",
+      "type": "real-pdf",
+      "pdf": "assets/pdfs/04 April 2026 MISC On-Call ROTA.pdf",
+      "pages": [1, 2],
+      "expected": "Split multi-name 2nd on-call rows into separate doctors with separate phones."
+    },
+    {
+      "id": "surgery_resident_phone_parser",
+      "type": "real-pdf",
+      "pdf": "assets/pdfs/Surgery  April 2026.pdf",
+      "pages": [2],
+      "expected": "Recover resident phone numbers from the page-2 resident list."
+    },
+    {
+      "id": "surgery_consultant_phone_parser",
+      "type": "real-pdf-plus-mock",
+      "pdf": "assets/pdfs/Surgery  April 2026.pdf",
+      "pages": [2],
+      "mock": "tests/fixtures/mocks/surgery_consultant_phone.txt",
+      "expected": "Recover consultant phone numbers from the page-2 left consultant list."
+    },
+    {
+      "id": "pediatrics_role_behavior_1004",
+      "type": "real-pdf-plus-structured",
+      "pdf": "assets/pdfs/Pidiatric Duty Rota April 2026.pdf",
+      "pages": [1, 2],
+      "expected": "Model morning 1st on-call from hospitalist, 2nd on-call 24h, and evening 1st on-call correctly."
+    },
+    {
+      "id": "orthopedics_24h_shift_0904",
+      "type": "real-pdf",
+      "pdf": "assets/pdfs/Orthopedics April 2026.pdf",
+      "pages": [1, 2],
+      "expected": "Show Orthopedics as 24h from 07:30 to next-day 07:30."
+    },
+    {
+      "id": "neurology_cross_page_phone_reconciliation",
+      "type": "real-pdf-plus-mock",
+      "pdf": "assets/pdfs/Neurology Duty Rota April 2026.pdf",
+      "pages": [2, 3],
+      "mock": "tests/fixtures/mocks/neurology_cross_page_contacts.txt",
+      "expected": "Resolve Hattan and Faisal phones from right-side/second-page contacts."
+    },
+    {
+      "id": "kptx_consultant_visibility_0904",
+      "type": "real-pdf",
+      "pdf": "assets/pdfs/April 2026 of KPTx Call Schedule.pdf",
+      "pages": [1, 2],
+      "expected": "Keep consultant Dr. Khalid Akkari visible in active daytime coverage."
+    },
+    {
+      "id": "liver_daytime_active_coverage_0904",
+      "type": "real-pdf-plus-structured",
+      "pdf": "assets/pdfs/April 2026 Adult Liver Transplant Call Schedule.pdf",
+      "pages": [1, 2],
+      "expected": "Recognize daytime active May and Dr. Attalaah on 09/04."
+    },
+    {
+      "id": "liver_daytime_active_coverage_1004",
+      "type": "real-pdf-snapshot",
+      "pdf": "assets/pdfs/April 2026 Adult Liver Transplant Call Schedule.pdf",
+      "pages": [1, 2],
+      "expected": "Recognize daytime active May and Dr. Attalaah on 10/04."
+    },
+    {
+      "id": "liver_after_hours_smr_resolution",
+      "type": "real-pdf-plus-structured",
+      "pdf": "assets/pdfs/April 2026 Adult Liver Transplant Call Schedule.pdf",
+      "pages": [1, 2],
+      "expected": "Resolve SMRO/IM.Resident alias into after-hours senior medicine coverage."
+    },
+    {
+      "id": "hematology_second_oncall_resolution_0904",
+      "type": "real-pdf-plus-structured",
+      "pdf": "assets/pdfs/April 2026 - Adult Hematology-Oncology & SCT Department On-Call and Duty Rota.pdf",
+      "pages": [1, 2],
+      "expected": "Resolve Reem S as the daytime 2nd on-call doctor."
+    },
+    {
+      "id": "hematology_weekend_day_1004",
+      "type": "real-pdf-snapshot",
+      "pdf": "assets/pdfs/April 2026 - Adult Hematology-Oncology & SCT Department On-Call and Duty Rota.pdf",
+      "pages": [1, 2],
+      "expected": "On 10/04 daytime, show Reem, Majed as 2nd on-call, and Wael from the weekend 24h team."
+    },
+    {
+      "id": "radiology_weekend_banner_text",
+      "type": "mock-rule-fixture",
+      "expected": "Weekend radiology on-call banner should show 24h wording; weekday should show 16:30-07:30."
+    }
+  ]
+}

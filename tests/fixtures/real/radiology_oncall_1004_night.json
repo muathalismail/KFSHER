@@ -1,0 +1,14 @@
+{
+  "id": "radiology_oncall_1004_night",
+  "specialty": "radiology_oncall",
+  "sourcePdf": "assets/pdfs/04 April 2026 MISC On-Call ROTA.pdf",
+  "pages": [1, 2],
+  "dateKey": "10/04",
+  "at": "2026-04-10T22:00:00+03:00",
+  "expectedRows": [
+    { "name": "Rawan Alanezi", "role": "1st On-Call", "phone": "0532040901" },
+    { "name": "Abdulrahman Alshammari", "role": "2nd On-Call", "phone": "0558718972" },
+    { "name": "Mohammed Al Anaki", "role": "2nd On-Call", "phone": "0592037777" },
+    { "name": "Dr. Rasees Al Otaibi", "role": "3rd On-Call Consultant", "phone": "0503895369" }
+  ]
+}

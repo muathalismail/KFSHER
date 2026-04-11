@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KFSH-D On-Call</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/styles.css">
+<style>
+/* ── Auditor panel — minimal, no redesign ── */
+#auditor-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 4px 0;
+}
+#auditor-toggle {
+  background: none;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 6px;
+  color: var(--text-2, #bbb);
+  font-size: 12px;
+  padding: 3px 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: inherit;
+}
+#auditor-toggle:hover { border-color: rgba(255,255,255,0.25); color: #fff; }
+#auditor-badge {
+  background: var(--red, #ff5252);
+  color: #fff;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  min-width: 18px;
+  text-align: center;
+  display: none;
+}
+#auditor-wrap {
+  display: none;
+  background: var(--surface, rgba(20,24,32,0.97));
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 12px;
+  max-height: 380px;
+  overflow-y: auto;
+}
+#auditor-wrap-head {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-1, #e0e8f0);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+#auditor-panel { font-family: inherit; }
+</style>
+</head>
+<body>
+<div class="glow"></div>
+<div class="wrap">
+
+<header>
+  <div class="badge"><div class="dot"></div><span class="mono">KFSH-D · ON-CALL LOOKUP</span></div>
+  <h1>نظام المناوبات الطبية</h1>
+  <p class="sub">مستشفى الملك فهد التخصصي — الدمام &nbsp;·&nbsp; أبريل 2026</p>
+</header>
+
+<div class="tbar">
+  <div class="ti"><span class="tl">التاريخ</span><span class="tv" id="ldate">—</span></div>
+  <span class="tsep">|</span>
+  <div class="ti"><span class="tl">اليوم</span><span class="tv" id="lday">—</span></div>
+  <span class="tsep">|</span>
+  <div class="ti"><span class="tl">الوقت</span><span class="tv" id="ltime">—</span></div>
+</div>
+<div class="shift-warn" id="shift-warn"></div>
+
+<div class="sbox">
+  <div class="sbox-main">
+    <span class="sicon">🔍</span>
+    <input type="text" id="search" placeholder="Search specialty, modality, or study... e.g. ENT, Orthopedics, CT brain, Ultrasound" autocomplete="off" spellcheck="false">
+  </div>
+  <label class="inline-upload" title="Upload a PDF to update the active rota">
+    <span>+ Add PDF</span>
+    <input id="pdfUploadInline" type="file" accept="application/pdf" multiple>
+  </label>
+</div>
+<div class="upload-status" id="uploadStatus"></div>
+
+<!-- Auditor toggle bar — always visible, zero height when no issues -->
+<div id="auditor-bar">
+  <button id="auditor-toggle" type="button">🔍 Validation <span id="auditor-badge"></span></button>
+</div>
+<div id="auditor-wrap">
+  <div id="auditor-wrap-head">📋 Validation Report</div>
+  <div id="auditor-panel">Checking…</div>
+</div>
+
+<div class="tags" id="tags"></div>
+
+<div id="welcome">
+  <p class="welcome-hint">Select a specialty below or type to search</p>
+  <div class="wgrid" id="wgrid"></div>
+</div>
+
+<div id="results">
+  <div class="rcount" id="rcount"></div>
+  <div id="cards"></div>
+</div>
+
+<div id="pdfPreviewWrap" class="pdf-preview-wrap">
+  <div class="pdf-preview-head">
+    <div>
+      <div class="pdf-preview-title">مرجع الجدول</div>
+      <div class="pdf-preview-sub" id="pdfPreviewName">—</div>
+    </div>
+    <div class="hactions">
+      <button class="ghostbtn" id="closePdfBtn" type="button">إخفاء</button>
+      <a class="ghostbtn" id="openPdfBtn" href="#" target="_blank" rel="noopener">فتح</a>
+      <a class="ghostbtn" id="downloadPdfBtn" href="#" download>تحميل</a>
+    </div>
+  </div>
+  <div id="pdfSourceHint" class="pdf-source-hint" hidden></div>
+  <div id="pdfRenderStatus" class="pdf-render-status" hidden></div>
+  <div id="pdfRender" class="pdf-render"></div>
+  <iframe id="pdfFrame" title="PDF preview"></iframe>
+</div>
+
+<footer>
+  <p>هذه الصفحة خاصة لإستخدام أطباء الطوارئ فقط لتسريع عملية الوصول للمناوبين</p>
+  <p>نسعى لخدمة المريض،،، المريض اولاً</p>
+</footer>
+
+  <script src="assets/js/data/rotas.js?v=20260411-surgery-almusianed-fix1"></script>
+  <script src="assets/js/auditor.js?v=20260411-surgery-almusianed-fix1"></script>
+  <script src="assets/js/app.js?v=20260411-surgery-almusianed-fix1"></script>
+</body>
+</html>

@@ -1,0 +1,30 @@
+{
+  "id": "pediatrics_1004_morning_evening",
+  "specialty": "pediatrics",
+  "sourcePdf": "assets/pdfs/Pidiatric Duty Rota April 2026.pdf",
+  "pages": [1, 2],
+  "checks": [
+    {
+      "dateKey": "10/04",
+      "at": "2026-04-10T10:00:00+03:00",
+      "allowExtra": false,
+      "expectedRows": [
+        { "name": "Dr. Abdalazeem Hamad", "role": "1st On-Call" },
+        { "name": "Othman Alessa", "role": "2nd On-Call" },
+        { "name": "Dr. Abdalazeem Hamad", "role": "KFSH ER Hospitalist", "phone": "0552831081" }
+      ],
+      "forbiddenNames": ["Dr. Khulood Al Thobaiti"]
+    },
+    {
+      "dateKey": "10/04",
+      "at": "2026-04-10T20:00:00+03:00",
+      "allowExtra": false,
+      "expectedRows": [
+        { "name": "Hawraa Alshakhs", "role": "1st On-Call" },
+        { "name": "Othman Alessa", "role": "2nd On-Call" },
+        { "name": "Dr. Abdalazeem Hamad", "role": "KFSH ER Hospitalist", "phone": "0552831081" }
+      ],
+      "forbiddenNames": ["Dr. Khulood Al Thobaiti"]
+    }
+  ]
+}
