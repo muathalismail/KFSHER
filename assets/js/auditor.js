@@ -959,9 +959,168 @@ Othman Alessa 568916700`,
     return results;
   }
 
+  async function loadPdfFixtureFile(sourcePdf='') {
+    const res = await fetch(sourcePdf, { cache:'no-store' });
+    if (!res.ok) throw new Error(`Failed to load PDF fixture ${sourcePdf}: ${res.status}`);
+    const blob = await res.blob();
+    const fileName = sourcePdf.split('/').pop() || 'fixture.pdf';
+    return new File([blob], fileName, { type: 'application/pdf' });
+  }
+
+  function validateUploadPipelineDisplay(fixture={}, normalizedPayload=null) {
+    const dept = ROTAS[fixture.specialty];
+    if (!dept) {
+      return { failures:[`Unknown specialty in upload fixture: ${fixture.specialty}`], affectedRows:[] };
+    }
+    const checks = Array.isArray(fixture.checks) ? fixture.checks : [{
+      dateKey: fixture.dateKey,
+      at: fixture.at,
+      expectedRows: fixture.expectedRows || [],
+      forbiddenNames: fixture.forbiddenNames || [],
+      allowExtra: fixture.allowExtra !== false,
+    }];
+    const failures = [];
+    const affectedRows = [];
+    checks.forEach(check => {
+      const rows = resolveDisplayEntriesFromNormalizedPayload(
+        fixture.specialty,
+        normalizedPayload,
+        check.dateKey,
+        new Date(check.at),
+        ''
+      );
+      failures.push(..._validateExpectedRows(rows, check.expectedRows || [], check.allowExtra !== false));
+      (check.forbiddenNames || []).forEach(name => {
+        if (rows.some(row => canonicalName(row.name || '') === canonicalName(name))) {
+          failures.push(`Forbidden upload-display row present: ${name}`);
+        }
+      });
+      affectedRows.push(`[${check.dateKey} @ ${check.at}]`);
+      affectedRows.push(...rows.map(_summarizeRow));
+    });
+    return { failures, affectedRows };
+  }
+
+  async function runUploadPipelineFixtureTests() {
+    const manifest = await loadRealPdfFixtureManifest();
+    const snapshots = manifest && Array.isArray(manifest.snapshots) ? manifest.snapshots : [];
+    const results = [];
+    for (const path of snapshots) {
+      const fixture = await loadRealPdfFixture(path);
+      if (!fixture.sourcePdf || !fixture.specialty) continue;
+      const file = await loadPdfFixtureFile(fixture.sourcePdf);
+      const detected = await detectDeptKeyFromPdf(file);
+      const parsed = await parseUploadedPdf(file, fixture.specialty);
+      const auditResult = await auditParsedRecord({
+        deptKey: fixture.specialty,
+        name: file.name,
+        entries: parsed.entries || [],
+        textSample: parsed.textSample || '',
+        specialtyLabel: specialtyLabelForKey(fixture.specialty, file.name),
+        specialtyUncertain: detected.deptKey !== fixture.specialty,
+        rawText: parsed.rawText || '',
+      }, null);
+      const normalizedPayload = buildNormalizedUploadPayload({
+        deptKey: fixture.specialty,
+        fileName: file.name,
+        entries: auditResult.annotatedEntries || parsed.entries || [],
+        parseDebug: parsed.debug || {},
+        rawText: parsed.rawText || '',
+      });
+      const decision = decideUploadPublication({
+        deptKey: fixture.specialty,
+        parseDebug: parsed.debug || {},
+        auditResult,
+        entries: auditResult.annotatedEntries || parsed.entries || [],
+        normalizedPayload,
+        fileName: file.name,
+        rawText: parsed.rawText || '',
+      });
+      const displayOutcome = validateUploadPipelineDisplay(fixture, normalizedPayload);
+      const failures = [...(displayOutcome.failures || [])];
+      if (!parsed.entries || !parsed.entries.length) {
+        failures.push('Upload pipeline extracted zero rows from the real PDF fixture.');
+      }
+      if (!normalizedPayload.roles || !normalizedPayload.roles.length) {
+        failures.push('Upload pipeline failed to produce normalized roles.');
+      }
+      if (!auditResult.publishable && decision.publishToLive) {
+        failures.push('Upload pipeline activated a fixture even though validation marked it non-publishable.');
+      }
+      if (decision.publishToLive && normalizedPayload.specialty !== fixture.specialty) {
+        failures.push(`Activated specialty mismatch: expected ${fixture.specialty}, got ${normalizedPayload.specialty}.`);
+      }
+      results.push({
+        id: `upload_${fixture.id || path}`,
+        specialty: fixture.specialty,
+        passed: failures.length === 0,
+        hardBlocked: false,
+        failures,
+        checkedAt: Date.now(),
+        fixtureType: 'upload-pipeline',
+        fixturePath: path,
+        affectedRows: displayOutcome.affectedRows || [],
+      });
+    }
+    return results;
+  }
+
+  async function _uploadThroughRuntimeHandler(sourcePdf='') {
+    const input = document.getElementById('pdfUploadInline');
+    const status = document.getElementById('uploadStatus');
+    if (!input || !status) throw new Error('Upload UI elements not found.');
+    const res = await fetch(sourcePdf, { cache:'no-store' });
+    if (!res.ok) throw new Error(`Failed to load runtime upload fixture ${sourcePdf}: ${res.status}`);
+    const blob = await res.blob();
+    const fileName = sourcePdf.split('/').pop() || 'upload.pdf';
+    const file = new File([blob], fileName, { type:'application/pdf' });
+    const transfer = new DataTransfer();
+    transfer.items.add(file);
+    input.files = transfer.files;
+    input.dispatchEvent(new Event('change', { bubbles:true }));
+
+    let settled = false;
+    for (let i = 0; i < 160; i += 1) {
+      await new Promise(resolve => setTimeout(resolve, 250));
+      const text = String(status.innerText || '').trim();
+      const active = uploadedRecordForDept('medicine_on_call');
+      if (active?.name === file.name && active?.parsedActive) {
+        settled = true;
+        break;
+      }
+      if (text && !/Checking uploaded PDF|Checking \d+ uploaded PDFs/i.test(text)) {
+        const direct = await getPdfRecord('medicine_on_call').catch(() => null);
+        if (direct?.name === file.name) {
+          settled = true;
+          break;
+        }
+      }
+    }
+    if (!settled) {
+      throw new Error(`Runtime upload did not settle for ${file.name}.`);
+    }
+    await loadUploadedSpecialties();
+    return {
+      fileName,
+      record: await getPdfRecord('medicine_on_call'),
+      active: uploadedRecordForDept('medicine_on_call'),
+      statusText: String(status.innerText || '').trim(),
+    };
+  }
+
+  function shouldRunRuntimeUploadE2E() {
+    try {
+      const params = new URLSearchParams(window.location.search || '');
+      return params.get('runRuntimeUploadE2E') === '1';
+    } catch (_) {
+      return false;
+    }
+  }
+
   async function runRegressionSuite() {
     const golden = await runGoldenTests();
     let realFixtures = [];
+    let uploadFixtures = [];
     try {
       realFixtures = await runRealPdfFixtureTests();
     } catch (err) {
@@ -975,7 +1134,20 @@ Othman Alessa 568916700`,
         fixtureType: 'real-pdf-snapshot',
       }];
     }
-    realFixtures.forEach(result => {
+    try {
+      uploadFixtures = await runUploadPipelineFixtureTests();
+    } catch (err) {
+      uploadFixtures = [{
+        id: 'upload-fixture-loader',
+        specialty: 'system',
+        passed: false,
+        hardBlocked: false,
+        failures: [String(err && err.message ? err.message : err)],
+        checkedAt: Date.now(),
+        fixtureType: 'upload-pipeline',
+      }];
+    }
+    [...realFixtures, ...uploadFixtures].forEach(result => {
       if (!result.passed) {
         _push({
           specialty: result.specialty,
@@ -987,10 +1159,208 @@ Othman Alessa 568916700`,
         });
       }
     });
-    return { golden, realFixtures };
+    return { golden, realFixtures, uploadFixtures };
   }
 
   const BUG_REGRESSION_TESTS = [
+    {
+      id: 'medicine_runtime_upload_handler_activation',
+      specialty: 'medicine_on_call',
+      async run() {
+        const previous = await getPdfRecord('medicine_on_call').catch(() => null);
+        try {
+          const outcome = await _uploadThroughRuntimeHandler('assets/pdfs/Block 7 (Mar 15 - Apr 11).pdf');
+          const failures = [];
+          if (!outcome.record) failures.push('Runtime upload did not persist a Medicine record.');
+          if (!outcome.record?.parsedActive) failures.push('Runtime upload persisted Medicine as inactive.');
+          if (outcome.record?.audit?.publishable === false) failures.push('Runtime upload kept audit.publishable=false on an active Medicine upload.');
+          if (outcome.record?.review?.reviewOnly) failures.push('Runtime upload left Medicine marked reviewOnly after activation.');
+          if (outcome.record?.review?.specialty) failures.push('Runtime upload left Medicine marked specialty review after activation.');
+          if ((outcome.record?.review?.policyIssues || []).some(issueType => ['uncertain-specialty', 'missing-consultant', 'weak-phone-match', 'noisy-label'].includes(issueType))) {
+            failures.push('Runtime upload kept warning-only Medicine policy issues on the active saved record.');
+          }
+          if (!outcome.record?.diagnostics?.activation?.activated) failures.push('Runtime upload did not persist activated diagnostics for Medicine.');
+          if (!outcome.active?.parsedActive) failures.push('Runtime upload did not register Medicine as the active searchable upload.');
+          return {
+            failures,
+            affectedRows: [
+              outcome.fileName,
+              outcome.statusText,
+              `parsedActive=${!!outcome.record?.parsedActive}`,
+              `audit.publishable=${String(outcome.record?.audit?.publishable)}`,
+              `reviewOnly=${String(outcome.record?.review?.reviewOnly)}`,
+              `policyIssues=${(outcome.record?.review?.policyIssues || []).join('|') || 'none'}`,
+            ],
+          };
+        } finally {
+          if (previous) {
+            if (previous.parsedActive) await saveActivePdfRecord(previous);
+            else await savePdfRecord(previous);
+          }
+          else {
+            const db = await openPdfDb();
+            await new Promise((resolve, reject) => {
+              const tx = db.transaction('pdfs', 'readwrite');
+              tx.objectStore('pdfs').delete('medicine_on_call');
+              tx.oncomplete = () => resolve();
+              tx.onerror = () => reject(tx.error);
+            });
+          }
+          await loadUploadedSpecialties();
+        }
+      },
+    },
+    {
+      id: 'medicine_upload_activation_valid_readable',
+      specialty: 'medicine_on_call',
+      run() {
+        const now = new Date('2026-04-01T10:00:00+03:00');
+        const entries = [
+          { specialty:'medicine_on_call', date:'01/04', role:'Junior ER', name:'Dr. Mohammed Hadadd', phone:'0549095077', section:'Junior ER', shiftType:'day', startTime:'07:30', endTime:'21:00' },
+          { specialty:'medicine_on_call', date:'01/04', role:'Senior ER', name:'Dr. Ali Ayman Bazroon', phone:'0546488997', section:'Senior', shiftType:'day', startTime:'07:30', endTime:'21:00' },
+        ];
+        const normalized = buildNormalizedUploadPayload({ deptKey:'medicine_on_call', fileName:'medicine.pdf', entries, parseDebug:{ parserMode:'specialized', templateDetected:true } });
+        const decision = decideUploadPublication({
+          deptKey:'medicine_on_call',
+          parseDebug:{ parserMode:'specialized', templateDetected:true },
+          auditResult:{ approved:true, publishable:true, overallConfidence:'medium', issues:[] },
+          entries,
+          normalizedPayload: normalized,
+          fileName:'medicine.pdf',
+          rawText:'Wed 1/4 Abrar A.Alsughir M.Alhaddad Ahmed Bazroon H.Barbari',
+          now,
+        });
+        const failures = [];
+        if (!decision.publishToLive) failures.push('Readable Medicine upload did not activate.');
+        if (!decision.diagnostics?.medicine?.currentActiveRolesResolved) failures.push('Medicine diagnostics did not report current active roles as resolved.');
+        return { failures, affectedRows: (decision.diagnostics?.medicine?.currentActiveRows || []).map(row => `${row.name} · ${row.role}`) };
+      },
+    },
+    {
+      id: 'medicine_upload_weak_phone_warning_only',
+      specialty: 'medicine_on_call',
+      run() {
+        const now = new Date('2026-04-01T10:00:00+03:00');
+        const entries = [
+          { specialty:'medicine_on_call', date:'01/04', role:'Junior ER', name:'Dr. Mohammed Hadadd', phone:'', phoneUncertain:true, section:'Junior ER', shiftType:'day', startTime:'07:30', endTime:'21:00' },
+          { specialty:'medicine_on_call', date:'01/04', role:'Senior ER', name:'Dr. Ali Ayman Bazroon', phone:'', phoneUncertain:true, section:'Senior', shiftType:'day', startTime:'07:30', endTime:'21:00' },
+        ];
+        const normalized = buildNormalizedUploadPayload({ deptKey:'medicine_on_call', fileName:'medicine.pdf', entries, parseDebug:{ parserMode:'specialized', templateDetected:true } });
+        const decision = decideUploadPublication({
+          deptKey:'medicine_on_call',
+          parseDebug:{ parserMode:'specialized', templateDetected:true },
+          auditResult:{ approved:true, publishable:true, overallConfidence:'medium', issues:[{ severity:'warn', issueType:'weak-phone-match', explanation:'phones incomplete' }] },
+          entries,
+          normalizedPayload: normalized,
+          fileName:'medicine.pdf',
+          rawText:'Wed 1/4 Abrar A.Alsughir M.Alhaddad Ahmed Bazroon H.Barbari',
+          now,
+        });
+        const failures = [];
+        if (!decision.publishToLive) failures.push('Weak phone binding alone still blocked Medicine activation.');
+        if (!(decision.diagnostics?.activation?.reasonCodes || []).every(code => code !== 'FAILED_SPECIALTY_VALIDATION')) {
+          failures.push('Weak phone binding still triggered FAILED_SPECIALTY_VALIDATION for Medicine.');
+        }
+        return { failures, affectedRows: decision.previewRows || [] };
+      },
+    },
+    {
+      id: 'medicine_upload_previous_consultant_warning_only',
+      specialty: 'medicine_on_call',
+      async run() {
+        const now = new Date('2026-04-01T10:00:00+03:00');
+        const record = {
+          deptKey:'medicine_on_call',
+          name:'medicine.pdf',
+          rawText:'Wed 1/4 Abrar A.Alsughir M.Alhaddad Ahmed Bazroon H.Barbari',
+          entries:[
+            { specialty:'medicine_on_call', date:'01/04', role:'Junior ER', name:'Dr. Mohammed Hadadd', phone:'0549095077', section:'Junior ER', shiftType:'day', startTime:'07:30', endTime:'21:00' },
+            { specialty:'medicine_on_call', date:'01/04', role:'Senior ER', name:'Dr. Ali Ayman Bazroon', phone:'0546488997', section:'Senior', shiftType:'day', startTime:'07:30', endTime:'21:00' },
+          ],
+        };
+        const oldRecord = {
+          entries:[{ role:'Consultant On-Call', name:'Dr. Legacy Consultant' }],
+        };
+        const audit = await auditParsedRecord(record, oldRecord);
+        const normalized = buildNormalizedUploadPayload({ deptKey:'medicine_on_call', fileName:'medicine.pdf', entries:audit.annotatedEntries, parseDebug:{ parserMode:'specialized', templateDetected:true }, rawText:record.rawText });
+        const decision = decideUploadPublication({
+          deptKey:'medicine_on_call',
+          parseDebug:{ parserMode:'specialized', templateDetected:true },
+          auditResult:audit,
+          entries:audit.annotatedEntries,
+          normalizedPayload: normalized,
+          fileName:'medicine.pdf',
+          rawText:record.rawText,
+          now,
+        });
+        const failures = [];
+        if (!audit.issues.some(issue => issue.issueType === 'missing-consultant')) failures.push('Medicine consultant disappearance warning was not emitted.');
+        if (!decision.publishToLive) failures.push('Previous consultant disappearance alone still blocked Medicine activation.');
+        if (decision.diagnostics?.medicine?.consultantIssue !== 'historical-diff-warning') failures.push('Medicine diagnostics did not classify consultant drift as a historical diff warning.');
+        return { failures, affectedRows: (audit.issues || []).map(issue => issue.issueType) };
+      },
+    },
+    {
+      id: 'medicine_upload_invalid_stays_inactive',
+      specialty: 'medicine_on_call',
+      async run() {
+        const now = new Date('2026-04-01T10:00:00+03:00');
+        const audit = await auditParsedRecord({
+          deptKey:'medicine_on_call',
+          name:'bad.pdf',
+          entries:[],
+          textSample:'',
+          rawText:'',
+          specialtyLabel:'Medicine On-Call',
+          specialtyUncertain:false,
+        }, null);
+        const decision = decideUploadPublication({
+          deptKey:'medicine_on_call',
+          parseDebug:{ parserMode:'specialized', templateDetected:false },
+          auditResult:audit,
+          entries:[],
+          normalizedPayload: buildNormalizedUploadPayload({ deptKey:'medicine_on_call', fileName:'bad.pdf', entries:[], parseDebug:{ parserMode:'specialized', templateDetected:false }, rawText:'' }),
+          fileName:'bad.pdf',
+          rawText:'',
+          now,
+        });
+        const failures = [];
+        if (decision.publishToLive) failures.push('Invalid Medicine upload activated unexpectedly.');
+        if (!decision.diagnostics?.validation?.hardBlocker) failures.push('Invalid Medicine upload did not report a hard blocker.');
+        return { failures, affectedRows: (audit.issues || []).map(issue => issue.issueType) };
+      },
+    },
+    {
+      id: 'medicine_display_er_only_role_bound_phone',
+      specialty: 'medicine_on_call',
+      run() {
+        const now = new Date('2026-04-12T10:00:00+03:00');
+        const normalized = buildNormalizedUploadPayload({
+          deptKey:'medicine_on_call',
+          fileName:'IM Resident Rota (Block 8).pdf',
+          entries:[
+            { specialty:'medicine_on_call', date:'12/04', role:'Junior Ward', name:'Dr. Zainab Alsalman', phone:'0544229280', section:'Junior Ward', shiftType:'day', startTime:'07:30', endTime:'21:00' },
+            { specialty:'medicine_on_call', date:'12/04', role:'Junior ER', name:'Dr. Hussain Ali Aldarwish', phone:'0539217592', section:'Junior ER', shiftType:'day', startTime:'07:30', endTime:'21:00' },
+            { specialty:'medicine_on_call', date:'12/04', role:'Senior ER', name:'Dr. M. Abdulatif', phone:'0591536669', section:'Senior', shiftType:'day', startTime:'07:30', endTime:'21:00' },
+          ],
+          parseDebug:{ parserMode:'specialized', templateDetected:true },
+          rawText:'Sun 12/4 Z.Alsalman Marwa H.Darwish M.Alahmad M.Abdulatif Maha',
+        });
+        const rows = resolveDisplayEntriesFromNormalizedPayload('medicine_on_call', normalized, '12/04', now, '');
+        const failures = [];
+        const junior = rows.find(entry => normalizeText(entry.role || '') === 'junior er');
+        const senior = rows.find(entry => normalizeText(entry.role || '') === 'senior er');
+        if (rows.some(entry => normalizeText(entry.section || '').includes('ward'))) failures.push('Medicine display still included Ward coverage rows.');
+        if (rows.length !== 2) failures.push(`Medicine display should expose exactly 2 ER rows, got ${rows.length}.`);
+        if (!junior || junior.name !== 'Dr. Hussain Ali Aldarwish' || cleanPhone(junior.phone || '') !== '0539217592') {
+          failures.push('Junior ER did not stay bound to the Resident 1 / ER doctor and phone.');
+        }
+        if (!senior || senior.name !== 'Dr. Mohammed Alabdulatif' || cleanPhone(senior.phone || '') !== '0591536669') {
+          failures.push('Senior ER did not resolve to Dr. Mohammed Alabdulatif with the correct Resident 4 phone.');
+        }
+        return { failures, affectedRows: rows.map(entry => `${entry.role} · ${entry.name} · ${entry.phone || 'none'}`) };
+      },
+    },
     {
       id: 'radiology_oncall_split_1004',
       specialty: 'radiology_oncall',
@@ -1383,7 +1753,8 @@ Othman Alessa 568916700`,
       }
     }
     for (const test of BUG_REGRESSION_TESTS) {
-      const outcome = test.run();
+      if (test.id === 'medicine_runtime_upload_handler_activation' && !shouldRunRuntimeUploadE2E()) continue;
+      const outcome = await Promise.resolve(test.run());
       const failures = outcome.failures || [];
       const result = {
         id: test.id,
@@ -1672,6 +2043,21 @@ Othman Alessa 568916700`,
            /\bDr\.?\s+\w+\s*[\/,&]\s*Dr\.?\s+\w+/i.test(name);
   }
 
+  function _medicineCurrentResolution(record={}, annotatedEntries=[], now=new Date()) {
+    if (record.deptKey !== 'medicine_on_call') return { ok:false, rows:[] };
+    if (typeof buildNormalizedUploadPayload !== 'function' || typeof isMedicineOnCallCurrentResolutionUsable !== 'function') {
+      return { ok:false, rows:[] };
+    }
+    const normalized = buildNormalizedUploadPayload({
+      deptKey: record.deptKey,
+      fileName: record.name || '',
+      entries: annotatedEntries,
+      parseDebug: record.parseDebug || { parserMode:'specialized', templateDetected:true },
+      rawText: record.rawText || record.textSample || '',
+    });
+    return isMedicineOnCallCurrentResolutionUsable(normalized, now);
+  }
+
   // ── CHANGE DETECTION (old vs new record) ─────────────────────
   function _diffRecords(oldRecord, newRecord) {
     const issues = [];
@@ -1869,12 +2255,22 @@ Othman Alessa 568916700`,
     const totalRows = usableAnnotated.length;
     const highCount = usableAnnotated.filter(e => e._confidence === 'high').length;
     const mediumOrHighCount = usableAnnotated.filter(e => e._confidence !== 'low').length;
-    const overallConfidence = noCoverageOnly ? 'high'
+    let overallConfidence = noCoverageOnly ? 'high'
       : totalRows === 0 ? 'low'
       : highCount / totalRows >= 0.7 ? 'high'
       : mediumOrHighCount / totalRows >= 0.6 ? 'medium'
       : 'low';
-    const publishable = approved && overallConfidence !== 'low';
+    const medicineResolution = _medicineCurrentResolution(record, usableAnnotated);
+    if (deptKey === 'medicine_on_call' && approved && medicineResolution.ok && overallConfidence === 'low') {
+      overallConfidence = 'medium';
+      issues.push({
+        severity: 'info',
+        issueType: 'medicine-current-roles-resolved',
+        explanation: 'Medicine current active ER roles resolved successfully, so activation can proceed despite weaker row confidence.',
+        affectedRows: (medicineResolution.rows || []).slice(0, 4).map(_summarizeRow),
+      });
+    }
+    const publishable = approved && (overallConfidence !== 'low' || (deptKey === 'medicine_on_call' && medicineResolution.ok));
 
     _setDeptVerified(deptKey, publishable || noCoverageOnly, hardErrors.length > 0, 'upload-audit');
     return { approved, publishable, overallConfidence, issues, annotatedEntries };
@@ -2128,6 +2524,7 @@ Othman Alessa 568916700`,
     auditAllExistingSpecialties,
     runGoldenTests,
     runRealPdfFixtureTests,
+    runUploadPipelineFixtureTests,
     runRegressionSuite,
     validateRealPdfFixture,
     renderReviewPanel,

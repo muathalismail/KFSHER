@@ -414,6 +414,68 @@ const UPLOAD_TRUST_PROFILES = {
   generic: { label:'generic', score:30 },
 };
 
+const UPLOAD_REASON_CODES = {
+  LOW_PARSE_CONFIDENCE: 'LOW_PARSE_CONFIDENCE',
+  NO_DOCTOR_ROWS_FOUND: 'NO_DOCTOR_ROWS_FOUND',
+  BLOCK_DATE_MISMATCH: 'BLOCK_DATE_MISMATCH',
+  AMBIGUOUS_LAYOUT: 'AMBIGUOUS_LAYOUT',
+  FAILED_SPECIALTY_VALIDATION: 'FAILED_SPECIALTY_VALIDATION',
+  MISSING_REQUIRED_ROLE: 'MISSING_REQUIRED_ROLE',
+  PHONE_BINDING_INCOMPLETE: 'PHONE_BINDING_INCOMPLETE',
+  REVIEW_ONLY_SPECIALTY: 'REVIEW_ONLY_SPECIALTY',
+};
+
+const SPECIALTY_PIPELINE_RULES = {
+  surgery: {
+    requiredRoles: ['1st on-call', '2nd on-call', 'associate', 'consultant'],
+    autoActivate: true,
+  },
+  neurology: {
+    requiredRoles: ['1st on-call', '2nd on-call', 'consultant'],
+    autoActivate: true,
+  },
+  hospitalist: {
+    requiredRoles: ['medical er', 'oncology er', 'inpatient'],
+    autoActivate: true,
+  },
+  picu: {
+    requiredRoles: ['resident 24h', 'after-hours', 'consultant'],
+    autoActivate: true,
+  },
+  radiology_duty: {
+    requiredRoles: ['ct - neuro', 'ct - general', 'ultrasound', 'x-ray'],
+    autoActivate: true,
+  },
+  radiology_oncall: {
+    requiredRoles: ['1st on-call', '2nd on-call', 'consultant'],
+    autoActivate: false,
+  },
+  medicine_on_call: {
+    requiredRoles: ['junior er', 'senior er'],
+    autoActivate: true,
+  },
+  pediatrics: {
+    requiredRoles: ['1st on-call', '2nd on-call', 'hospitalist'],
+    autoActivate: false,
+  },
+  hematology: {
+    requiredRoles: ['1st on-call', 'consultant'],
+    autoActivate: false,
+  },
+  kptx: {
+    requiredRoles: ['day coverage', 'consultant'],
+    autoActivate: false,
+  },
+  liver: {
+    requiredRoles: ['assistant consultant', '2nd on-call', '3rd on-call'],
+    autoActivate: false,
+  },
+  ent: {
+    requiredRoles: ['1st on-call', '2nd on-call', 'consultant'],
+    autoActivate: false,
+  },
+};
+
 let uploadedPdfRecords = new Map();
 
 function isMedicineSubspecialty(deptKey) {
@@ -501,9 +563,11 @@ function getParserTrustProfile(deptKey='', parseDebug={}, auditResult=null, entr
     trustScore -= 18;
     riskReasons.push('Row count dropped sharply compared with live data');
   }
-  if (issueTypes.has('missing-consultant')) {
+  if (issueTypes.has('missing-consultant') && deptKey !== 'medicine_on_call') {
     trustScore -= 18;
     riskReasons.push('Previously known consultant names disappeared');
+  } else if (issueTypes.has('missing-consultant') && deptKey === 'medicine_on_call') {
+    riskReasons.push('Previous consultant names changed compared with the older upload');
   }
   if (issueTypes.has('row-mapping')) {
     trustScore -= 18;
@@ -538,51 +602,299 @@ function getParserTrustProfile(deptKey='', parseDebug={}, auditResult=null, entr
   };
 }
 
-function decideUploadPublication({ deptKey='', parseDebug={}, auditResult=null, prevRecord=null, entries=[] } = {}) {
-  const trustedSpecialty = isTrustedAutoPublishSpecialty(deptKey);
-  const issueTypes = getUploadIssueTypes(auditResult?.issues || []);
-  const trustProfile = getParserTrustProfile(deptKey, parseDebug, auditResult, entries);
-  const criticalRiskTypes = [...issueTypes].filter(type => getCriticalUploadRiskTypes().has(type));
-  const elevatedRiskTypes = [...issueTypes].filter(type => getElevatedUploadRiskTypes().has(type) && !criticalRiskTypes.includes(type));
-  const previewRows = summarizeUploadPreviewRows(entries);
+function getMedicineOnCallRoleCoverage(entries=[]) {
+  const searchable = (entries || []).map(entry => normalizeText([
+    entry.role || '',
+    entry.section || '',
+    entry.shiftType || '',
+  ].join(' ')));
+  const required = ['junior er', 'senior er'];
+  const found = required.filter(target => searchable.some(text => text.includes(target)));
+  const missing = required.filter(target => !found.includes(target));
+  return { required, found, missing };
+}
 
-  const auditBlocked = !auditResult?.publishable;
-  const parserLowTrust = trustProfile.trustScore < 60;
-  const suspiciousStructuralChange = criticalRiskTypes.length > 0;
-  const genericNeedsReview = (trustProfile.parserMode === 'generic' || trustProfile.parserMode === 'generic-fallback')
-    && !trustProfile.strongGenericStructure;
+function resolveMedicineOnCallActiveRowsFromNormalized(normalizedPayload=null, now=new Date(), qLow='') {
+  if (!normalizedPayload?.roles?.length) return [];
+  const sched = getScheduleDate(now);
+  const schedKey = fmtKey(sched.date);
+  return resolveDisplayEntriesFromNormalizedPayload('medicine_on_call', normalizedPayload, schedKey, now, qLow);
+}
 
-  const autoPublishAllowed = trustedSpecialty && (trustProfile.trustedParser || trustProfile.strongGenericStructure);
-  const publishToLive = !!(autoPublishAllowed
-    && !auditBlocked
-    && !parserLowTrust
-    && !suspiciousStructuralChange);
+function isMedicineOnCallCurrentResolutionUsable(normalizedPayload=null, now=new Date()) {
+  const rows = resolveMedicineOnCallActiveRowsFromNormalized(normalizedPayload, now, '');
+  if (!rows.length) return { ok:false, rows:[], missing:['junior er', 'senior er'] };
+  const searchable = rows.map(entry => normalizeText([entry.role || '', entry.section || ''].join(' ')));
+  const required = ['junior er', 'senior er'];
+  const found = required.filter(target => searchable.some(text => text.includes(target)));
+  const missing = required.filter(target => !found.includes(target));
+  return { ok: found.length === required.length, rows, found, missing };
+}
 
-  let reviewReason = '';
-  if (auditBlocked) {
-    reviewReason = 'Validation blocked publish because the upload has structural parsing issues.';
-  } else if (!autoPublishAllowed) {
-    reviewReason = trustedSpecialty
-      ? 'Trusted specialty upload did not use a trusted parser path or did not meet the strong fallback checks.'
-      : 'This specialty is review-only until a dedicated upload parser is promoted to trusted auto-publish.';
-  } else if (parserLowTrust) {
-    reviewReason = 'Parser trust score is too low for safe automatic publish.';
-  } else if (suspiciousStructuralChange) {
-    reviewReason = 'Upload differs too sharply from the current live source and needs review before publish.';
-  } else if (genericNeedsReview) {
-    reviewReason = 'Generic or fallback parsing needs review unless structure is exceptionally strong.';
+function summarizeNormalizedDateRange(roles=[]) {
+  const dateKeys = Array.from(new Set((roles || []).map(role => role.dateKey).filter(Boolean)));
+  if (!dateKeys.length) return { start:'', end:'', label:'' };
+  const sortable = dateKeys
+    .map(dateKey => {
+      const [day, month] = dateKey.split('/').map(Number);
+      return {
+        dateKey,
+        stamp: Number.isFinite(day) && Number.isFinite(month) ? (month * 100 + day) : Number.MAX_SAFE_INTEGER,
+      };
+    })
+    .sort((a, b) => a.stamp - b.stamp);
+  const start = sortable[0]?.dateKey || '';
+  const end = sortable[sortable.length - 1]?.dateKey || '';
+  return {
+    start,
+    end,
+    label: start && end ? `${start}${start === end ? '' : ` → ${end}`}` : '',
+  };
+}
+
+function normalizedCoverageType(entry={}) {
+  return entry.coverageType || entry.shiftType || (isExplicitOnCallEntry(entry) ? 'on-call' : 'on-duty');
+}
+
+function buildNormalizedUploadPayload({ deptKey='', fileName='', entries=[], parseDebug={}, rawText='' } = {}) {
+  const roles = (entries || []).map((entry, index) => ({
+    roleType: entry.role || '',
+    doctorName: entry.name || '',
+    doctorPhone: entry.phone || '',
+    startTime: entry.startTime || '',
+    endTime: entry.endTime || '',
+    coverageType: normalizedCoverageType(entry),
+    shiftType: entry.shiftType || '',
+    sourceConfidence: entry._confidence || 'unknown',
+    sourceReference: entry.sourceReference || `${fileName || 'upload'}#row-${index + 1}`,
+    sourceSection: entry.section || '',
+    specialty: entry.specialty || deptKey,
+    dateKey: entry.date || '',
+    phoneUncertain: !!entry.phoneUncertain,
+    review: { ...(entry.review || {}) },
+  }));
+  return {
+    specialty: deptKey,
+    sourceFile: fileName || '',
+    parserMode: parseDebug?.parserMode || 'generic',
+    templateDetected: !!parseDebug?.templateDetected,
+    rawTextLength: String(rawText || '').length,
+    dateRange: summarizeNormalizedDateRange(roles),
+    roles,
+  };
+}
+
+function normalizedRolesToEntries(normalizedPayload=null) {
+  const roles = normalizedPayload?.roles || [];
+  return roles.map(role => ({
+    specialty: role.specialty || normalizedPayload?.specialty || '',
+    date: role.dateKey || '',
+    role: role.roleType || '',
+    name: role.doctorName || '',
+    phone: role.doctorPhone || '',
+    phoneUncertain: !!role.phoneUncertain,
+    section: role.sourceSection || '',
+    coverageType: role.coverageType || '',
+    shiftType: role.shiftType || '',
+    startTime: role.startTime || '',
+    endTime: role.endTime || '',
+    review: { ...(role.review || {}) },
+    _confidence: role.sourceConfidence || 'unknown',
+    sourceReference: role.sourceReference || '',
+    parsedFromPdf: true,
+  }));
+}
+
+function findRequiredRoleCoverage(deptKey='', roles=[]) {
+  const profile = SPECIALTY_PIPELINE_RULES[deptKey] || null;
+  const required = profile?.requiredRoles || [];
+  const searchable = (roles || []).map(role => normalizeText([
+    role.roleType || '',
+    role.coverageType || '',
+    role.sourceSection || '',
+  ].join(' ')));
+  const found = required.filter(target => searchable.some(text => text.includes(normalizeText(target))));
+  const missing = required.filter(target => !found.includes(target));
+  return { required, found, missing };
+}
+
+function mapValidationReasonCodes({ deptKey='', parseDebug={}, auditResult=null, normalizedPayload=null, now=new Date() } = {}) {
+  const reasonCodes = new Set();
+  const issues = auditResult?.issues || [];
+  const issueTypes = getUploadIssueTypes(issues);
+  const trustProfile = getParserTrustProfile(deptKey, parseDebug, auditResult, normalizedPayload?.roles || []);
+  const requiredRoles = findRequiredRoleCoverage(deptKey, normalizedPayload?.roles || []);
+  const medicineCurrentResolution = deptKey === 'medicine_on_call'
+    ? isMedicineOnCallCurrentResolutionUsable(normalizedPayload, now)
+    : null;
+  const medicineStructurallyUsable = !!(medicineCurrentResolution && medicineCurrentResolution.ok);
+
+  if (!(normalizedPayload?.roles || []).length) {
+    reasonCodes.add(UPLOAD_REASON_CODES.NO_DOCTOR_ROWS_FOUND);
+  }
+  if (
+    (!auditResult?.publishable && !(deptKey === 'medicine_on_call' && medicineStructurallyUsable))
+    || (issueTypes.has('uncertain-specialty') && !(deptKey === 'medicine_on_call' && medicineStructurallyUsable))
+  ) {
+    reasonCodes.add(UPLOAD_REASON_CODES.FAILED_SPECIALTY_VALIDATION);
+  }
+  if ((auditResult?.overallConfidence === 'low' || trustProfile.trustScore < 60) && !(deptKey === 'medicine_on_call' && medicineStructurallyUsable)) {
+    reasonCodes.add(UPLOAD_REASON_CODES.LOW_PARSE_CONFIDENCE);
+  }
+  if (issueTypes.has('row-mapping') || issueTypes.has('data-loss')) {
+    reasonCodes.add(UPLOAD_REASON_CODES.BLOCK_DATE_MISMATCH);
+  }
+  if (requiredRoles.missing.length) {
+    reasonCodes.add(UPLOAD_REASON_CODES.MISSING_REQUIRED_ROLE);
+  }
+  if (issueTypes.has('all-missing-phones') || issueTypes.has('weak-phone-match')) {
+    reasonCodes.add(UPLOAD_REASON_CODES.PHONE_BINDING_INCOMPLETE);
+  }
+  if (
+    parseDebug?.parserMode === 'generic'
+    || parseDebug?.parserMode === 'generic-fallback'
+    || issueTypes.has('merged-names')
+    || issueTypes.has('template-sections-missing')
+  ) {
+    reasonCodes.add(UPLOAD_REASON_CODES.AMBIGUOUS_LAYOUT);
   }
 
   return {
-    publishToLive,
-    autoPublishAllowed,
-    trustedSpecialty,
+    trustProfile,
+    requiredRoles,
+    reasonCodes: Array.from(reasonCodes),
+  };
+}
+
+function buildUploadPipelineDiagnostics({ deptKey='', detectedSpecialty='', parseDebug={}, parsed=null, auditResult=null, fileName='', normalizedPayload=null, now=new Date() } = {}) {
+  const validation = mapValidationReasonCodes({ deptKey, parseDebug, auditResult, normalizedPayload, now });
+  const profile = SPECIALTY_PIPELINE_RULES[deptKey] || { autoActivate:false };
+  const medicineCurrentResolution = deptKey === 'medicine_on_call'
+    ? isMedicineOnCallCurrentResolutionUsable(normalizedPayload, now)
+    : null;
+  const medicineUsableNow = !!(medicineCurrentResolution && medicineCurrentResolution.ok);
+  const validationPassed = !!auditResult?.approved;
+  const publishable = !!auditResult?.publishable || (deptKey === 'medicine_on_call' && validationPassed && medicineUsableNow);
+  const hardBlockerIssue = (auditResult?.issues || []).find(issue => {
+    const type = issue?.issueType || '';
+    if (!getCriticalUploadRiskTypes().has(type)) return false;
+    if (deptKey === 'medicine_on_call' && medicineUsableNow && (type === 'uncertain-specialty' || type === 'missing-consultant')) return false;
+    return true;
+  }) || null;
+  const ambiguityOnly = validation.reasonCodes.length > 0 && validation.reasonCodes.every(code =>
+    code === UPLOAD_REASON_CODES.AMBIGUOUS_LAYOUT
+    || code === UPLOAD_REASON_CODES.MISSING_REQUIRED_ROLE
+    || code === UPLOAD_REASON_CODES.PHONE_BINDING_INCOMPLETE
+    || code === UPLOAD_REASON_CODES.LOW_PARSE_CONFIDENCE
+  );
+  const eligibleForActivation = validationPassed
+    && publishable
+    && profile.autoActivate
+    && !validation.reasonCodes.some(code => [
+      UPLOAD_REASON_CODES.NO_DOCTOR_ROWS_FOUND,
+      UPLOAD_REASON_CODES.BLOCK_DATE_MISMATCH,
+      UPLOAD_REASON_CODES.FAILED_SPECIALTY_VALIDATION,
+      UPLOAD_REASON_CODES.AMBIGUOUS_LAYOUT,
+      UPLOAD_REASON_CODES.MISSING_REQUIRED_ROLE,
+    ].includes(code));
+  const activationStatus = eligibleForActivation
+    ? 'activated'
+    : ((validationPassed && publishable && ambiguityOnly) ? 'needs_review' : 'rejected');
+  const activationReasonCodes = eligibleForActivation
+    ? []
+    : (
+      validation.reasonCodes.length
+        ? validation.reasonCodes
+        : [profile.autoActivate ? UPLOAD_REASON_CODES.FAILED_SPECIALTY_VALIDATION : UPLOAD_REASON_CODES.REVIEW_ONLY_SPECIALTY]
+    );
+
+  return {
+    specialty: deptKey,
+    sourceFile: fileName,
+    detectedSpecialty,
+    parserMode: parseDebug?.parserMode || 'generic',
+    templateDetected: !!parseDebug?.templateDetected,
+    parseSuccess: !!((parsed?.entries || []).length),
+    extractedTextLength: String(parsed?.rawText || '').length,
+    extractedRowsCount: (parsed?.entries || []).length,
+    requiredRolesFound: validation.requiredRoles.found,
+    requiredRolesMissing: validation.requiredRoles.missing,
+    detectedDateRange: normalizedPayload?.dateRange || { start:'', end:'', label:'' },
+    confidenceScore: validation.trustProfile.trustScore,
+    confidenceLabel: auditResult?.overallConfidence || 'low',
+    validation: {
+      approved: validationPassed,
+      publishable,
+      reasonCodes: validation.reasonCodes,
+      issueTypes: (auditResult?.issues || []).map(issue => issue.issueType).filter(Boolean),
+      hardBlocker: hardBlockerIssue?.issueType || '',
+      status: validationPassed ? (publishable ? 'publishable' : 'review') : 'rejected',
+    },
+    activation: {
+      status: activationStatus,
+      autoActivateEligible: profile.autoActivate,
+      activated: activationStatus === 'activated',
+      reasonCodes: activationReasonCodes,
+    },
+    medicine: deptKey === 'medicine_on_call' ? {
+      rolesFound: getMedicineOnCallRoleCoverage(parsed?.entries || []).found,
+      rolesMissing: getMedicineOnCallRoleCoverage(parsed?.entries || []).missing,
+      consultantIssue: (auditResult?.issues || []).some(issue => issue.issueType === 'missing-consultant')
+        ? 'historical-diff-warning'
+        : ((auditResult?.issues || []).some(issue => issue.issueType === 'consultant-gap') ? 'parser-miss' : 'none'),
+      currentActiveRolesResolved: medicineUsableNow,
+      currentActiveRows: (medicineCurrentResolution?.rows || []).map(entry => ({
+        name: entry.name || '',
+        role: entry.role || '',
+        section: entry.section || '',
+      })),
+      hardBlocker: hardBlockerIssue?.issueType || '',
+    } : null,
+  };
+}
+
+function reasonCodeExplanation(code='') {
+  if (code === UPLOAD_REASON_CODES.LOW_PARSE_CONFIDENCE) return 'Low parser confidence';
+  if (code === UPLOAD_REASON_CODES.NO_DOCTOR_ROWS_FOUND) return 'No doctor rows found';
+  if (code === UPLOAD_REASON_CODES.BLOCK_DATE_MISMATCH) return 'Date/block mapping mismatch';
+  if (code === UPLOAD_REASON_CODES.AMBIGUOUS_LAYOUT) return 'Layout is ambiguous or fallback parsing was used';
+  if (code === UPLOAD_REASON_CODES.FAILED_SPECIALTY_VALIDATION) return 'Specialty validation failed';
+  if (code === UPLOAD_REASON_CODES.MISSING_REQUIRED_ROLE) return 'Required role is missing';
+  if (code === UPLOAD_REASON_CODES.PHONE_BINDING_INCOMPLETE) return 'Phone binding is incomplete';
+  if (code === UPLOAD_REASON_CODES.REVIEW_ONLY_SPECIALTY) return 'Specialty is stored for review instead of auto-activation';
+  return code || 'Unknown';
+}
+
+function decideUploadPublication({ deptKey='', parseDebug={}, auditResult=null, entries=[], normalizedPayload=null, fileName='', rawText='', now=new Date() } = {}) {
+  const trustProfile = getParserTrustProfile(deptKey, parseDebug, auditResult, entries);
+  const previewRows = summarizeUploadPreviewRows(entries);
+  const diagnostics = buildUploadPipelineDiagnostics({
+    deptKey,
+    detectedSpecialty: deptKey,
+    parseDebug,
+    parsed: { entries, rawText },
+    auditResult,
+    fileName,
+    normalizedPayload,
+    now,
+  });
+  const activationReasons = diagnostics.activation.reasonCodes.map(reasonCodeExplanation);
+  const reviewReason = activationReasons[0] || (diagnostics.activation.activated ? '' : 'Upload requires review.');
+  const issueTypes = getUploadIssueTypes(auditResult?.issues || []);
+  const criticalRiskTypes = [...issueTypes].filter(type => getCriticalUploadRiskTypes().has(type));
+  const elevatedRiskTypes = [...issueTypes].filter(type => getElevatedUploadRiskTypes().has(type) && !criticalRiskTypes.includes(type));
+
+  return {
+    publishToLive: diagnostics.activation.activated,
+    autoPublishAllowed: diagnostics.activation.autoActivateEligible,
+    trustedSpecialty: isTrustedAutoPublishSpecialty(deptKey),
     trustProfile,
     previewRows,
-    reviewOnly: !publishToLive,
+    reviewOnly: diagnostics.activation.status !== 'activated',
     reviewReason,
     criticalRiskTypes,
     elevatedRiskTypes,
+    diagnostics,
   };
 }
 
@@ -609,8 +921,11 @@ function runUploadPolicyChecks() {
       deptKey:'medicine_on_call',
       parseDebug:{ parserMode:'generic', templateDetected:false },
       auditResult:{ publishable:true, overallConfidence:'high', issues:[] },
-      entries:[{ name:'Dr. Example', role:'Junior ER' }],
-      expected:false,
+      entries:[
+        { name:'Dr. Example One', role:'Junior ER', section:'Junior ER', shiftType:'day', date:fmtKey(getScheduleDate(new Date()).date) },
+        { name:'Dr. Example Two', role:'Senior ER', section:'Senior', shiftType:'day', date:fmtKey(getScheduleDate(new Date()).date) },
+      ],
+      expected:true,
     },
   ];
   return cases.map(test => {
@@ -641,17 +956,63 @@ function isMedicineOnCallDay(now) {
   return mins >= 7 * 60 + 30 && mins < 21 * 60;
 }
 
+const MEDICINE_ON_CALL_DISPLAY_CONTACT_OVERRIDES = {
+  mabdulatif: { name:'Dr. Mohammed Alabdulatif', phone:'0591536669' },
+  mohammedalabdulatif: { name:'Dr. Mohammed Alabdulatif', phone:'0591536669' },
+};
+
+function isMedicineOnCallErEntry(entry={}) {
+  const role = normalizeText(entry.role || '');
+  const section = normalizeText(entry.section || '');
+  return role.includes('junior er')
+    || role.includes('senior er')
+    || section === 'junior er'
+    || section === 'senior';
+}
+
+function stabilizeMedicineOnCallErEntry(entry={}) {
+  const next = { ...entry };
+  const aliasKey = compactMedicineAlias(next.name || '');
+  const override = MEDICINE_ON_CALL_DISPLAY_CONTACT_OVERRIDES[aliasKey] || null;
+  if (override) {
+    next.name = override.name;
+    next.phone = override.phone;
+    next.phoneUncertain = false;
+  }
+  const role = normalizeText(next.role || '');
+  const section = normalizeText(next.section || '');
+  if (role.includes('senior er') || section === 'senior') {
+    next.role = 'Senior ER';
+    next.section = 'Senior';
+  } else if (role.includes('junior er') || section === 'junior er') {
+    next.role = 'Junior ER';
+    next.section = 'Junior ER';
+  }
+  const resolved = resolvePhone(ROTAS.medicine_on_call || { contacts:{} }, next);
+  if (resolved?.phone) {
+    next.phone = resolved.phone;
+    next.phoneUncertain = !!resolved.uncertain;
+  }
+  return next;
+}
+
+function getMedicineOnCallDisplayEntries(entries=[], now=new Date()) {
+  const rows = (entries || []).map(entry => ({ ...entry }));
+  if (!rows.length) return [];
+  const shiftType = isMedicineOnCallDay(now) ? 'day' : 'night';
+  const active = rows.filter(entry => entry.shiftType === shiftType);
+  if (!active.length) return [];
+  const erOnly = active.filter(isMedicineOnCallErEntry).map(stabilizeMedicineOnCallErEntry);
+  const roleOrder = entry => normalizeText(entry.role || '').includes('junior er') ? 0 : 1;
+  return erOnly.sort((a, b) => roleOrder(a) - roleOrder(b) || (a.name || '').localeCompare(b.name || ''));
+}
+
 function getMedicineOnCallEntries(schedKey, now, qLow='') {
   const dept = ROTAS.medicine_on_call;
   if (!dept) return [];
   const entries = (dept.schedule[schedKey] || []).map(entry => ({ ...entry }));
   if (!entries.length) return [];
-  const shiftType = isMedicineOnCallDay(now) ? 'day' : 'night';
-  const q = normalizeText(qLow);
-  let active = entries.filter(entry => entry.shiftType === shiftType);
-  if (!active.length) return [];
-  if (q.includes('ward')) return active.filter(entry => entry.section === 'Junior Ward');
-  return active.filter(entry => entry.section === 'Junior ER' || entry.section === 'Senior');
+  return getMedicineOnCallDisplayEntries(entries, now);
 }
 
 function getSurgeryEntries(schedKey, now) {
@@ -862,6 +1223,17 @@ function getKptxEntries(schedKey, now) {
   const dept = ROTAS.kptx;
   if (!dept) return [];
   const entries = (dept.schedule[schedKey] || []).map(entry => {
+    const resolved = resolvePhone(dept, entry);
+    return resolved?.phone
+      ? { ...entry, phone: entry.phone || resolved.phone, phoneUncertain: !!(resolved.uncertain && !entry.phone) }
+      : { ...entry };
+  });
+  return getKptxEntriesFromRows(entries, now);
+}
+
+function getKptxEntriesFromRows(rows=[], now=new Date()) {
+  const dept = ROTAS.kptx;
+  const entries = (rows || []).map(entry => {
     const resolved = resolvePhone(dept, entry);
     return resolved?.phone
       ? { ...entry, phone: entry.phone || resolved.phone, phoneUncertain: !!(resolved.uncertain && !entry.phone) }
@@ -1405,6 +1777,208 @@ function parseHospitalistPdfEntries(text='', deptKey='hospitalist') {
   return deduped;
 }
 
+const MEDICINE_ON_CALL_ROLE_SEQUENCE = [
+  { role:'Junior Ward', section:'Junior Ward', shiftType:'day', startTime:'07:30', endTime:'21:00' },
+  { role:'Junior Ward', section:'Junior Ward', shiftType:'night', startTime:'21:00', endTime:'07:30' },
+  { role:'Junior ER', section:'Junior ER', shiftType:'day', startTime:'07:30', endTime:'21:00' },
+  { role:'Junior ER', section:'Junior ER', shiftType:'night', startTime:'21:00', endTime:'07:30' },
+  { role:'Senior ER', section:'Senior', shiftType:'day', startTime:'07:30', endTime:'21:00' },
+  { role:'Senior ER', section:'Senior', shiftType:'night', startTime:'21:00', endTime:'07:30' },
+];
+
+function parseMedicineOnCallDateBlocks(lines=[]) {
+  const dayLineRe = /\b(?:Sun|Mon|Tue|Wed|Wen|Thu|Fri|Sat)\s+\d{1,2}\/\d{1,2}\b/gi;
+  return (lines || [])
+    .filter(line => line.match(dayLineRe))
+    .map(line => Array.from(line.matchAll(/(?:Sun|Mon|Tue|Wed|Wen|Thu|Fri|Sat)\s+(\d{1,2})\/(\d{1,2})/gi)).map(match => ({
+      dateKey: `${String(parseInt(match[1], 10)).padStart(2, '0')}/${String(parseInt(match[2], 10)).padStart(2, '0')}`,
+    })))
+    .filter(group => group.length >= 3);
+}
+
+function compactMedicineAlias(value='') {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/^dr\.?\s*/i, '')
+    .replace(/[^a-z0-9]+/g, '');
+}
+
+function cleanMedicineOnCallResolvedName(name='') {
+  return String(name || '')
+    .replace(/\bResiden\s*t?\b.*$/i, '')
+    .replace(/\bResident\b.*$/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function buildMedicineOnCallAliasIndex(contactResult=null) {
+  const dept = ROTAS.medicine_on_call || { contacts:{} };
+  const phoneToFullName = new Map();
+  Object.entries(contactResult?.map || {}).forEach(([name, phone]) => {
+    if (/^Dr/i.test(name || '') && phone) phoneToFullName.set(cleanPhone(phone), name);
+  });
+  const aliasIndex = new Map();
+  Object.entries(dept.contacts || {}).forEach(([alias, phone]) => {
+    const compact = compactMedicineAlias(alias);
+    if (!compact) return;
+    const canonical = phoneToFullName.get(cleanPhone(phone || '')) || (/^Dr/i.test(alias) ? alias : `Dr. ${alias}`);
+    aliasIndex.set(compact, cleanMedicineOnCallResolvedName(canonical.replace(/\s+/g, ' ').trim()));
+  });
+  Object.keys(contactResult?.map || {}).forEach(name => {
+    const compact = compactMedicineAlias(name);
+    if (!compact) return;
+    aliasIndex.set(compact, cleanMedicineOnCallResolvedName(name.replace(/\s+/g, ' ').trim()));
+  });
+  return aliasIndex;
+}
+
+function splitMedicineOnCallRowNames(body='', aliasIndex=null, expectedCount=MEDICINE_ON_CALL_ROLE_SEQUENCE.length) {
+  const tokens = String(body || '').trim().split(/\s+/).filter(Boolean);
+  const memo = new Map();
+  const maxWidth = 4;
+
+  function solve(index, slot) {
+    const key = `${index}|${slot}`;
+    if (memo.has(key)) return memo.get(key);
+    const remainingTokens = tokens.length - index;
+    const remainingSlots = expectedCount - slot;
+    if (remainingSlots === 0) return index === tokens.length ? { score:0, groups:[] } : null;
+    if (remainingTokens < remainingSlots || remainingTokens > remainingSlots * maxWidth) return null;
+
+    let best = null;
+    for (let width = 1; width <= Math.min(maxWidth, remainingTokens); width += 1) {
+      const raw = tokens.slice(index, index + width).join(' ');
+      const compact = compactMedicineAlias(raw);
+      const canonical = aliasIndex?.get(compact) || '';
+      const tail = solve(index + width, slot + 1);
+      if (!tail) continue;
+      const score = tail.score + (canonical ? 4 : 0) + width;
+      const candidate = { score, groups:[canonical || raw, ...tail.groups] };
+      if (!best || candidate.score > best.score) best = candidate;
+    }
+    memo.set(key, best);
+    return best;
+  }
+
+  return solve(0, 0)?.groups || [];
+}
+
+function resolveMedicineOnCallName(raw='', contactResult=null) {
+  const token = String(raw || '').trim().replace(/^[.-]+|[.-]+$/g, '');
+  if (!token) return '';
+  const dept = ROTAS.medicine_on_call || { contacts:{} };
+  const directCandidates = [
+    token,
+    token.replace(/\s+/g, ''),
+    token.replace(/\s+/g, '.'),
+  ];
+  for (const candidate of directCandidates) {
+    if (dept.contacts?.[candidate]) {
+      if (/^dr\.?/i.test(candidate)) return candidate;
+    }
+  }
+  const normalizedToken = normalizeText(token.replace(/\./g, ' '));
+  const bareToken = normalizedToken.replace(/^dr\b/, '').trim();
+  let best = null;
+  Object.keys(contactResult?.map || {}).forEach(name => {
+    const candidateNorm = normalizeText(String(name || '').replace(/^Dr\.?\s*/i, '').replace(/\./g, ' '));
+    if (!candidateNorm) return;
+    const candidateTokens = candidateNorm.split(' ').filter(Boolean);
+    const tokenBits = bareToken.split(' ').filter(Boolean);
+    if (!tokenBits.length) return;
+    const firstBit = tokenBits[0];
+    const lastBit = tokenBits[tokenBits.length - 1];
+    const firstMatch = firstBit.length === 1
+      ? !!candidateTokens[0]?.startsWith(firstBit)
+      : candidateTokens.some(bit => bit === firstBit || bit.startsWith(firstBit));
+    const lastMatch = lastBit.length >= 3
+      ? candidateTokens.some(bit => bit === lastBit || bit.startsWith(lastBit))
+      : true;
+    if (!firstMatch || !lastMatch) return;
+    const score = scoreNameMatch(token, name) || scoreNameMatch(`Dr. ${token}`, name);
+    if (!score) return;
+    if (!best || score.score > best.score) best = { name, score: score.score };
+  });
+  if (best?.name) return cleanMedicineOnCallResolvedName(best.name);
+  const fallback = token.replace(/\b([A-Z])\./g, '$1. ').replace(/\s+/g, ' ').trim();
+  return cleanMedicineOnCallResolvedName(/^dr\.?/i.test(fallback) ? fallback : `Dr. ${fallback}`.trim());
+}
+
+function buildMedicineOnCallRow(dateKey='', roleMeta={}, rawName='', contactResult=null, deptKey='medicine_on_call') {
+  const name = resolveMedicineOnCallName(rawName, contactResult);
+  const phoneMeta = resolvePhoneFromContactMap(name, contactResult)
+    || resolvePhone(ROTAS[deptKey] || { contacts:{} }, { name, phone:'' })
+    || { phone:'', uncertain:true };
+  return {
+    specialty: deptKey,
+    date: dateKey,
+    role: roleMeta.role,
+    name,
+    phone: phoneMeta.phone || '',
+    phoneUncertain: !phoneMeta.phone || !!phoneMeta.uncertain,
+    section: roleMeta.section,
+    shiftType: roleMeta.shiftType,
+    startTime: roleMeta.startTime,
+    endTime: roleMeta.endTime,
+    parsedFromPdf: true,
+  };
+}
+
+function parseMedicineOnCallWeekendBlocks(lines=[], contactResult=null, deptKey='medicine_on_call') {
+  const entries = [];
+  const headerRe = /^(Fri|Sat)\s+(\d{1,2})\/(\d{1,2})$/i;
+  for (let i = 0; i < lines.length; i += 1) {
+    const match = String(lines[i] || '').trim().match(headerRe);
+    if (!match) continue;
+    const dateKey = `${String(parseInt(match[2], 10)).padStart(2, '0')}/${String(parseInt(match[3], 10)).padStart(2, '0')}`;
+    const rawNames = [];
+    let cursor = i + 1;
+    while (cursor < lines.length && rawNames.length < MEDICINE_ON_CALL_ROLE_SEQUENCE.length) {
+      const candidate = String(lines[cursor] || '').trim();
+      if (!candidate) {
+        cursor += 1;
+        continue;
+      }
+      if (headerRe.test(candidate)) break;
+      rawNames.push(candidate);
+      cursor += 1;
+    }
+    if (rawNames.length === MEDICINE_ON_CALL_ROLE_SEQUENCE.length) {
+      rawNames.forEach((rawName, index) => {
+        entries.push(buildMedicineOnCallRow(dateKey, MEDICINE_ON_CALL_ROLE_SEQUENCE[index], rawName, contactResult, deptKey));
+      });
+    }
+    i = cursor - 1;
+  }
+  return entries;
+}
+
+function parseMedicineOnCallPdfEntries(text='', deptKey='medicine_on_call') {
+  const contactResult = buildContactMapFromText(text);
+  const aliasIndex = buildMedicineOnCallAliasIndex(contactResult);
+  const lines = String(text || '').split(/\n/).map(line => line.trim()).filter(Boolean);
+  const entries = [];
+  const dayRowRe = /^(Sun|Mon|Tue|Wed|Wen|Thu|Fri|Sat)\s+(\d{1,2})\/(\d{1,2})\s+(.+)$/i;
+
+  lines.forEach(line => {
+    const match = line.match(dayRowRe);
+    if (!match) return;
+    if (/Day\s*\/\s*Date/i.test(line) || /Junior\s+Ward/i.test(line)) return;
+    const dateKey = `${String(parseInt(match[2], 10)).padStart(2, '0')}/${String(parseInt(match[3], 10)).padStart(2, '0')}`;
+    const groups = splitMedicineOnCallRowNames(match[4], aliasIndex, MEDICINE_ON_CALL_ROLE_SEQUENCE.length);
+    if (groups.length !== MEDICINE_ON_CALL_ROLE_SEQUENCE.length) return;
+    groups.forEach((rawName, index) => {
+      entries.push(buildMedicineOnCallRow(dateKey, MEDICINE_ON_CALL_ROLE_SEQUENCE[index], rawName, contactResult, deptKey));
+    });
+  });
+
+  const deduped = dedupeParsedEntries(entries);
+  deduped._templateDetected = deduped.length >= 60;
+  deduped._templateName = deduped._templateDetected ? 'medicine-on-call-grid' : '';
+  deduped._coreSectionsFound = Array.from(new Set(deduped.map(entry => entry.section).filter(Boolean)));
+  return deduped;
+}
+
 function isLegacyHospitalistRecord(record) {
   if (!record || record.deptKey !== 'hospitalist' || !Array.isArray(record.entries) || !record.entries.length) return false;
   const oncologyStructured = record.entries.filter(entry =>
@@ -1553,14 +2127,67 @@ function isLegacyPicuRecord(record) {
   return structuredCount === 0 || genericConsultantOnly;
 }
 
+function normalizedUploadedBaseEntries(record, deptKey) {
+  const normalizedPayload = record?.normalized || null;
+  if (!normalizedPayload || !Array.isArray(normalizedPayload.roles) || !normalizedPayload.roles.length) {
+    return Array.isArray(record?.entries) ? record.entries : [];
+  }
+  return normalizedRolesToEntries(normalizedPayload).filter(entry =>
+    !entry.specialty
+    || entry.specialty === deptKey
+    || record.deptKey === deptKey
+    || PDF_FALLBACKS[deptKey] === record.deptKey
+  );
+}
+
+function resolveDisplayEntriesFromNormalizedPayload(deptKey, normalizedPayload, schedKey, now, qLow='') {
+  const allEntries = normalizedRolesToEntries(normalizedPayload).filter(entry =>
+    !entry.specialty
+    || entry.specialty === deptKey
+    || PDF_FALLBACKS[deptKey] === normalizedPayload?.specialty
+  );
+  const dated = allEntries.filter(entry => !entry.date || entry.date === schedKey || entry.date === 'dynamic-weekday');
+  const base = dated.length ? dated : allEntries.filter(entry => !entry.date);
+  if (!base.length) return [];
+  if (base.some(isNoCoverageEntry)) return base.filter(isNoCoverageEntry);
+  if (deptKey === 'medicine_on_call') {
+    return splitMultiDoctorEntries(getMedicineOnCallDisplayEntries(base.map(cloneEntry), now), deptKey);
+  }
+  if (deptKey === 'radiology_duty') {
+    const intent = radiologyQueryIntent(qLow);
+    if (intent === 'ct_neuro_er') {
+      const override = getRadiologyDutyNeuroErEntries(schedKey);
+      if (override.length) return override;
+    }
+    return filterRadiologyDutyByIntent(base.map(cloneEntry), intent);
+  }
+  if (deptKey === 'radiology_oncall') return base;
+  if (deptKey === 'neurology') return splitMultiDoctorEntries(getNeurologyEntriesFromRows(base), deptKey);
+  if (deptKey === 'picu') return splitMultiDoctorEntries(resolvePicuActiveEntries(getPicuEntriesFromRows(base), now), deptKey);
+  if (deptKey === 'kptx') return splitMultiDoctorEntries(getKptxEntriesFromRows(base, now), deptKey);
+  if (deptKey === 'liver') return splitMultiDoctorEntries(normalizeLiverRowsForDisplay(base.map(cloneEntry), schedKey, now), deptKey);
+  if (isMedicineSubspecialty(deptKey)) {
+    const entries = withMedicineMeta(base.map(cloneEntry), deptKey);
+    const active = isWorkHours(now)
+      ? entries.filter(entry => entry.coverageType !== 'on-call')
+      : entries.filter(entry => entry.coverageType === 'on-call');
+    return splitMultiDoctorEntries(active.length ? active : entries.filter(entry => roleText(entry).includes('24h')), deptKey);
+  }
+  return splitMultiDoctorEntries(filterActiveEntries(base.map(cloneEntry), now), deptKey);
+}
+
 function uploadedEntriesForDept(deptKey, schedKey, now, qLow='') {
   const record = uploadedRecordForDept(deptKey);
   if (!record || !record.parsedActive || !Array.isArray(record.entries)) return null;
   if (deptKey === 'medicine_on_call' && isLegacyMedicineOnCallRecord(record)) return null;
   if (deptKey === 'hospitalist' && isLegacyHospitalistRecord(record)) return null;
   if (deptKey === 'picu' && isLegacyPicuRecord(record)) return null;
-  if (!record.entries.length) return [];
-  const deptEntries = record.entries.filter(entry => !entry.specialty || entry.specialty === deptKey || record.deptKey === deptKey || PDF_FALLBACKS[deptKey] === record.deptKey);
+  if (record.normalized?.roles?.length) {
+    return resolveDisplayEntriesFromNormalizedPayload(deptKey, record.normalized, schedKey, now, qLow);
+  }
+  const baseEntries = normalizedUploadedBaseEntries(record, deptKey);
+  if (!baseEntries.length) return [];
+  const deptEntries = baseEntries.filter(entry => !entry.specialty || entry.specialty === deptKey || record.deptKey === deptKey || PDF_FALLBACKS[deptKey] === record.deptKey);
   const dated = deptEntries.filter(entry => !entry.date || entry.date === schedKey || entry.date === 'dynamic-weekday');
   const base = dated.length ? dated : deptEntries.filter(entry => !entry.date);
   if (!base.length) return [];
@@ -1577,6 +2204,8 @@ function uploadedEntriesForDept(deptKey, schedKey, now, qLow='') {
   if (deptKey === 'radiology_oncall') return base;
   if (deptKey === 'neurology') return splitMultiDoctorEntries(getNeurologyEntriesFromRows(base), deptKey);
   if (deptKey === 'picu') return splitMultiDoctorEntries(resolvePicuActiveEntries(getPicuEntriesFromRows(base), now), deptKey);
+  if (deptKey === 'kptx') return splitMultiDoctorEntries(getKptxEntriesFromRows(base, now), deptKey);
+  if (deptKey === 'liver') return splitMultiDoctorEntries(normalizeLiverRowsForDisplay(base.map(cloneEntry), schedKey, now), deptKey);
   if (isMedicineSubspecialty(deptKey)) {
     const entries = withMedicineMeta(base.map(cloneEntry), deptKey);
     const active = isWorkHours(now)
@@ -1916,15 +2545,31 @@ function ensureDetectedSpecialty(deptKey, fileName='') {
 
 function canonicalizeUploadedRecord(record) {
   if (!record) return record;
+  const normalizedPayload = record.normalized || buildNormalizedUploadPayload({
+    deptKey: record.deptKey || record.originalDeptKey || '',
+    fileName: record.name || '',
+    entries: record.entries || [],
+    parseDebug: record.diagnostics || record.debug || {},
+    rawText: record.rawText || '',
+  });
   const review = { ...(record.review || {}) };
   if (record.parsedActive && record.isActive !== false) {
     review.auditRejected = false;
     review.parsing = false;
+    review.pendingUploadReview = false;
+    review.reviewOnly = false;
+    review.reviewReason = '';
   }
   const preservedKey = record.deptKey || record.originalDeptKey || '';
   if (preservedKey === 'medicine_on_call' || record.originalDeptKey === 'medicine_on_call') {
+    if (record.parsedActive && record.isActive !== false) {
+      review.specialty = false;
+      review.policyIssues = [];
+      review.reasonCodes = [];
+    }
     return {
       ...record,
+      normalized: normalizedPayload,
       review,
       originalDeptKey: 'medicine_on_call',
       deptKey: 'medicine_on_call',
@@ -1936,6 +2581,7 @@ function canonicalizeUploadedRecord(record) {
   if (preservedKey && ROTAS[preservedKey] && !ROTAS[preservedKey].uploadedOnly) {
     return {
       ...record,
+      normalized: normalizedPayload,
       review,
       originalDeptKey: record.originalDeptKey || preservedKey,
       deptKey: preservedKey,
@@ -1948,6 +2594,7 @@ function canonicalizeUploadedRecord(record) {
   if (!interpreted) {
     return {
       ...record,
+      normalized: normalizedPayload,
       review,
       specialtyLabel: specialtyLabelForKey(record.deptKey, record.name || ''),
       icon: specialtyIconForKey(record.deptKey, record.name || ''),
@@ -1955,6 +2602,7 @@ function canonicalizeUploadedRecord(record) {
   }
   return {
     ...record,
+    normalized: normalizedPayload,
     review,
     originalDeptKey: record.originalDeptKey || record.deptKey,
     deptKey: interpreted.key,
@@ -3101,47 +3749,223 @@ function parseNeurosurgeryPdfEntries(text='', deptKey='neurosurgery') {
   return deduped;
 }
 
+const KPTX_NAME_HINTS = {
+  'dr abdulnaser al abadi':'Dr. Abdulnaser Al Abadi',
+  'dr abdulnaser alabadi':'Dr. Abdulnaser Al Abadi',
+  'dr khalid akkari':'Dr. Khalid B. Akkari',
+  'dr khalid b akkari':'Dr. Khalid B. Akkari',
+  'dr maher al demerdash':'Dr. Maher Aldemerdash',
+  'dr maher aldemerdash':'Dr. Maher Aldemerdash',
+  'dr najeeb al musaied':'Dr. Najeeb Al Musaied',
+  'dr fahad al otaibi':'Dr. Fahad Al Otaibi',
+  'judee selem':'Judee Selem',
+  'amer ahmed':'Amer Ahmed',
+  'eman el rashidy':'Eman El Rashidy',
+  'eman rashidi':'Eman El Rashidy',
+};
+
+const KPTX_COORDINATOR_NAMES = ['Judee Selem', 'Amer Ahmed', 'Eman El Rashidy', 'Eman Rashidi'];
+
+function normalizeKptxName(raw='') {
+  const clean = String(raw || '').replace(/\s+/g, ' ').trim();
+  if (!clean) return '';
+  const hinted = KPTX_NAME_HINTS[canonicalName(clean)] || clean;
+  return hinted.replace(/\bDr\.\s*([A-Z])/g, 'Dr. $1').replace(/\s+/g, ' ').trim();
+}
+
 function parseKptxPdfEntries(text='', deptKey='kptx') {
   const entries = [];
   const rowRe = /^(Wednesday|Thursday|Friday|Saturday|Sunday|Monday|Tuesday)\s+(\d{2})\/04\/2026\s+(.+)$/i;
   const lines = String(text || '').split(/\n/).map(line => line.trim()).filter(Boolean);
+  const dept = ROTAS[deptKey] || { contacts:{} };
+  const contactResult = buildContactMapFromText(text);
+
+  const add = (dateKey='', role='', name='', startTime='', endTime='', shiftType='') => {
+    const normalizedName = normalizeKptxName(name);
+    if (!normalizedName) return;
+    const resolved = resolvePhoneFromContactMap(normalizedName, contactResult)
+      || resolvePhone(dept, { name: normalizedName, phone:'' })
+      || { phone:'', uncertain:true };
+    entries.push({
+      specialty: deptKey,
+      date: dateKey,
+      role,
+      name: normalizedName,
+      phone: resolved.phone || '',
+      phoneUncertain: !resolved.phone || !!resolved.uncertain,
+      startTime,
+      endTime,
+      shiftType,
+      parsedFromPdf: true,
+    });
+  };
+
   lines.forEach(line => {
     const match = line.match(rowRe);
     if (!match) return;
     const dateKey = `${match[2]}/04`;
     const body = match[3].trim();
-    const drIndex = body.search(/Dr\.?\s+/i);
-    if (drIndex === -1) return;
-    const before = body.slice(0, drIndex).trim().split(/\s{2,}|\t|\s{1,}(?=[A-Z][a-z]+\b)/).filter(Boolean);
-    const after = body.slice(drIndex).trim();
-    const consultantMatch = after.match(/^(Dr\.?\s+[A-Z][A-Za-z.'-]+(?:\s+[A-Z][A-Za-z.'-]+){1,5})(?:\s+(.*))?$/);
-    if (!consultantMatch) return;
-    const consultant = consultantMatch[1].replace(/\s+/g, ' ').trim();
-    const remainder = (consultantMatch[2] || '').trim();
-    const first = before[0] || '';
-    const second = before[1] || '';
-    const coordinator = remainder.split(/\s{2,}|\t/).filter(Boolean)[0] || remainder;
-    const add = (role, name) => {
-      if (!name) return;
-      const resolved = resolvePhone(ROTAS[deptKey] || { contacts:{} }, { name, phone:'' }) || { phone:'', uncertain:true };
+    const coordinator = KPTX_COORDINATOR_NAMES
+      .map(name => normalizeKptxName(name))
+      .find(name => new RegExp(`${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i').test(body)) || '';
+    const withoutCoordinator = coordinator
+      ? body.slice(0, Math.max(0, body.toLowerCase().lastIndexOf(coordinator.toLowerCase()))).trim()
+      : body;
+    const consultantMatch = withoutCoordinator.match(/(Dr\.?\s+[A-Z][A-Za-z.'-]+(?:\s+[A-Z][A-Za-z.'-]+){1,5})$/i);
+    const consultant = consultantMatch ? normalizeKptxName(consultantMatch[1]) : '';
+    const prefix = consultantMatch
+      ? withoutCoordinator.slice(0, consultantMatch.index).trim()
+      : withoutCoordinator;
+    const fields = prefix.split(/\s{2,}/).map(part => part.trim()).filter(Boolean);
+    if (!consultant || !fields.length) return;
+
+    const dayRole = /Friday|Saturday/i.test(match[1]) ? 'Weekend Coverage' : 'Day Coverage';
+    if (fields.length >= 3) {
+      add(dateKey, dayRole, fields[0], '07:30', '16:30', 'day');
+      add(dateKey, 'After-Hours On-Call', fields[1], '16:30', '07:30', 'night');
+      add(dateKey, '2nd On-Call After-Hours', fields[2], '16:30', '07:30', 'night');
+    } else {
+      add(dateKey, dayRole, fields[0], '07:30', '16:30', 'day');
+      add(dateKey, 'After-Hours On-Call', fields[1] || '', '16:30', '07:30', 'night');
+    }
+    add(dateKey, 'Consultant On-Call 24h', consultant, '07:30', '07:30', '24h');
+    add(dateKey, 'Clinical Coordinator On-Call', coordinator, '07:30', '07:30', '24h');
+  });
+  const deduped = dedupeParsedEntries(entries);
+  deduped._templateDetected = deduped.length >= 20;
+  deduped._templateName = deduped._templateDetected ? 'kptx-monthly-2026' : '';
+  return deduped;
+}
+
+const LIVER_NAME_HINTS = {
+  'may':'May Magdy',
+  'attalaah':'Dr. Attalaah',
+  'sharafeldin':'Sharafeldin Nourein',
+  'hala':'Hala Khalifa Mohamed',
+  'hadi':'Hadi Kuriry',
+  'eyad':'Eyad Gadour',
+  'rehab':'Rehab Abdullah',
+  'taher':'Taher Majati',
+  'ergin':'Ergin Latog',
+  'genalyn':'Genalyn Dela Fuente',
+};
+
+function normalizeLiverParsedName(raw='') {
+  const clean = String(raw || '')
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/\bIM\.?\s*Resident\b/ig, ' ')
+    .replace(/\bIM\.?\s*Res\b/ig, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!clean) return '';
+  return LIVER_NAME_HINTS[canonicalName(clean)] || clean;
+}
+
+function splitLiverCoverageNames(raw='') {
+  return splitPossibleNames(
+    String(raw || '')
+      .replace(/\([^)]*\)/g, ' ')
+      .replace(/\bIM\.?\s*Resident\b/ig, '/')
+      .replace(/\bIM\.?\s*Res\b/ig, '/')
+      .replace(/\s+/g, ' ')
+      .trim()
+  )
+    .map(normalizeLiverParsedName)
+    .filter(name => name && !isLiverResidentAlias(name));
+}
+
+function parseLiverPdfEntries(text='', deptKey='liver') {
+  const entries = [];
+  const dept = ROTAS[deptKey] || { contacts:{} };
+  const contactResult = buildContactMapFromText(text);
+  const dateRe = /^(Wednesday|Thursday|Friday|Saturday|Sunday|Monday|Tuesday)\s+(\d{1,2})\/(\d{1,2})\/2026(?:\s+(.*))?$/i;
+  const stopRe = /^(Outpatient Service|Day|Date|\(G\)|Inpatient Service|4\.2026|Liver Transplant Call Schedule|KFSHD ID\/|Adult Liver Transplant Team Contact Details|Clinical|Coordinator Adult Liver Tx|Name$)/i;
+  const lines = String(text || '').split(/\n/).map(line => line.trimEnd()).filter(Boolean);
+  const blocks = [];
+  let current = null;
+
+  lines.forEach(line => {
+    const trimmed = line.trim();
+    const match = trimmed.match(dateRe);
+    if (match) {
+      if (current) blocks.push(current);
+      current = {
+        dateKey: `${String(parseInt(match[2], 10)).padStart(2, '0')}/${String(parseInt(match[3], 10)).padStart(2, '0')}`,
+        chunks: [match[4] || ''],
+      };
+      return;
+    }
+    if (!current) return;
+    if (stopRe.test(trimmed)) {
+      blocks.push(current);
+      current = null;
+      return;
+    }
+    current.chunks.push(trimmed);
+  });
+  if (current) blocks.push(current);
+
+  const add = (dateKey='', role='', rawName='', startTime='', endTime='', shiftType='') => {
+    const names = splitLiverCoverageNames(rawName);
+    if (!names.length && !/^SMRO/i.test(rawName || '')) return;
+    if (/^SMRO/i.test(rawName || '')) {
+      entries.push({
+        specialty: deptKey,
+        date: dateKey,
+        role,
+        name: 'SMRO',
+        phone: '',
+        phoneUncertain: true,
+        startTime,
+        endTime,
+        shiftType,
+        parsedFromPdf: true,
+      });
+      return;
+    }
+    names.forEach(name => {
+      const resolved = resolvePhoneFromContactMap(name, contactResult)
+        || resolvePhone(dept, { name, phone:'' })
+        || { phone:'', uncertain:true };
       entries.push({
         specialty: deptKey,
         date: dateKey,
         role,
         name,
         phone: resolved.phone || '',
-        phoneUncertain: !!(resolved.phone && resolved.uncertain),
+        phoneUncertain: !resolved.phone || !!resolved.uncertain,
+        startTime,
+        endTime,
+        shiftType,
         parsedFromPdf: true,
       });
-    };
-    add(/Friday|Saturday/i.test(match[1]) ? 'Weekend Coverage' : 'Day Coverage', first);
-    add('After-Hours On-Call', second);
-    add('Consultant On-Call 24h', consultant);
-    add('Clinical Coordinator On-Call', coordinator);
+    });
+  };
+
+  blocks.forEach(block => {
+    const fields = block.chunks.join('   ').split(/\s{2,}/).map(part => part.trim()).filter(Boolean);
+    if (!fields.length) return;
+    add(block.dateKey, 'Assistant Consultant 1st On-Call (07:30–16:30)', fields[0], '07:30', '16:30', 'day');
+
+    if (/^SMRO/i.test(fields[1] || '')) {
+      add(block.dateKey, 'Night On-Call (9PM–9AM)', fields[1], '21:00', '07:30', 'night');
+      add(block.dateKey, '2nd On-Call', fields[2] || '', '16:30', '07:30', 'night');
+      add(block.dateKey, '3rd On-Call', fields[3] || '', '21:00', '07:30', 'night');
+      add(block.dateKey, 'Clinical Coordinator 24h', fields[4] || '', '07:30', '07:30', '24h');
+      return;
+    }
+
+    add(block.dateKey, 'After-Hours On-Call', fields[1] || '', '16:30', '07:30', 'night');
+    add(block.dateKey, '2nd On-Call', fields[2] || '', '16:30', '07:30', 'night');
+    add(block.dateKey, '3rd On-Call', fields[3] || '', '21:00', '07:30', 'night');
+    if (fields[4] && !/IM\.?\s*Res|resident/i.test(fields[4])) {
+      add(block.dateKey, 'Clinical Coordinator 24h', fields[4], '07:30', '07:30', '24h');
+    }
   });
+
   const deduped = dedupeParsedEntries(entries);
-  deduped._templateDetected = deduped.length >= 20;
-  deduped._templateName = deduped._templateDetected ? 'kptx-monthly-2026' : '';
+  deduped._templateDetected = /Liver Transplant Call Schedule/i.test(text) && deduped.length >= 20;
+  deduped._templateName = deduped._templateDetected ? 'liver-monthly-2026' : '';
   return deduped;
 }
 
@@ -4368,6 +5192,10 @@ async function parseUploadedPdf(file, deptKey) {
     parsed = parseRadiologyDutyPdfEntries(text, deptKey);
     parserMode = 'specialized';
 
+  } else if (deptKey === 'medicine_on_call') {
+    parsed = parseMedicineOnCallPdfEntries(text, deptKey);
+    parserMode = 'specialized';
+
   } else if (deptKey === 'medicine' || isMedicineSubspecialty(deptKey)) {
     parsed = parseMedicinePdfEntries(text, deptKey);
     parserMode = 'specialized';
@@ -4379,10 +5207,18 @@ async function parseUploadedPdf(file, deptKey) {
     parsed = dedupeParsedEntries([...seqParsed, ...genericParsed]);
 
   } else if (deptKey === 'liver') {
-    // Schedule packed into one line with d/m/yyyy or dd/mm/yyyy date separators
-    const inlineParsed  = parseSingleLineDateSplit(text, deptKey);
-    const genericParsed = parseGenericPdfEntries(text, deptKey);
-    parsed = dedupeParsedEntries([...inlineParsed, ...genericParsed]);
+    const liverParsed = parseLiverPdfEntries(text, deptKey);
+    if (liverParsed._templateDetected && liverParsed.length) {
+      parsed = dedupeParsedEntries([...liverParsed]);
+      parsed._templateDetected = true;
+      parsed._templateName = liverParsed._templateName || 'liver-monthly-2026';
+      parserMode = 'specialized';
+    } else {
+      const inlineParsed  = parseSingleLineDateSplit(text, deptKey);
+      const genericParsed = parseGenericPdfEntries(text, deptKey);
+      parsed = dedupeParsedEntries([...liverParsed, ...inlineParsed, ...genericParsed]);
+      parserMode = 'generic-fallback';
+    }
 
   } else if (deptKey === 'kptx') {
     const kptxParsed = parseKptxPdfEntries(text, deptKey);
@@ -4857,13 +5693,40 @@ async function saveActivePdfRecord(record) {
     });
     archivedVersions.push(...(previous.archivedVersions || []));
   }
+  const normalizedReview = {
+    ...(record.review || {}),
+    parsing: false,
+    auditRejected: false,
+    pendingUploadReview: false,
+    reviewOnly: false,
+    reviewReason: '',
+  };
+  if (record.deptKey === 'medicine_on_call') {
+    normalizedReview.specialty = false;
+    normalizedReview.policyIssues = [];
+    normalizedReview.reasonCodes = [];
+  }
+  const normalizedAudit = {
+    ...(record.audit || {}),
+    publishable: true,
+    livePublished: true,
+  };
   await savePdfRecord({
     ...record,
+    review: normalizedReview,
+    audit: normalizedAudit,
     isActive: true,
     pendingReviewUpload: null,
     archivedVersions,
   });
-  cacheUploadedRecord({ ...record, isActive: true, pendingReviewUpload: null, archivedVersions });
+  cacheUploadedRecord({
+    ...record,
+    review: normalizedReview,
+    audit: normalizedAudit,
+    isActive: true,
+    pendingReviewUpload: null,
+    archivedVersions,
+  });
 }
 
 async function saveRejectedPdfRecord(record) {
@@ -5466,6 +6329,12 @@ function isDeptHardBlocked(deptKey) {
   return !!(dept && dept.auditBlocked);
 }
 
+function uploadBlockReasonSummary(record=null) {
+  const codes = record?.diagnostics?.activation?.reasonCodes || [];
+  if (!codes.length) return '';
+  return codes.map(reasonCodeExplanation).join(' · ');
+}
+
 async function buildCard(deptKey, dept, entries) {
   const card = document.createElement('div');
   card.className = 'dcard';
@@ -5473,11 +6342,14 @@ async function buildCard(deptKey, dept, entries) {
   const now = new Date();
   let rowsHtml = '';
   if (isDeptHardBlocked(deptKey)) {
-    rowsHtml = '<div class="empty">Needs review</div>';
+    const uploaded = uploadedRecordForDept(deptKey);
+    const reasonText = uploadBlockReasonSummary(uploaded);
+    rowsHtml = `<div class="empty">Needs review${reasonText ? ` · ${escapeHtml(reasonText)}` : ''}</div>`;
   } else if (!entries || entries.length === 0) {
     const uploaded = uploadedRecordForDept(deptKey);
     if (uploaded && uploaded.review && (uploaded.review.parsing || uploaded.review.auditRejected)) {
-      rowsHtml = '<div class="empty">Parsing failed - review needed</div>';
+      const reasonText = uploadBlockReasonSummary(uploaded);
+      rowsHtml = `<div class="empty">Parsing failed - review needed${reasonText ? ` · ${escapeHtml(reasonText)}` : ''}</div>`;
     } else if ((deptKey === 'radiology_duty' || deptKey === 'radiology_oncall') && imagingIconForced === deptKey) {
       rowsHtml = '<div class="empty">No active coverage</div>';
     } else {
@@ -5816,21 +6688,36 @@ document.addEventListener('DOMContentLoaded', () => {
         deptKey,
         parseDebug: parsed.debug || {},
         auditResult,
-        prevRecord,
         entries,
+        normalizedPayload: buildNormalizedUploadPayload({
+          deptKey,
+          fileName: file.name,
+          entries,
+          parseDebug: parsed.debug || {},
+          rawText: parsed.rawText || '',
+        }),
+        fileName: file.name,
+        rawText: parsed.rawText || '',
       });
       const {
         publishToLive,
-        autoPublishAllowed,
         trustProfile,
         reviewReason,
         reviewOnly,
         previewRows,
         criticalRiskTypes,
         elevatedRiskTypes,
+        diagnostics,
       } = publishDecision;
+      const normalizedPayload = buildNormalizedUploadPayload({
+        deptKey,
+        fileName: file.name,
+        entries,
+        parseDebug: parsed.debug || {},
+        rawText: parsed.rawText || '',
+      });
 
-      if (!auditResult.publishable) {
+      if (!publishToLive && !auditResult.publishable) {
         review.parsing = true;
         review.auditRejected = true;
         review.auditErrors = auditResult.issues.filter(i => i.severity === 'error').map(i => i.explanation);
@@ -5842,6 +6729,18 @@ document.addEventListener('DOMContentLoaded', () => {
       } else if (auditResult.overallConfidence === 'medium') {
         review.auditWarnings = auditResult.issues.filter(i => i.severity !== 'info').map(i => i.explanation);
       }
+      if (publishToLive) {
+        review.specialty = false;
+        review.parsing = false;
+        review.auditRejected = false;
+        review.pendingUploadReview = false;
+        review.reviewOnly = false;
+        review.reviewReason = '';
+        review.policyIssues = (review.policyIssues || []).filter(issueType => {
+          if (deptKey !== 'medicine_on_call') return true;
+          return !['uncertain-specialty', 'missing-consultant', 'weak-phone-match', 'noisy-label'].includes(issueType);
+        });
+      }
       if (!entries.length) {
         review.parsing = true;
       }
@@ -5849,6 +6748,20 @@ document.addEventListener('DOMContentLoaded', () => {
       if (trustProfile.riskReasons.length) review.riskReasons = trustProfile.riskReasons;
       if (criticalRiskTypes.length || elevatedRiskTypes.length) {
         review.policyIssues = [...criticalRiskTypes, ...elevatedRiskTypes];
+        if (publishToLive && deptKey === 'medicine_on_call') {
+          review.policyIssues = review.policyIssues.filter(issueType => ![
+            'uncertain-specialty',
+            'missing-consultant',
+            'weak-phone-match',
+            'noisy-label',
+          ].includes(issueType));
+        }
+      }
+      if (publishToLive && deptKey === 'medicine_on_call') {
+        review.policyIssues = [];
+      }
+      if (diagnostics.activation.reasonCodes.length) {
+        review.reasonCodes = diagnostics.activation.reasonCodes;
       }
 
       debug.rows = entries.length;
@@ -5856,7 +6769,9 @@ document.addEventListener('DOMContentLoaded', () => {
       debug.trustLevel = trustProfile.trustLevel;
       debug.previewRows = previewRows;
       debug.riskReasons = trustProfile.riskReasons;
-      debug.status = !auditResult.publishable ? 'Auditor blocked — review needed' :
+      debug.reasonCodes = diagnostics.activation.reasonCodes;
+      debug.status = publishToLive         ? `published (${auditResult.overallConfidence} confidence)` :
+                     !auditResult.publishable ? 'Auditor blocked — review needed' :
                      review.parsing        ? 'Parsing failed — review needed' :
                      reviewOnly            ? 'Stored for review only' :
                      `published (${auditResult.overallConfidence} confidence)`;
@@ -5865,7 +6780,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (deptKey === 'radiology_duty') {
         debug.sectionDebug = formatRadiologyDutyUploadDebug(entries, auditResult.issues || [], !!auditResult.publishable);
       }
-      const needsReview = review.specialty || review.auditRejected || hasHardReviewIssue(auditResult.issues || []);
+      const needsReview = !publishToLive && (review.specialty || review.auditRejected || hasHardReviewIssue(auditResult.issues || []));
       const uploadRecord = {
         deptKey,
         specialty: deptKey,
@@ -5880,10 +6795,12 @@ document.addEventListener('DOMContentLoaded', () => {
         entries,
         textSample: parsed.textSample || '',
         rawText: parsed.rawText || '',
+        normalized: normalizedPayload,
+        diagnostics,
         audit: {
           overallConfidence: auditResult.overallConfidence,
           approved: auditResult.approved,
-          publishable: auditResult.publishable,
+          publishable: publishToLive || auditResult.publishable,
           livePublished: publishToLive,
           parserTrustScore: trustProfile.trustScore,
           parserTrustLevel: trustProfile.trustLevel,
@@ -5924,10 +6841,13 @@ document.addEventListener('DOMContentLoaded', () => {
           const riskHtml = item.riskReasons && item.riskReasons.length
             ? `<div class="upload-debug ${okClass}">risk=${escapeHtml(item.riskReasons.join(' | '))}</div>`
             : '';
+          const reasonCodeHtml = item.reasonCodes && item.reasonCodes.length
+            ? `<div class="upload-debug ${okClass}">reason-codes=${escapeHtml(item.reasonCodes.join(' | '))}</div>`
+            : '';
           const templateInfo = item.specialty.startsWith('radiology_duty')
             ? `<div class="upload-debug ${okClass}">template=${item.templateDetected?'yes':'no'} · core-sections=${escapeHtml((item.coreSectionsFound || []).join(', ') || 'none')}</div>`
             : '';
-          return `<div class="upload-debug ${okClass}">${escapeHtml(item.file)}: received=yes · text=${item.textChars?'yes':'no'} (${item.textChars}) · specialty=${escapeHtml(item.specialty)} · doctors=${item.rows}${conf}${trust} · saved=${item.saved?'yes':'no'} · searchable=${item.searchable?'yes':'no'} · ${escapeHtml(item.status)}</div>${templateInfo}${previewHtml}${riskHtml}${issueHtml}${item.sectionDebug || ''}`;
+          return `<div class="upload-debug ${okClass}">${escapeHtml(item.file)}: received=yes · text=${item.textChars?'yes':'no'} (${item.textChars}) · specialty=${escapeHtml(item.specialty)} · doctors=${item.rows}${conf}${trust} · saved=${item.saved?'yes':'no'} · searchable=${item.searchable?'yes':'no'} · ${escapeHtml(item.status)}</div>${templateInfo}${previewHtml}${riskHtml}${reasonCodeHtml}${issueHtml}${item.sectionDebug || ''}`;
         }).join('')
       : (accepted.length ? `Active PDFs updated: ${accepted.length}` : '');
     if (reviewNotes.length) status.innerHTML += `<div class="upload-debug fail">⚠️ Review: ${escapeHtml(reviewNotes.join(' · '))}</div>`;
