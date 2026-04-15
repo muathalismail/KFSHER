@@ -81,6 +81,8 @@ h1{font-size:clamp(26px,5vw,40px);font-weight:700;background:linear-gradient(135
 .drow{display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--surf);border:1px solid var(--border);border-radius:11px;transition:all .2s;margin-bottom:8px}
 .drow:last-child{margin-bottom:0}
 .drow:hover{border-color:rgba(0,212,255,.3);background:var(--surf2)}
+.radiology-trace{margin-top:10px;padding:10px 12px;border:1px dashed rgba(0,212,255,.22);border-radius:10px;background:rgba(0,212,255,.04)}
+.radiology-trace-line{font-size:11px;line-height:1.5;color:var(--muted);font-family:'JetBrains Mono',monospace}
 .dinfo{flex:1;min-width:0}
 .ddrname{font-size:15px;font-weight:700;color:var(--text);margin-bottom:3px}
 .drrole{font-size:12px;color:var(--text);font-weight:600;margin-bottom:3px}
