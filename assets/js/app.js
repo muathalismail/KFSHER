@@ -2177,11 +2177,23 @@ function resolveDisplayEntriesFromNormalizedPayload(deptKey, normalizedPayload, 
 }
 
 function uploadedEntriesForDept(deptKey, schedKey, now, qLow='') {
-  const record = uploadedRecordForDept(deptKey);
+  const record = refreshUploadedRecordIfNeeded(uploadedRecordForDept(deptKey));
   if (!record || !record.parsedActive || !Array.isArray(record.entries)) return null;
   if (deptKey === 'medicine_on_call' && isLegacyMedicineOnCallRecord(record)) return null;
   if (deptKey === 'hospitalist' && isLegacyHospitalistRecord(record)) return null;
   if (deptKey === 'picu' && isLegacyPicuRecord(record)) return null;
+  if (deptKey === 'radiology_duty') {
+    const deptEntries = (record.entries || []).filter(entry =>
+      !entry.specialty || entry.specialty === deptKey || record.deptKey === deptKey || PDF_FALLBACKS[deptKey] === record.deptKey
+    );
+    const dated = deptEntries.filter(entry => !entry.date || entry.date === schedKey || entry.date === 'dynamic-weekday');
+    const base = dated.length ? dated : deptEntries.filter(entry => !entry.date);
+    if (!base.length) return [];
+    if (base.some(isNoCoverageEntry)) return base.filter(isNoCoverageEntry);
+    const intent = radiologyQueryIntent(qLow);
+    const filtered = filterRadiologyDutyByIntent(base.map(cloneEntry), intent);
+    return dedupeRadiologyDutyDisplayEntries(filtered);
+  }
   if (record.normalized?.roles?.length) {
     return resolveDisplayEntriesFromNormalizedPayload(deptKey, record.normalized, schedKey, now, qLow);
   }
@@ -2193,14 +2205,6 @@ function uploadedEntriesForDept(deptKey, schedKey, now, qLow='') {
   if (!base.length) return [];
   if (base.some(isNoCoverageEntry)) return base.filter(isNoCoverageEntry);
   if (record.review && record.review.parsing) return splitMultiDoctorEntries(base.map(cloneEntry), deptKey);
-  if (deptKey === 'radiology_duty') {
-    const intent = radiologyQueryIntent(qLow);
-    if (intent === 'ct_neuro_er') {
-      const override = getRadiologyDutyNeuroErEntries(schedKey);
-      if (override.length) return override;
-    }
-    return filterRadiologyDutyByIntent(base.map(cloneEntry), intent);
-  }
   if (deptKey === 'radiology_oncall') return base;
   if (deptKey === 'neurology') return splitMultiDoctorEntries(getNeurologyEntriesFromRows(base), deptKey);
   if (deptKey === 'picu') return splitMultiDoctorEntries(resolvePicuActiveEntries(getPicuEntriesFromRows(base), now), deptKey);
@@ -4480,6 +4484,74 @@ function inferRadiologyDutyRole(section='', name='', fallbackRole='') {
   return fallbackRole || 'Resident';
 }
 
+function getRadiologyDutyResolvedName(name='') {
+  if (!name) return '';
+  return RADIOLOGY_DUTY_NAME_EXPANSIONS[canonicalName(name)] || name;
+}
+
+function getRadiologyDutyNameTokens(name='') {
+  return canonicalName(getRadiologyDutyResolvedName(name)).split(' ').filter(Boolean);
+}
+
+function hasRadiologyDutySharedLastToken(a='', b='') {
+  const aTokens = getRadiologyDutyNameTokens(a);
+  const bTokens = getRadiologyDutyNameTokens(b);
+  if (!aTokens.length || !bTokens.length) return false;
+  return aTokens[aTokens.length - 1] === bTokens[bTokens.length - 1];
+}
+
+function hasRadiologyDutyCompatibleInitial(rawName='', candidateName='') {
+  const rawTokens = canonicalName(rawName).split(' ').filter(Boolean);
+  const candidateTokens = getRadiologyDutyNameTokens(candidateName);
+  if (!rawTokens.length || !candidateTokens.length) return true;
+  const rawFirst = rawTokens[0] || '';
+  if (rawFirst.length !== 1) return true;
+  return candidateTokens[0] && candidateTokens[0].startsWith(rawFirst);
+}
+
+function scoreRadiologyDutyDisplayEntry(entry={}) {
+  const confidenceScore = entry._confidence === 'high' ? 20 : entry._confidence === 'medium' ? 10 : 0;
+  const name = String(entry.name || '').trim();
+  const resolvedName = getRadiologyDutyResolvedName(name);
+  const hasPhone = entry.phone ? 10 : 0;
+  const certainPhone = entry.phone && !entry.phoneUncertain ? 6 : 0;
+  const exactResolvedName = canonicalName(name) === canonicalName(resolvedName) ? 0 : 3;
+  const fullNameBonus = getRadiologyDutyNameTokens(name).length >= 2 && !/^[A-Z]\./.test(name) ? 4 : 0;
+  const doctorPrefixBonus = /^Dr\.?\s/i.test(name) ? 1 : 0;
+  return confidenceScore + hasPhone + certainPhone + exactResolvedName + fullNameBonus + doctorPrefixBonus;
+}
+
+function pickBetterRadiologyDutyEntry(current, candidate) {
+  if (!current) return candidate;
+  const currentScore = scoreRadiologyDutyDisplayEntry(current);
+  const candidateScore = scoreRadiologyDutyDisplayEntry(candidate);
+  if (candidateScore !== currentScore) return candidateScore > currentScore ? candidate : current;
+  const currentName = String(current.name || '');
+  const candidateName = String(candidate.name || '');
+  if (candidateName.length !== currentName.length) return candidateName.length > currentName.length ? candidate : current;
+  return candidate;
+}
+
+function dedupeRadiologyDutyDisplayEntries(entries=[]) {
+  const byIdentity = new Map();
+  entries.forEach(entry => {
+    const sectionKey = normalizeText(entry.section || '');
+    const roleKey = normalizeText(entry.role || '');
+    const shiftKey = [entry.date || '', entry.startTime || '', entry.endTime || '', entry.shiftLabel || ''].join('|');
+    const phoneKey = cleanPhone(entry.phone || '');
+    const nameKey = canonicalName(getRadiologyDutyResolvedName(entry.name || ''));
+    const identityKey = [
+      sectionKey,
+      roleKey,
+      shiftKey,
+      phoneKey || nameKey,
+    ].join('|');
+    const existing = byIdentity.get(identityKey);
+    byIdentity.set(identityKey, pickBetterRadiologyDutyEntry(existing, entry));
+  });
+  return [...byIdentity.values()];
+}
+
 function normalizeRadiologyDutyName(raw='', rawText='') {
   const pretty = raw
     .replace(/([A-Z])\.([A-Za-z])/g, '$1. $2')
@@ -4584,18 +4656,28 @@ function resolveRadiologyDutyCandidateName(rawName='', contactResult=null, rawTe
   const contacts = getRadiologyDutyContactNames(contactResult);
   if (!contacts.length) return { name:'', confidence:'low', matched:false };
 
+  const exactExpanded = contacts.find(contact => canonicalName(contact) === canonicalName(expanded));
+  if (exactExpanded) return { name: exactExpanded, confidence:'high', matched:true };
+
+  const strictCandidates = contacts.filter(contact =>
+    hasRadiologyDutySharedLastToken(expanded, contact)
+    && hasRadiologyDutyCompatibleInitial(pretty, contact)
+  );
+  const candidatePool = strictCandidates.length ? strictCandidates : contacts.filter(contact =>
+    hasRadiologyDutySharedLastToken(pretty, contact)
+    && hasRadiologyDutyCompatibleInitial(pretty, contact)
+  );
+  if (!candidatePool.length) return { name:'', confidence:'low', matched:false };
+
   let best = null;
-  contacts.forEach(contactName => {
+  candidatePool.forEach(contactName => {
     const match = scoreNameMatch(expanded, contactName) || scoreNameMatch(pretty, contactName);
     if (!match) return;
     if (!best || match.score > best.score) best = { ...match, name: contactName };
   });
 
-  if (best && best.score >= 8) {
+  if (best && best.score >= 12 && hasRadiologyDutySharedLastToken(expanded, best.name)) {
     return { name: best.name, confidence: best.uncertain ? 'medium' : 'high', matched:true };
-  }
-  if (contacts.some(contact => canonicalName(contact) === canonicalName(expanded))) {
-    return { name: contacts.find(contact => canonicalName(contact) === canonicalName(expanded)), confidence:'high', matched:true };
   }
   return { name:'', confidence:'low', matched:false };
 }
@@ -6340,6 +6422,9 @@ async function buildCard(deptKey, dept, entries) {
   card.className = 'dcard';
   const pdf = await getPdfHref(deptKey);
   const now = new Date();
+  if (deptKey === 'radiology_duty' && Array.isArray(entries)) {
+    entries = dedupeRadiologyDutyDisplayEntries(entries);
+  }
   let rowsHtml = '';
   if (isDeptHardBlocked(deptKey)) {
     const uploaded = uploadedRecordForDept(deptKey);
