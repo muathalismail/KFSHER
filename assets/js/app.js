@@ -2558,12 +2558,17 @@ async function loadUploadedSpecialties() {
 document.addEventListener('DOMContentLoaded', () => {
   tick(); setInterval(tick,1000);
 
-  uploadedSpecialtiesReadyPromise = loadUploadedSpecialties();
-  // Pull cloud records from Supabase (non-blocking, merges into IndexedDB)
-  if (typeof pullFromSupabase === 'function') {
-    pullFromSupabase().catch(err => console.warn('[SUPABASE] Pull skipped:', err.message));
-  }
-  uploadedSpecialtiesReadyPromise.then(() => Promise.all([
+  // 1. Pull cloud records from Supabase FIRST (blocks until done or fails)
+  // 2. Then load uploaded specialties from IndexedDB (which now includes cloud data)
+  // 3. Then hydrate + render
+  const supabasePull = (typeof pullFromSupabase === 'function')
+    ? pullFromSupabase().catch(err => console.warn('[SUPABASE] Pull skipped:', err.message))
+    : Promise.resolve();
+
+  supabasePull.then(() => {
+    uploadedSpecialtiesReadyPromise = loadUploadedSpecialties();
+    return uploadedSpecialtiesReadyPromise;
+  }).then(() => Promise.all([
     hydrateBundledSurgerySchedule(),
     hydrateBundledHospitalistSchedule(),
     hydrateBundledPediatricsContacts(),
