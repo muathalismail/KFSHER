@@ -107,35 +107,32 @@ function parseNeurosurgeryPdfEntries(text='', deptKey='neurosurgery') {
     const dateKey = `${String(parseInt(match[2], 10)).padStart(2, '0')}/${monthPad}`;
     const body = match[5].replace(/\b\d{3,}.*$/, '').trim();
     const tokens = tokenizeNeurosurgeryRow(body);
-    if (tokens.length < 4) return;
+    if (tokens.length < 3) return;
 
-    // Column mapping (left to right in PDF):
-    // 0: Resident Day, 1: Resident Night, 2: Fellow/2nd On-Duty
-    // 3: Associate Consultant (may be empty)
-    // 4: Neurosurgeon Consultant ← target
-    // 5+: Neurovascular (EXCLUDED)
+    // RELIABLE COLUMN EXTRACTION — count from the RIGHT:
+    // LAST token = Neurovascular (ALWAYS skip)
+    // SECOND-TO-LAST = Neurosurgeon Consultant (ALWAYS extract)
+    // Remaining tokens from LEFT: [0]=ResDay, [1]=ResNight, [2]=Fellow, [3]=Associate
     //
-    // If only 4 tokens: no associate column → token[3] is consultant
-    // If 5+ tokens: token[3]=associate, token[4]=consultant, token[5]=neurovascular (skip)
+    // This works regardless of empty cells because Neurovascular is always last.
 
-    let dayResident = tokens[0] || '';
-    let nightResident = tokens[1] || '';
-    let secondOnCall = tokens[2] || '';
+    const lastIdx = tokens.length - 1;
+    // Last token = Neurovascular → skip
+    // Second-to-last = Consultant
+    const consultant = tokens.length >= 4 ? (tokens[lastIdx - 1] || '') : '';
+    // Everything before consultant, from left:
+    const dayResident = tokens[0] || '';
+    const nightResident = tokens.length >= 3 ? (tokens[1] || '') : '';
+    let secondOnCall = '';
     let associate = '';
-    let consultant = '';
 
-    if (tokens.length === 4) {
-      // No associate column: 0=day, 1=night, 2=fellow, 3=consultant
-      consultant = tokens[3] || '';
-    } else if (tokens.length >= 5) {
-      // 0=day, 1=night, 2=fellow, 3=associate, 4=consultant, 5+=neurovascular (skip)
-      associate = tokens[3] || '';
-      consultant = tokens[4] || '';
-    }
-
-    // Exclude any Neurovascular values that leaked into consultant
-    if (/neurovascular|intervention|neuro-interv/i.test(consultant)) consultant = '';
-    if (/neurovascular|intervention|neuro-interv/i.test(associate)) associate = '';
+    // Tokens between nightResident (idx 1) and consultant (lastIdx-1):
+    // These are Fellow and Associate (in that order)
+    const middleStart = 2;
+    const middleEnd = lastIdx - 1; // exclusive (consultant position)
+    const middleTokens = tokens.slice(middleStart, middleEnd);
+    if (middleTokens.length >= 1) secondOnCall = middleTokens[0] || '';
+    if (middleTokens.length >= 2) associate = middleTokens[1] || '';
 
     const add = (role, name, startTime='07:30', endTime='07:30', shiftType='24h') => {
       if (!name) return;
