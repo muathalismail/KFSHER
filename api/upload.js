@@ -55,7 +55,6 @@ module.exports = async function handler(req, res) {
           specialty,
           date: date || new Date().toISOString().slice(0, 10),
           data,
-          source: source || 'upload',
           pdf_url,
         }),
       }

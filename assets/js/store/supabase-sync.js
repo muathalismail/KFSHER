@@ -30,7 +30,6 @@ async function syncRecordToSupabase(record, pdfFile) {
         name: record.name || '',
         uploadedAt: record.uploadedAt || Date.now(),
       },
-      source: record.name || 'upload',
     };
 
     // Include PDF as base64 if available and small enough (<5MB)
