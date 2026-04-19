@@ -2410,10 +2410,6 @@ async function saveActivePdfRecord(record) {
     pendingReviewUpload: null,
     archivedVersions,
   });
-  // Sync to Supabase (non-blocking)
-  if (typeof syncRecordToSupabase === 'function') {
-    syncRecordToSupabase(record, record._pdfFile || null).catch(() => {});
-  }
 }
 
 async function saveRejectedPdfRecord(record) {
@@ -2508,6 +2504,10 @@ async function getPdfHref(deptKey) {
       };
     }
     return { href: runtimePdfUrls[renderKey], name: uploaded.name || 'rota.pdf', uploadedAt: uploaded.uploadedAt || 0 };
+  }
+  // Cloud-synced record: use Supabase Storage URL for PDF viewing
+  if (uploaded && uploaded._cloudPdfUrl) {
+    return { href: uploaded._cloudPdfUrl, name: uploaded.name || 'rota.pdf', uploadedAt: uploaded.uploadedAt || 0 };
   }
   if (deptKey === 'radiology_duty') {
     const fallbackMeta = DEFAULT_PDF_MAP[deptKey] || DEFAULT_PDF_MAP[fallbackKey] || null;
@@ -2787,6 +2787,10 @@ document.addEventListener('DOMContentLoaded', () => {
       if (publishToLive) {
         await saveActivePdfRecord(uploadRecord);
         registerUploadedSpecialty(canonicalizeUploadedRecord(uploadRecord));
+        // Sync to Supabase with the PDF file for cross-device viewing
+        if (typeof syncRecordToSupabase === 'function') {
+          syncRecordToSupabase(uploadRecord, file).catch(() => {});
+        }
       } else {
         await saveRejectedPdfRecord(uploadRecord);
       }
