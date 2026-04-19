@@ -150,6 +150,10 @@
 
 <footer>
   <p class="mono">Beta version — may contain errors, verify with the official PDF.</p>
+  <div style="margin-top:8px;display:none" id="migrate-wrap">
+    <button id="migrate-to-supabase" type="button" class="ghostbtn" style="font-size:11px">Migrate to Cloud</button>
+    <span id="migrate-status" style="font-size:11px;color:var(--muted,#888);margin-left:8px"></span>
+  </div>
 </footer>
 
   <script src="assets/js/data/rotas.js?v=20260424-radduty3"></script>
@@ -161,6 +165,7 @@
   <script src="assets/js/store/indexeddb.js?v=20260415-modular6"></script>
   <script src="assets/js/store/memory-cache.js?v=20260415-modular6"></script>
   <script src="assets/js/store/canonical.js?v=20260415-modular6"></script>
+  <script src="assets/js/store/supabase-sync.js?v=20260419-v1"></script>
   <!-- Parsers (generic first, then specialty, then registry) -->
   <script src="assets/js/parsers/generic.js?v=20260420-fix1"></script>
   <script src="assets/js/parsers/anesthesia.js?v=20260415-modular6"></script>
@@ -182,6 +187,6 @@
   <script src="assets/js/ui/pdf-preview.js?v=20260419-native1"></script>
   <script src="assets/js/ui/search.js?v=20260424-ui3"></script>
   <script src="assets/js/auditor.js?v=20260419-fallback2"></script>
-  <script src="assets/js/app.js?v=20260419-fallback1"></script>
+  <script src="assets/js/app.js?v=20260419-supabase1"></script>
 </body>
 </html>

@@ -2410,6 +2410,10 @@ async function saveActivePdfRecord(record) {
     pendingReviewUpload: null,
     archivedVersions,
   });
+  // Sync to Supabase (non-blocking)
+  if (typeof syncRecordToSupabase === 'function') {
+    syncRecordToSupabase(record, record._pdfFile || null).catch(() => {});
+  }
 }
 
 async function saveRejectedPdfRecord(record) {
@@ -2555,6 +2559,10 @@ document.addEventListener('DOMContentLoaded', () => {
   tick(); setInterval(tick,1000);
 
   uploadedSpecialtiesReadyPromise = loadUploadedSpecialties();
+  // Pull cloud records from Supabase (non-blocking, merges into IndexedDB)
+  if (typeof pullFromSupabase === 'function') {
+    pullFromSupabase().catch(err => console.warn('[SUPABASE] Pull skipped:', err.message));
+  }
   uploadedSpecialtiesReadyPromise.then(() => Promise.all([
     hydrateBundledSurgerySchedule(),
     hydrateBundledHospitalistSchedule(),
@@ -2866,6 +2874,15 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   refreshPdfListAsync();
+
+  // Migration button (hidden — show via console: document.getElementById('migrate-wrap').style.display='block')
+  const migrateBtn = document.getElementById('migrate-to-supabase');
+  if (migrateBtn && typeof migrateAllToSupabase === 'function') {
+    migrateBtn.addEventListener('click', () => {
+      const status = document.getElementById('migrate-status');
+      migrateAllToSupabase(status);
+    });
+  }
 
   // Search
   const si = document.getElementById('search');
