@@ -109,8 +109,8 @@ const SPECIALTY_PIPELINE_RULES = {
     autoActivate: true,
   },
   radiology_oncall: {
-    requiredRoles: ['1st on-call', '2nd on-call', 'consultant'],
-    autoActivate: false,
+    requiredRoles: ['on-call', 'consultant'],
+    autoActivate: true,
   },
   medicine_on_call: {
     requiredRoles: ['junior er', 'senior er'],
