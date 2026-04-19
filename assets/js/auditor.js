@@ -119,7 +119,10 @@ const Auditor = (() => {
   function _applyDeptAuditState(deptKey, { verified=true, hardBlocked=false, source='' } = {}) {
     if (!ROTAS[deptKey]) return;
     ROTAS[deptKey].verified = !!verified;
-    ROTAS[deptKey].auditBlocked = !!hardBlocked;
+    // Never hard-block a specialty that has built-in schedule data —
+    // the built-in data should always be available as fallback.
+    const hasBuiltIn = ROTAS[deptKey].schedule && Object.keys(ROTAS[deptKey].schedule).length > 0;
+    ROTAS[deptKey].auditBlocked = hasBuiltIn ? false : !!hardBlocked;
     ROTAS[deptKey].auditSource = source || '';
   }
 
