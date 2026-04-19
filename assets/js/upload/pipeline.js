@@ -138,7 +138,7 @@ const SPECIALTY_PIPELINE_RULES = {
   },
   ent: {
     requiredRoles: ['1st on-call', '2nd on-call', 'consultant'],
-    autoActivate: false,
+    autoActivate: true,
   },
   neurosurgery: {
     requiredRoles: ['resident', 'consultant'],
