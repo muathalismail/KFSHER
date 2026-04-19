@@ -426,9 +426,10 @@ function mapValidationReasonCodes({ deptKey='', parseDebug={}, auditResult=null,
   if (!(normalizedPayload?.roles || []).length) {
     reasonCodes.add(UPLOAD_REASON_CODES.NO_DOCTOR_ROWS_FOUND);
   }
+  const hasAutoActivate = !!(SPECIALTY_PIPELINE_RULES[deptKey] && SPECIALTY_PIPELINE_RULES[deptKey].autoActivate);
   if (
-    (!auditResult?.publishable && !(deptKey === 'medicine_on_call' && medicineStructurallyUsable))
-    || (issueTypes.has('uncertain-specialty') && !(deptKey === 'medicine_on_call' && medicineStructurallyUsable))
+    (!auditResult?.publishable && !(deptKey === 'medicine_on_call' && medicineStructurallyUsable) && !hasAutoActivate)
+    || (issueTypes.has('uncertain-specialty') && !(deptKey === 'medicine_on_call' && medicineStructurallyUsable) && !hasAutoActivate)
   ) {
     reasonCodes.add(UPLOAD_REASON_CODES.FAILED_SPECIALTY_VALIDATION);
   }
