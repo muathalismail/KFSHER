@@ -11,7 +11,7 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    const { specialty, date, data, source, pdf_base64, pdf_name } = req.body;
+    const { specialty, date, data, pdf_base64, pdf_name } = req.body;
 
     if (!specialty || !data) {
       return res.status(400).json({ error: 'Missing specialty or data' });
@@ -21,26 +21,33 @@ module.exports = async function handler(req, res) {
     let pdf_url = null;
     if (pdf_base64 && pdf_name) {
       const buffer = Buffer.from(pdf_base64, 'base64');
-      const path = `${specialty}/${Date.now()}_${pdf_name}`;
+      const safeName = pdf_name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const path = `${specialty}/${Date.now()}_${safeName}`;
+
       const storageResp = await fetch(
         `${url}/storage/v1/object/rota-pdfs/${path}`,
         {
           method: 'POST',
           headers: {
+            'apikey': key,
             'Authorization': `Bearer ${key}`,
             'Content-Type': 'application/pdf',
+            'x-upsert': 'true',
           },
           body: buffer,
         }
       );
+
       if (storageResp.ok) {
         pdf_url = `${url}/storage/v1/object/public/rota-pdfs/${path}`;
+        console.log('[upload] PDF stored:', pdf_url);
       } else {
-        console.error('[upload] Storage error:', await storageResp.text());
+        const errText = await storageResp.text();
+        console.error('[upload] Storage error:', storageResp.status, errText);
       }
     }
 
-    // Insert rota record via REST API
+    // Insert rota record
     const dbResp = await fetch(
       `${url}/rest/v1/kfsher`,
       {
