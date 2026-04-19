@@ -71,37 +71,24 @@ function normalizeNeurosurgeryName(raw='') {
 }
 
 function tokenizeNeurosurgeryRow(body='') {
+  // Split by double-space (column boundaries from extractPdfText)
+  // then clean up each column value
   const source = String(body || '').replace(/\b\d{3,}.*$/, '').trim();
-  const tokens = [];
-  let i = 0;
-  while (i < source.length) {
-    if (/\s/.test(source[i])) {
-      i += 1;
-      continue;
-    }
-    if (/^Dr\.?\s*/i.test(source.slice(i))) {
-      const rest = source.slice(i).replace(/^Dr\.?\s*/i, '');
-      const words = rest.split(/\s+/);
-      const take = [];
-      for (const word of words) {
-        if (!word) continue;
-        if (/^\d/.test(word)) break;
-        if (/^(Wednesday|Thursday|Friday|Saturday|Sunday|Monday|Tuesday)$/i.test(word)) break;
-        take.push(word);
-        if (take.length >= 2) break;
-      }
-      if (take.length) {
-        tokens.push(normalizeNeurosurgeryName(`Dr. ${take.join(' ')}`));
-        i += (`Dr. ${take.join(' ')}`).length;
-        continue;
-      }
-    }
-    const nextSpace = source.indexOf(' ', i);
-    const token = source.slice(i, nextSpace === -1 ? source.length : nextSpace).trim();
-    if (token) tokens.push(token);
-    i = nextSpace === -1 ? source.length : nextSpace + 1;
-  }
-  return tokens.filter(Boolean);
+  const columns = source.split(/\s{2,}/).map(s => s.trim()).filter(Boolean);
+  return columns.map(col => normalizeNeurosurgeryName(col));
+}
+
+/**
+ * Split slash-separated resident names into separate entries.
+ * "Lujain / Basma" → ["Lujain", "Basma"]
+ * "Basma" → ["Basma"]
+ */
+function splitNeurosurgerySlashNames(raw='') {
+  return String(raw || '').split(/\s*\/\s*/)
+    .map(n => n.trim())
+    .filter(Boolean)
+    .map(n => normalizeNeurosurgeryName(n))
+    .filter((n, i, arr) => arr.indexOf(n) === i); // dedupe
 }
 
 function parseNeurosurgeryPdfEntries(text='', deptKey='neurosurgery') {
@@ -121,11 +108,35 @@ function parseNeurosurgeryPdfEntries(text='', deptKey='neurosurgery') {
     const body = match[5].replace(/\b\d{3,}.*$/, '').trim();
     const tokens = tokenizeNeurosurgeryRow(body);
     if (tokens.length < 4) return;
-    const dayResident = tokens[0] || '';
-    const nightResident = tokens[1] || '';
-    const secondOnCall = tokens[2] || '';
-    const consultant = tokens[3] || '';
-    const associate = tokens[4] || '';
+
+    // Column mapping (left to right in PDF):
+    // 0: Resident Day, 1: Resident Night, 2: Fellow/2nd On-Duty
+    // 3: Associate Consultant (may be empty)
+    // 4: Neurosurgeon Consultant ← target
+    // 5+: Neurovascular (EXCLUDED)
+    //
+    // If only 4 tokens: no associate column → token[3] is consultant
+    // If 5+ tokens: token[3]=associate, token[4]=consultant, token[5]=neurovascular (skip)
+
+    let dayResident = tokens[0] || '';
+    let nightResident = tokens[1] || '';
+    let secondOnCall = tokens[2] || '';
+    let associate = '';
+    let consultant = '';
+
+    if (tokens.length === 4) {
+      // No associate column: 0=day, 1=night, 2=fellow, 3=consultant
+      consultant = tokens[3] || '';
+    } else if (tokens.length >= 5) {
+      // 0=day, 1=night, 2=fellow, 3=associate, 4=consultant, 5+=neurovascular (skip)
+      associate = tokens[3] || '';
+      consultant = tokens[4] || '';
+    }
+
+    // Exclude any Neurovascular values that leaked into consultant
+    if (/neurovascular|intervention|neuro-interv/i.test(consultant)) consultant = '';
+    if (/neurovascular|intervention|neuro-interv/i.test(associate)) associate = '';
+
     const add = (role, name, startTime='07:30', endTime='07:30', shiftType='24h') => {
       if (!name) return;
       const resolved = resolvePhone(ROTAS[deptKey] || { contacts:{} }, { name, phone:'' }) || { phone:'', uncertain:true };
@@ -142,11 +153,17 @@ function parseNeurosurgeryPdfEntries(text='', deptKey='neurosurgery') {
         parsedFromPdf: true,
       });
     };
-    add('Resident On-Duty (Day)', dayResident, '07:30', '17:00', 'day');
-    add('Resident On-Duty (Night)', nightResident, '17:00', '07:30', 'night');
-    add('Associate Consultant — Second On-Call', secondOnCall, '07:30', '07:30', '24h');
-    add('Consultant On-Call 24h', consultant, '07:30', '07:30', '24h');
-    add('Associate Consultant On-Call', associate, '07:30', '07:30', '24h');
+
+    // Split slash-separated resident names (e.g. "Lujain / Basma" → two entries)
+    for (const name of splitNeurosurgerySlashNames(dayResident)) {
+      add('Resident On-Duty (Day)', name, '07:30', '17:00', 'day');
+    }
+    for (const name of splitNeurosurgerySlashNames(nightResident)) {
+      add('Resident On-Duty (Night)', name, '17:00', '07:30', 'night');
+    }
+    if (secondOnCall) add('2nd On-Duty', secondOnCall, '07:30', '07:30', '24h');
+    if (associate) add('Associate Consultant On-Call', associate, '07:30', '07:30', '24h');
+    if (consultant) add('Neurosurgeon Consultant On-Call', consultant, '07:30', '07:30', '24h');
   });
   const deduped = dedupeParsedEntries(entries);
   deduped._templateDetected = deduped.length >= 20;
