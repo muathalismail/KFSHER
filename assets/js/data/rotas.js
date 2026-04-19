@@ -451,7 +451,7 @@ dental:{
 // ── 12. NEUROSURGERY ─────────────────────────────────────────
 neurosurgery:{
   label:'Neurosurgery / جراحة الأعصاب', icon:'🧠',
-  keywords:['neurosurgery','neuro surgery','brain surgery','جراحة أعصاب'],
+  keywords:['neurosurgery','neuro surgery','brain surgery','nsd','nsd duty','جراحة أعصاب'],
   contacts:{
     'Dr. Sultan Al Saiari':'0555587356','Dr. Mazen Al Otaibi':'0537903601',
     'Dr. Abdullah AlRamadan':'0566522784','Dr. Laila Batarfi':'0554626063',

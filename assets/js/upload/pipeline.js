@@ -140,6 +140,34 @@ const SPECIALTY_PIPELINE_RULES = {
     requiredRoles: ['1st on-call', '2nd on-call', 'consultant'],
     autoActivate: false,
   },
+  neurosurgery: {
+    requiredRoles: ['resident', 'consultant'],
+    autoActivate: true,
+  },
+  spine: {
+    requiredRoles: ['resident', 'consultant'],
+    autoActivate: true,
+  },
+  palliative: {
+    requiredRoles: ['1st on-call', 'consultant'],
+    autoActivate: true,
+  },
+  dental: {
+    requiredRoles: ['adult', 'pediatric'],
+    autoActivate: true,
+  },
+  pediatric_heme_onc: {
+    requiredRoles: ['on-duty', 'consultant'],
+    autoActivate: true,
+  },
+  dermatology: {
+    requiredRoles: ['on-call'],
+    autoActivate: true,
+  },
+  infectious: {
+    requiredRoles: ['fellow', 'consultant'],
+    autoActivate: true,
+  },
 };
 
 // uploadedPdfRecords → now in store/memory-cache.js (loaded as global)
