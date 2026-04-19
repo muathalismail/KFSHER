@@ -1,6 +1,3 @@
-// Vercel serverless function: read rota records from Supabase
-// Uses publishable key (safe for reads with RLS enabled)
-
 const { createClient } = require('@supabase/supabase-js');
 
 module.exports = async function handler(req, res) {
@@ -10,11 +7,17 @@ module.exports = async function handler(req, res) {
 
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_PUBLISHABLE_KEY;
+
+  console.log('[records] ENV check: SUPABASE_URL=' + (url ? 'SET' : 'MISSING') +
+    ', SUPABASE_PUBLISHABLE_KEY=' + (key ? 'SET' : 'MISSING'));
+
   if (!url || !key) {
     return res.status(500).json({ error: 'Supabase not configured' });
   }
 
-  const supabase = createClient(url, key);
+  const supabase = createClient(url, key, {
+    db: { schema: 'public' },
+  });
 
   try {
     const specialty = req.query.specialty || null;
@@ -26,13 +29,14 @@ module.exports = async function handler(req, res) {
 
     const { data, error } = await query;
     if (error) {
+      console.error('[records] DB error:', error);
       return res.status(500).json({ error: error.message });
     }
 
-    // Cache for 5 minutes
     res.setHeader('Cache-Control', 'public, max-age=300');
     return res.status(200).json(data || []);
   } catch (err) {
+    console.error('[records] Handler error:', err);
     return res.status(500).json({ error: err.message });
   }
 };

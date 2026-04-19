@@ -1,7 +1,3 @@
-// Vercel serverless function: secure write to Supabase
-// Client sends extracted rota data → this function writes using SERVICE_KEY
-// Client never sees the service key.
-
 const { createClient } = require('@supabase/supabase-js');
 
 module.exports = async function handler(req, res) {
@@ -11,11 +7,17 @@ module.exports = async function handler(req, res) {
 
   const url = process.env.SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_KEY;
+
+  console.log('[upload] ENV check: SUPABASE_URL=' + (url ? 'SET' : 'MISSING') +
+    ', SUPABASE_SERVICE_KEY=' + (serviceKey ? 'SET (' + serviceKey.length + ' chars)' : 'MISSING'));
+
   if (!url || !serviceKey) {
     return res.status(500).json({ error: 'Supabase not configured' });
   }
 
-  const supabase = createClient(url, serviceKey);
+  const supabase = createClient(url, serviceKey, {
+    db: { schema: 'public' },
+  });
 
   try {
     const { specialty, date, data, source, pdf_base64, pdf_name } = req.body;
@@ -36,7 +38,7 @@ module.exports = async function handler(req, res) {
           upsert: true,
         });
       if (uploadErr) {
-        console.error('Storage upload error:', uploadErr);
+        console.error('[upload] Storage error:', uploadErr);
       } else {
         const { data: urlData } = supabase.storage
           .from('rota-pdfs')
@@ -45,27 +47,25 @@ module.exports = async function handler(req, res) {
       }
     }
 
-    // Upsert rota record
+    // Insert rota record (use insert instead of upsert to avoid unique constraint issues)
     const { data: result, error } = await supabase
       .from('rota_records')
-      .upsert({
+      .insert({
         specialty,
         date: date || new Date().toISOString().slice(0, 10),
         data,
         source: source || 'upload',
         pdf_url,
-      }, {
-        onConflict: 'specialty,date',
       });
 
     if (error) {
-      console.error('DB upsert error:', error);
+      console.error('[upload] DB insert error:', error);
       return res.status(500).json({ error: error.message });
     }
 
     return res.status(200).json({ ok: true, pdf_url });
   } catch (err) {
-    console.error('Upload handler error:', err);
+    console.error('[upload] Handler error:', err);
     return res.status(500).json({ error: err.message });
   }
 };
