@@ -78,14 +78,20 @@ const Auditor = (() => {
 
   function _checkRadiologyDutyTemplateCoverage(entries=[], sourceText='') {
     if (!_isRadiologyDutyTemplate(sourceText)) return [];
-    const essential = ['CT - Neuro', 'CT - General', 'Ultrasound - Abdomen', 'Ultrasound - MSK', 'X-Ray / General'];
-    const sections = new Set(entries.filter(_hasUsableDoctorRow).map(entry => entry.section).filter(Boolean));
-    const missing = essential.filter(section => !sections.has(section));
+    // Check for ANY CT and ANY Ultrasound section — names vary between rota formats
+    // (e.g. "CT - Neuro", "NEURO - CT (In-Patient & ER)", "CT (In-Patient & ER)")
+    const sectionTexts = entries.filter(_hasUsableDoctorRow).map(entry => (entry.section || '').toLowerCase()).filter(Boolean);
+    const allSections = sectionTexts.join(' ');
+    const hasCT = allSections.includes('ct');
+    const hasUS = allSections.includes('ultrasound') || allSections.includes('us ');
+    const missing = [];
+    if (!hasCT) missing.push('CT (any section)');
+    if (!hasUS) missing.push('Ultrasound (any section)');
     if (!missing.length) return [];
     return [{
       severity: 'error',
       issueType: 'template-sections-missing',
-      explanation: `Radiology Duty template detected, but essential sections were not extracted: ${missing.join(', ')}.`,
+      explanation: `Radiology Duty template detected, but essential modalities were not found: ${missing.join(', ')}.`,
       affectedRows: entries.slice(0, 5).map(_summarizeRow),
     }];
   }
@@ -1830,7 +1836,7 @@ Othman Alessa 568916700`,
     radonc:           ['1st', 'consultant'],
     nephrology:       ['1st', '2nd', 'consultant'],
     kptx:             ['1st', 'consultant'],
-    liver:            ['day', 'after-hours', '3rd'],
+    liver:            ['day', 'after', 'consultant'],
     psychiatry:       ['resident', 'consultant'],
     pediatrics:       ['1st', '2nd'],
     pediatric_heme_onc: ['1st', '2nd', 'consultant'],
@@ -2082,7 +2088,18 @@ Othman Alessa 568916700`,
         .map(e => canonicalName(e.name))
     );
     const newNames = new Set(newRecord.entries.map(e => canonicalName(e.name)));
-    const lost = [...oldConsultants].filter(n => n && !newNames.has(n));
+    // Compact (no-space) versions of all new canonical names for substring matching.
+    // This handles cases where RULE C expanded an old abbreviated name
+    // (e.g. old "faraidy" → new "meshal faraidy", old "binsaleh" → new "bin saleh").
+    const newCompact = [...newNames].map(n => n.replace(/\s/g, ''));
+    const isNamePresent = (oldCanon) => {
+      if (newNames.has(oldCanon)) return true;
+      const compact = oldCanon.replace(/\s/g, '');
+      // Require ≥4 chars to avoid spurious single-token matches like "ali"
+      if (compact.length < 4) return false;
+      return newCompact.some(nc => nc.includes(compact));
+    };
+    const lost = [...oldConsultants].filter(n => n && !isNamePresent(n));
     if (lost.length) {
       issues.push({
         severity: 'warn',

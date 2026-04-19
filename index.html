@@ -77,11 +77,11 @@
 </header>
 
 <div class="tbar">
-  <div class="ti"><span class="tl">التوقيت</span><span class="tv" id="ltime">—</span></div>
+  <div class="ti"><span class="tl">التاريخ</span><span class="tv" id="ldate">—</span></div>
   <span class="tsep">|</span>
   <div class="ti"><span class="tl">اليوم</span><span class="tv" id="lday">—</span></div>
   <span class="tsep">|</span>
-  <div class="ti"><span class="tl">التاريخ</span><span class="tv" id="ldate">—</span></div>
+  <div class="ti"><span class="tl">الوقت</span><span class="tv" id="ltime">—</span></div>
 </div>
 <div class="shift-warn" id="shift-warn"></div>
 
@@ -90,10 +90,10 @@
     <span class="sicon">🔍</span>
     <input type="text" id="search" placeholder="Search specialty, modality, or study... e.g. ENT, Orthopedics, CT brain, Ultrasound" autocomplete="off" spellcheck="false">
   </div>
-  <label class="inline-upload" title="Upload a PDF to update the active rota">
+  <div class="inline-upload" id="uploadTrigger" title="Upload a PDF to update the active rota" style="cursor:pointer">
     <span>+ Add PDF</span>
-    <input id="pdfUploadInline" type="file" accept="application/pdf" multiple>
-  </label>
+  </div>
+  <input id="pdfUploadInline" type="file" accept="application/pdf" multiple style="position:absolute;width:0;height:0;opacity:0;overflow:hidden">
 </div>
 <div class="upload-status" id="uploadStatus"></div>
 
@@ -136,12 +136,52 @@
   <iframe id="pdfFrame" title="PDF preview"></iframe>
 </div>
 
+<div id="password-overlay" style="position:fixed;inset:0;background:rgba(0,0,0,0.55);display:none;align-items:center;justify-content:center;z-index:9999">
+  <div style="background:var(--card,#1a1e2e);border-radius:14px;border:1px solid var(--border,rgba(255,255,255,0.08));padding:24px;width:280px;display:flex;flex-direction:column;gap:12px;box-shadow:0 16px 48px rgba(0,0,0,0.5)">
+    <p style="font-size:15px;font-weight:600;color:var(--text,#e0e8f0);margin:0;text-align:center">أدخل كلمة المرور</p>
+    <input id="pdf-password-input" type="password" placeholder="••••••••" style="text-align:center;font-size:20px;letter-spacing:6px;padding:10px;border-radius:8px;border:1px solid var(--border,rgba(255,255,255,0.1));background:var(--surf2,rgba(255,255,255,0.04));color:var(--text,#e0e8f0);outline:none;font-family:inherit" autocomplete="off">
+    <p id="password-error" style="font-size:12px;color:#ff5252;text-align:center;margin:0;display:none">كلمة المرور غير صحيحة</p>
+    <div style="display:flex;gap:8px">
+      <button id="password-cancel" type="button" class="ghostbtn" style="flex:1;padding:8px">إلغاء</button>
+      <label id="password-confirm" for="pdfUploadInline" class="ghostbtn" style="flex:1;padding:8px;background:var(--accent,#7ee8fa);color:#000;font-weight:600;border-color:var(--accent,#7ee8fa);cursor:pointer;display:flex;align-items:center;justify-content:center">تأكيد ↗</label>
+    </div>
+  </div>
+</div>
+
 <footer>
   <p class="mono">Beta version — may contain errors, verify with the official PDF.</p>
 </footer>
 
-  <script src="assets/js/data/rotas.js?v=20260415-radiology-duty-stabilize3"></script>
-  <script src="assets/js/auditor.js?v=20260415-radiology-duty-stabilize3"></script>
-  <script src="assets/js/app.js?v=20260415-radiology-duty-stabilize3"></script>
+  <script src="assets/js/data/rotas.js?v=20260424-radduty3"></script>
+  <!-- Core modules (loaded before app.js, exposing globals) -->
+  <script src="assets/js/core/time.js?v=20260415-modular6"></script>
+  <script src="assets/js/core/phone-resolver.js?v=20260407-fix1"></script>
+  <script src="assets/js/core/entry-model.js?v=20260415-modular6"></script>
+  <script src="assets/js/core/lanes.js?v=20260424-dermid1"></script>
+  <script src="assets/js/store/indexeddb.js?v=20260415-modular6"></script>
+  <script src="assets/js/store/memory-cache.js?v=20260415-modular6"></script>
+  <script src="assets/js/store/canonical.js?v=20260415-modular6"></script>
+  <!-- Parsers (generic first, then specialty, then registry) -->
+  <script src="assets/js/parsers/generic.js?v=20260420-fix1"></script>
+  <script src="assets/js/parsers/anesthesia.js?v=20260415-modular6"></script>
+  <script src="assets/js/parsers/radiology.js?v=20260415-modular6"></script>
+  <script src="assets/js/parsers/medicine.js?v=20260416-modular10"></script>
+  <script src="assets/js/parsers/surgery.js?v=20260423-sustain1"></script>
+  <script src="assets/js/parsers/neurology.js?v=20260423-sustain1"></script>
+  <script src="assets/js/parsers/hospitalist.js?v=20260423-sustain1"></script>
+  <script src="assets/js/parsers/picu.js?v=20260423-sustain1"></script>
+  <script src="assets/js/parsers/others.js?v=20260420-col6"></script>
+  <script src="assets/js/parsers/imaging_on_duty_validator.js?v=20260418-v1"></script>
+  <script src="assets/js/parsers/registry.js?v=20260418-v1"></script>
+  <!-- Resolver -->
+  <script src="assets/js/resolver/shift-filter.js?v=20260415-modular6"></script>
+  <!-- Upload pipeline -->
+  <script src="assets/js/upload/pipeline.js?v=20260424-radduty1"></script>
+  <!-- UI modules (loaded before auditor + app) -->
+  <script src="assets/js/ui/card.js?v=20260415-modular6"></script>
+  <script src="assets/js/ui/pdf-preview.js?v=20260419-native1"></script>
+  <script src="assets/js/ui/search.js?v=20260424-ui3"></script>
+  <script src="assets/js/auditor.js?v=20260424-radduty1"></script>
+  <script src="assets/js/app.js?v=20260419-pwgate3"></script>
 </body>
 </html>
