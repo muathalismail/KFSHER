@@ -858,7 +858,7 @@ function uploadedEntriesForDept(deptKey, schedKey, now, qLow='') {
     return resolveDisplayEntriesFromNormalizedPayload(deptKey, record.normalized, schedKey, now, qLow);
   }
   const baseEntries = normalizedUploadedBaseEntries(record, deptKey);
-  if (!baseEntries.length) return [];
+  if (!baseEntries.length) return null; // no data for this date → fall through to built-in
   const deptEntries = baseEntries.filter(entry => !entry.specialty || entry.specialty === deptKey || record.deptKey === deptKey || PDF_FALLBACKS[deptKey] === record.deptKey);
   const dated = deptEntries.filter(entry => !entry.date || entry.date === schedKey || entry.date === 'dynamic-weekday');
   const base = dated.length ? dated : deptEntries.filter(entry => !entry.date);
@@ -2323,7 +2323,10 @@ function getRadiologyEntries(schedKey, now, qLow='') {
 // Radiology uses explicit duty/on-call rules; other specialties use active role filters.
 function getEntries(deptKey, dept, schedKey, now, qLow='') {
   const uploadedEntries = uploadedEntriesForDept(deptKey, schedKey, now, qLow);
-  if (uploadedEntries) return uploadedEntries;
+  // Only use uploaded data if it actually has entries for this date.
+  // An empty array means the upload had no data for this schedKey —
+  // fall through to built-in schedule instead of showing "No active on-call".
+  if (uploadedEntries && uploadedEntries.length) return uploadedEntries;
   if (deptKey === 'medicine_on_call') return splitMultiDoctorEntries(getMedicineOnCallEntries(schedKey, now, qLow), deptKey);
   if (deptKey === 'medicine') {
     return splitMultiDoctorEntries(MEDICINE_SUBSPECIALTY_KEYS.flatMap(key => {
