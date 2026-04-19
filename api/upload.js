@@ -42,7 +42,7 @@ module.exports = async function handler(req, res) {
 
     // Insert rota record via REST API
     const dbResp = await fetch(
-      `${url}/rest/v1/rota_records`,
+      `${url}/rest/v1/kfsher`,
       {
         method: 'POST',
         headers: {

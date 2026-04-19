@@ -11,7 +11,7 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    let endpoint = `${url}/rest/v1/rota_records?select=*&order=created_at.desc`;
+    let endpoint = `${url}/rest/v1/kfsher?select=*&order=created_at.desc`;
     if (req.query.specialty) {
       endpoint += `&specialty=eq.${encodeURIComponent(req.query.specialty)}`;
     }
