@@ -1063,7 +1063,10 @@ const PDF_DETECTION_RULES = [
 
 function detectDeptFromText(text='', detectionSource='content') {
   const interpreted = interpretSpecialtyFromText(text);
-  if (interpreted) return { deptKey: interpreted.key, source: detectionSource, uncertain: detectionSource !== 'filename', score: interpreted.score || 100 };
+  // Content-based detection is HIGH confidence (PDF text is definitive).
+  // Filename-based detection is also high confidence when matched.
+  // Only mark uncertain if score is very low.
+  if (interpreted) return { deptKey: interpreted.key, source: detectionSource, uncertain: false, score: interpreted.score || 100 };
   const normalizedSource = normalizeText(text);
   if (!normalizedSource) return { deptKey: null, source: detectionSource, uncertain: true, score: 0 };
   let best = null;
@@ -1078,7 +1081,8 @@ function detectDeptFromText(text='', detectionSource='content') {
     if (score && (!best || score > best.score)) best = { key, score };
   });
   if (!best) return { deptKey: null, source: detectionSource, uncertain: true, score: 0 };
-  return { deptKey: best.key, source: detectionSource, uncertain: detectionSource !== 'filename', score: best.score };
+  // High confidence if score >= 6 (matched a meaningful keyword), otherwise uncertain
+  return { deptKey: best.key, source: detectionSource, uncertain: best.score < 6, score: best.score };
 }
 
 function detectDeptKeyFromText(text='') {

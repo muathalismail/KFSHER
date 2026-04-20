@@ -80,6 +80,18 @@ function resolvePhone(dept, entry) {
   let best = null;
   for (const targetName of splitPossibleNames(entry.name)) {
     if (c[targetName]) return { phone: c[targetName], uncertain: false };
+
+    // First-name unique match: if exactly ONE contact starts with this name → high confidence
+    const targetFirst = canonicalName(targetName).split(' ')[0];
+    if (targetFirst && targetFirst.length >= 3) {
+      const firstNameMatches = Object.entries(c).filter(([cn, ph]) =>
+        ph && canonicalName(cn).split(' ')[0] === targetFirst
+      );
+      if (firstNameMatches.length === 1) {
+        return { phone: firstNameMatches[0][1], uncertain: false };
+      }
+    }
+
     for (const [contactName, phone] of Object.entries(c)) {
       if (!phone) continue;
       const match = scoreNameMatch(targetName, contactName);

@@ -1907,10 +1907,13 @@ Othman Alessa 568916700`,
     const seen = new Map();
     const dupes = [];
     entries.forEach((e, i) => {
+      // Include time slot in key — same doctor covering different shifts is NOT a duplicate
       const key = [
         canonicalName(e.name),
         (e.date || ''),
         (e.role || '').toLowerCase().slice(0, 12),
+        (e.startTime || ''),
+        (e.endTime || ''),
       ].join('|');
       if (seen.has(key)) dupes.push({ a: seen.get(key), b: i });
       else seen.set(key, i);
