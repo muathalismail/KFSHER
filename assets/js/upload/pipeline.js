@@ -109,8 +109,8 @@ const SPECIALTY_PIPELINE_RULES = {
     autoActivate: true,
   },
   radiology_oncall: {
-    requiredRoles: ['on-call', 'consultant'],
-    autoActivate: false, // generic parser can't handle this layout — use built-in schedule
+    requiredRoles: ['on-call'],
+    autoActivate: true,
   },
   medicine_on_call: {
     requiredRoles: ['junior er', 'senior er'],

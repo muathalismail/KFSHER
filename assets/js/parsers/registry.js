@@ -72,6 +72,14 @@ PARSER_REGISTRY['radiology_duty'] = function(text, deptKey) {
   };
 };
 
+PARSER_REGISTRY['radiology_oncall'] = function(text, deptKey) {
+  return {
+    entries: parseRadiologyOnCallPdfEntries(text, deptKey),
+    parserMode: 'specialized',
+    meta: { templateDetected: true },
+  };
+};
+
 PARSER_REGISTRY['medicine_on_call'] = function(text, deptKey) {
   return {
     entries: parseMedicineOnCallPdfEntries(text, deptKey),
