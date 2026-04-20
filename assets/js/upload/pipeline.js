@@ -436,7 +436,7 @@ function mapValidationReasonCodes({ deptKey='', parseDebug={}, auditResult=null,
   if ((auditResult?.overallConfidence === 'low' || trustProfile.trustScore < 60) && !(deptKey === 'medicine_on_call' && medicineStructurallyUsable) && !hasAutoActivate) {
     reasonCodes.add(UPLOAD_REASON_CODES.LOW_PARSE_CONFIDENCE);
   }
-  if (issueTypes.has('row-mapping') || issueTypes.has('data-loss')) {
+  if ((issueTypes.has('row-mapping') || issueTypes.has('data-loss')) && !hasAutoActivate) {
     reasonCodes.add(UPLOAD_REASON_CODES.BLOCK_DATE_MISMATCH);
   }
   if (requiredRoles.missing.length) {

@@ -1,41 +1,37 @@
 // ═══════════════════════════════════════════════════════════════
-// parsers/radiology-oncall.js — Specialized parser for Imaging On-Call Rota
+// parsers/radiology-oncall.js — Imaging On-Call Rota parser
 // ═══════════════════════════════════════════════════════════════
-// Extracts ONLY columns 2-4 (1st, 2nd, 3rd On-Call)
-// Skips columns 5-10 (Weekend X-Ray, General Consultants, Neuro, Nuclear)
-// Handles weekend split (AM/PM rows for Fri & Sat)
+// Extracts ONLY: 1st On-Call, 2nd On-Call, 3rd On-Call (cols 2-4)
+// SKIPS: Weekend X-Ray, General Consultants, Neuro, Nuclear (cols 5-10)
+// Handles weekend AM/PM split for Fri & Sat
 // ═══════════════════════════════════════════════════════════════
+
+// Words that are NOT doctor names — skip if matched
+const _ONCALL_SKIP_WORDS = /^(RESIDENTS?|GENERAL|ON-CALL|DAY|DATE|1st|2nd|3rd|NEURO|NUCLEAR|ABDOMEN|CHEST|MSK|PEDIA|BREAST|X-Ray|Weekend|CONSULTANT|MEDICINE|ER|In-Patient|-+\s*Weekend\s*-+|-+\s*GENERAL\s*IT\s*SUPPORT\s*-+|case\s+assignments)/i;
 
 function parseRadiologyOnCallPdfEntries(text='', deptKey='radiology_oncall') {
   const entries = [];
   const dept = ROTAS[deptKey] || { contacts:{} };
   const { year: detectedYr, monthPad } = detectPdfMonthYear(text);
 
-  // The on-call rota is a table with double-space column separators.
-  // Column order: Day | Date | 1st On-Call | 2nd On-Call | 3rd On-Call | Weekend XRay | ...rest (skip)
-  // We extract columns by position: after splitting by double-space,
-  // tokens[0]=Day (or empty for weekend PM row), tokens[1]=Date,
-  // tokens[2]=1st, tokens[3]=2nd, tokens[4]=3rd
-  // Everything at index 5+ is SKIPPED.
-
   const lines = String(text || '').split(/\n/).map(l => l.trim()).filter(Boolean);
   const dateRe = /(\d{1,2})\/(\d{1,2})\/(\d{4})/;
   const timeRe = /(7:30\s*[ap]m)\s*[-–]\s*(7:30\s*[ap]m)/i;
+  const dayRe = /^(Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sun|Mon|Tues?|Wed|Thurs?|Fri|Sat)\b/i;
 
-  // Track weekend AM rows to merge with PM rows
-  const weekendAM = {}; // dateKey → {first, second, third}
+  const weekendAM = {};
 
   for (const line of lines) {
-    // Split by double-space to get columns
-    const cols = line.split(/\s{2,}/).map(s => s.trim()).filter(Boolean);
-    if (cols.length < 2) continue;
+    // Split by double-space
+    const rawCols = line.split(/\s{2,}/).map(s => s.trim()).filter(Boolean);
+    if (rawCols.length < 2) continue;
 
-    // Find the date column — may be at index 0 or 1
+    // Find date in the first 3 columns
     let dateCol = null;
     let dateIdx = -1;
-    for (let i = 0; i < Math.min(cols.length, 3); i++) {
-      if (dateRe.test(cols[i])) {
-        dateCol = cols[i];
+    for (let i = 0; i < Math.min(rawCols.length, 3); i++) {
+      if (dateRe.test(rawCols[i])) {
+        dateCol = rawCols[i];
         dateIdx = i;
         break;
       }
@@ -51,75 +47,70 @@ function parseRadiologyOnCallPdfEntries(text='', deptKey='radiology_oncall') {
 
     const dateKey = `${String(dayNum).padStart(2, '0')}/${String(month).padStart(2, '0')}`;
 
-    // Detect time slot for weekends
+    // Weekend time detection
     const tm = dateCol.match(timeRe);
-    let shiftHours = '16:30-07:30'; // weekday default
     let isWeekendAM = false;
     let isWeekendPM = false;
     if (tm) {
-      const startH = tm[1].toLowerCase();
-      if (startH.includes('am')) {
-        isWeekendAM = true;
-        shiftHours = '07:30-19:30';
-      } else {
-        isWeekendPM = true;
-        shiftHours = '19:30-07:30';
-      }
+      if (tm[1].toLowerCase().includes('am')) isWeekendAM = true;
+      else isWeekendPM = true;
     }
 
-    // Detect day name from the line
-    const dayMatch = line.match(/^(Sun|Mon|Tues?|Wed|Thurs?|Fri|Sat)/i);
-
-    // Extract only columns 2, 3, 4 (relative to date column)
-    // After the date column, the next 3 values are 1st, 2nd, 3rd on-call
-    const dataStart = dateIdx + 1;
-    const firstOnCall = (cols[dataStart] || '').trim();
-    const secondOnCall = (cols[dataStart + 1] || '').trim();
-    const thirdOnCall = (cols[dataStart + 2] || '').trim();
-
-    // Skip header rows
-    if (/^(1st|2nd|3rd|RESIDENTS|GENERAL|ON-CALL|DAY|DATE)/i.test(firstOnCall)) continue;
-    if (/^RESIDENTS$/i.test(firstOnCall)) continue;
-
-    // For weekend AM rows, store and wait for PM row
-    if (isWeekendAM) {
-      weekendAM[dateKey] = { first: firstOnCall, second: secondOnCall, third: thirdOnCall };
-      continue; // don't emit yet — wait for PM row
+    // Collect ALL tokens after the date, filtering out day names
+    const afterDate = rawCols.slice(dateIdx + 1);
+    // Also check: if the column BEFORE the date is a day name, skip it
+    // Extract exactly the first 3 valid name tokens (cols 2,3,4)
+    const dataTokens = [];
+    for (const tok of afterDate) {
+      if (dataTokens.length >= 3) break; // HARD STOP at 3 columns
+      if (dayRe.test(tok)) continue; // skip day names
+      if (_ONCALL_SKIP_WORDS.test(tok)) continue; // skip headers/labels
+      if (/^\d{5,}/.test(tok)) continue; // skip IDs
+      if (/^0\d{9}/.test(tok)) continue; // skip phone numbers
+      dataTokens.push(tok);
     }
 
-    const addEntry = (role, name, hours) => {
-      if (!name || name === '-' || name === '--' || /^(RESIDENTS|GENERAL|X-Ray)/i.test(name)) return;
+    const firstOnCall = dataTokens[0] || '';
+    const secondOnCall = dataTokens[1] || '';
+    const thirdOnCall = dataTokens[2] || '';
+
+    // Skip if first token is clearly a header
+    if (_ONCALL_SKIP_WORDS.test(firstOnCall)) continue;
+
+    const addEntry = (role, rawName, startTime, endTime, shiftType) => {
+      if (!rawName || rawName === '-' || rawName === '--') return;
+      if (_ONCALL_SKIP_WORDS.test(rawName)) return;
       // Split slash-separated names
-      const names = name.split(/\s*\/\s*/).map(n => n.trim()).filter(Boolean);
-      for (const n of names) {
-        const resolved = resolvePhone(dept, { name: n, phone: '' }) || { phone: '', uncertain: true };
+      const names = rawName.split(/\s*\/\s*/).map(n => n.trim()).filter(n =>
+        n && n !== '-' && !_ONCALL_SKIP_WORDS.test(n)
+      );
+      for (const name of names) {
+        const resolved = resolvePhone(dept, { name, phone: '' }) || { phone: '', uncertain: true };
         entries.push({
-          specialty: deptKey,
-          date: dateKey,
-          role,
-          name: n,
+          specialty: deptKey, date: dateKey, role, name,
           phone: resolved.phone || '',
           phoneUncertain: !resolved.phone || !!resolved.uncertain,
-          startTime: hours.split('-')[0] || '16:30',
-          endTime: hours.split('-')[1] || '07:30',
-          shiftType: hours === '07:30-07:30' ? '24h' : hours.includes('07:30-19:30') ? 'day' : 'night',
-          parsedFromPdf: true,
+          startTime, endTime, shiftType, parsedFromPdf: true,
         });
       }
     };
 
+    if (isWeekendAM) {
+      weekendAM[dateKey] = { first: firstOnCall, second: secondOnCall, third: thirdOnCall };
+      continue;
+    }
+
     if (isWeekendPM && weekendAM[dateKey]) {
-      // Merge AM + PM: if same person in both → 24h, else separate entries
       const am = weekendAM[dateKey];
       const merge = (role, amName, pmName) => {
         if (!amName && !pmName) return;
-        if (amName === pmName || (!pmName && amName) || (!amName && pmName)) {
-          // Same person or only one slot filled → 24h
-          addEntry(role, amName || pmName, '07:30-07:30');
+        if (amName === pmName || (!pmName && amName)) {
+          addEntry(role, amName || pmName, '07:30', '07:30', '24h');
+        } else if (!amName && pmName) {
+          addEntry(role, pmName, '19:30', '07:30', 'night');
         } else {
-          // Different people → separate shifts
-          addEntry(role, amName, '07:30-19:30');
-          addEntry(role, pmName, '19:30-07:30');
+          addEntry(role, amName, '07:30', '19:30', 'day');
+          addEntry(role, pmName, '19:30', '07:30', 'night');
         }
       };
       merge('1st On-Call', am.first, firstOnCall);
@@ -127,17 +118,16 @@ function parseRadiologyOnCallPdfEntries(text='', deptKey='radiology_oncall') {
       merge('3rd On-Call', am.third, thirdOnCall);
       delete weekendAM[dateKey];
     } else if (!isWeekendPM) {
-      // Regular weekday
-      addEntry('1st On-Call', firstOnCall, shiftHours);
-      addEntry('2nd On-Call', secondOnCall, shiftHours);
-      addEntry('3rd On-Call', thirdOnCall, shiftHours);
+      addEntry('1st On-Call', firstOnCall, '16:30', '07:30', 'night');
+      addEntry('2nd On-Call', secondOnCall, '16:30', '07:30', 'night');
+      addEntry('3rd On-Call', thirdOnCall, '16:30', '07:30', 'night');
     }
   }
 
-  // Emit any remaining weekend AM rows that had no PM counterpart
+  // Remaining weekend AM rows without PM counterpart
   for (const [dateKey, am] of Object.entries(weekendAM)) {
-    const addEntry = (role, name) => {
-      if (!name || name === '-') return;
+    const add = (role, name) => {
+      if (!name || _ONCALL_SKIP_WORDS.test(name)) return;
       const names = name.split(/\s*\/\s*/).map(n => n.trim()).filter(Boolean);
       for (const n of names) {
         const resolved = resolvePhone(dept, { name: n, phone: '' }) || { phone: '', uncertain: true };
@@ -148,13 +138,13 @@ function parseRadiologyOnCallPdfEntries(text='', deptKey='radiology_oncall') {
         });
       }
     };
-    addEntry('1st On-Call', am.first);
-    addEntry('2nd On-Call', am.second);
-    addEntry('3rd On-Call', am.third);
+    add('1st On-Call', am.first);
+    add('2nd On-Call', am.second);
+    add('3rd On-Call', am.third);
   }
 
   const deduped = dedupeParsedEntries(entries);
-  deduped._templateDetected = deduped.length >= 20;
+  deduped._templateDetected = deduped.length >= 15;
   deduped._templateName = deduped._templateDetected ? `radiology-oncall-${monthPad}-${detectedYr}` : '';
   return deduped;
 }
