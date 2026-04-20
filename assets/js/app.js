@@ -849,6 +849,7 @@ function resolveDisplayEntriesFromNormalizedPayload(deptKey, normalizedPayload, 
 
 function uploadedEntriesForDept(deptKey, schedKey, now, qLow='') {
   if (deptKey === 'radiology_duty') return null;
+  if (deptKey === 'radiology_oncall') return null; // built-in schedule is authoritative — generic parser can't handle this layout
   const record = uploadedRecordForDept(deptKey);
   if (!record || !record.parsedActive || !Array.isArray(record.entries)) return null;
   if (deptKey === 'medicine_on_call' && isLegacyMedicineOnCallRecord(record)) return null;
