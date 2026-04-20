@@ -75,6 +75,12 @@ function scoreNameMatch(target, candidate) {
 
 function resolvePhone(dept, entry) {
   if (entry.phone) return { phone: entry.phone, uncertain: !!entry.phoneUncertain };
+  // Check server-extracted contacts first (pdfplumber, all specialties)
+  const sc = (typeof window !== 'undefined' && window._serverExtractedContacts) || {};
+  const nameNorm = canonicalName(entry.name || '');
+  for (const [scName, scPhone] of Object.entries(sc)) {
+    if (scPhone && canonicalName(scName) === nameNorm) return { phone: scPhone, uncertain: false };
+  }
   const c = dept.contacts || {};
   if (c[entry.name]) return { phone: c[entry.name], uncertain: false };
   let best = null;

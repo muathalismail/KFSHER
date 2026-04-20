@@ -1840,26 +1840,26 @@ async function parseUploadedPdf(file, deptKey) {
   let parserMode = 'generic';
   let parserMeta = { templateDetected: false };
 
-  // For radiology_oncall: fetch contacts server-side via pdfplumber before parsing
-  if (deptKey === 'radiology_oncall' && typeof parseRadiologyOnCallPdfEntries !== 'undefined') {
-    try {
-      const buffer = await file.arrayBuffer();
-      const b64 = btoa(new Uint8Array(buffer).reduce((s, b) => s + String.fromCharCode(b), ''));
-      const resp = await fetch('/api/extract-contacts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pdf_base64: b64 }),
-      });
-      if (resp.ok) {
-        const serverContacts = await resp.json();
-        if (serverContacts && !serverContacts.error) {
-          parseRadiologyOnCallPdfEntries._serverContacts = serverContacts;
-          console.log('[ONCALL] Server extracted', Object.keys(serverContacts).length, 'contacts');
-        }
+  // Server-side phone extraction via pdfplumber — applies to ALL specialties
+  try {
+    const buffer = await file.arrayBuffer();
+    const b64 = btoa(new Uint8Array(buffer).reduce((s, b) => s + String.fromCharCode(b), ''));
+    const resp = await fetch('/api/extract-contacts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pdf_base64: b64 }),
+    });
+    if (resp.ok) {
+      const serverContacts = await resp.json();
+      if (serverContacts && !serverContacts.error) {
+        window._serverExtractedContacts = serverContacts;
+        if (typeof parseRadiologyOnCallPdfEntries !== 'undefined') parseRadiologyOnCallPdfEntries._serverContacts = serverContacts;
+        console.log(`[SERVER] Extracted ${Object.keys(serverContacts).length} contacts for ${deptKey}`);
       }
-    } catch (err) {
-      console.warn('[ONCALL] Server contact extraction failed, using client-side:', err.message);
     }
+  } catch (err) {
+    console.warn('[SERVER] Contact extraction failed, using client-side:', err.message);
+  }
   }
 
   // Use registry for parser dispatch
