@@ -2593,6 +2593,11 @@ document.addEventListener('DOMContentLoaded', () => {
   // 3. Then hydrate + render
   // IMPORTANT: assign the full chain to uploadedSpecialtiesReadyPromise immediately
   // so any code that awaits it (e.g. search) waits for the complete sequence.
+  // Render icons IMMEDIATELY — they only need ROTAS (already loaded via script tag)
+  renderTags();
+  renderWelcomeGrid();
+
+  // Then load data in the background
   uploadedSpecialtiesReadyPromise = (
     (typeof pullFromSupabase === 'function')
       ? pullFromSupabase().catch(err => console.warn('[SUPABASE] Pull skipped:', err.message))
@@ -2605,6 +2610,7 @@ document.addEventListener('DOMContentLoaded', () => {
     hydrateBundledPediatricsContacts(),
     hydrateBundledPicuSchedule(),
   ])).finally(() => {
+    // Re-render after data loads (picks up any uploaded specialties)
     renderTags();
     renderWelcomeGrid();
     // ── AUDITOR: run startup checks after data loads ──────────
