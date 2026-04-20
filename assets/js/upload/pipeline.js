@@ -433,7 +433,7 @@ function mapValidationReasonCodes({ deptKey='', parseDebug={}, auditResult=null,
   ) {
     reasonCodes.add(UPLOAD_REASON_CODES.FAILED_SPECIALTY_VALIDATION);
   }
-  if ((auditResult?.overallConfidence === 'low' || trustProfile.trustScore < 60) && !(deptKey === 'medicine_on_call' && medicineStructurallyUsable)) {
+  if ((auditResult?.overallConfidence === 'low' || trustProfile.trustScore < 60) && !(deptKey === 'medicine_on_call' && medicineStructurallyUsable) && !hasAutoActivate) {
     reasonCodes.add(UPLOAD_REASON_CODES.LOW_PARSE_CONFIDENCE);
   }
   if (issueTypes.has('row-mapping') || issueTypes.has('data-loss')) {
@@ -446,10 +446,11 @@ function mapValidationReasonCodes({ deptKey='', parseDebug={}, auditResult=null,
     reasonCodes.add(UPLOAD_REASON_CODES.PHONE_BINDING_INCOMPLETE);
   }
   if (
-    parseDebug?.parserMode === 'generic'
+    (parseDebug?.parserMode === 'generic'
     || parseDebug?.parserMode === 'generic-fallback'
     || issueTypes.has('merged-names')
-    || issueTypes.has('template-sections-missing')
+    || issueTypes.has('template-sections-missing'))
+    && !hasAutoActivate
   ) {
     reasonCodes.add(UPLOAD_REASON_CODES.AMBIGUOUS_LAYOUT);
   }
