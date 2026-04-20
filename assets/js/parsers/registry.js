@@ -157,6 +157,11 @@ PARSER_REGISTRY['kptx'] = templateFallbackStrategy(parseKptxPdfEntries, {
   extraFallbacks: [parseSingleLineDateSplit],
 });
 
+PARSER_REGISTRY['spine'] = templateFallbackStrategy(parseSpinePdfEntries, {
+  templatePrefix: 'spine',
+  extraFallbacks: [parseSingleLineDateSplit],
+});
+
 PARSER_REGISTRY['neurosurgery'] = templateFallbackStrategy(parseNeurosurgeryPdfEntries, {
   templatePrefix: 'neurosurgery',
   extraFallbacks: [parseSingleLineDateSplit, (text, dk) => parseDaySequence(text, dk)],
