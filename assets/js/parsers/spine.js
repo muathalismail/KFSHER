@@ -50,28 +50,37 @@ function parseSpinePdfEntries(text='', deptKey='spine') {
     const body = match[5];
 
     // Split by double-space (column boundaries from extractPdfText)
-    // Filter out contact table text that leaks in
-    const cols = body.split(/\s{2,}/).map(s => s.trim()).filter(Boolean)
-      .filter(col =>
-        !/^(Spine|Surgery|Department|Consultants?|Residents?|Assistant|Staff|Contact|Neurosciences)\b/i.test(col)
-        && !/^\d{5,}/.test(col)
-        && !/^0\d{9}/.test(col)
-      );
+    // Filter out contact table text that leaks from the right side of the PDF
+    const rawCols = body.split(/\s{2,}/).map(s => s.trim()).filter(Boolean);
+    // Filter out contact table text leaking from the right side:
+    // - Section headers, labels, IDs, phones, emails
+    // - Full names from contact table: "Dr. Saud Al Hamad" (Dr + 3+ words) or
+    //   "Faisal AL Habib" (no Dr, 2+ words with mixed case)
+    const cols = rawCols.filter(col =>
+      !/^(Spine|Surgery|Department|Consultants?|Residents?|Assistants?|Staff|Contact|Neurosciences|Neurosurgery|Doctor|Office|Mobile|Bleep|AM\s+to|PM\s+to|hrs)\b/i.test(col)
+      && !/^\d{4,}/.test(col)           // ID/extension numbers
+      && !/^0\d{9}/.test(col)           // phone numbers
+      && !/^\+\d{3}/.test(col)          // international numbers
+      && !/\@/.test(col)                // email addresses
+      // Contact table "Dr. Full Name" entries have 3+ words (e.g. "Dr. Saud Al Hamad")
+      // Rota "Dr Short" entries have exactly 2 words (e.g. "Dr. Bachar", "Dr. Saud")
+      && !(col.split(/\s+/).length >= 3 && /^Dr\.?\s/i.test(col))
+      // Contact table resident entries: 2+ words, no Dr prefix, mixed case
+      && !(col.split(/\s+/).length >= 2 && /[A-Z]/.test(col) && /[a-z]/.test(col) && !/^Dr\.?\s/i.test(col) && !/\//.test(col))
+    );
 
     if (cols.length < 3) return;
 
-    // Spine has NO extra columns after consultant:
-    // cols[0]=ResDay, cols[1]=ResNight, cols[2]=Fellow or Consultant, cols[3]=Consultant (if fellow present)
+    // After filtering: cols = [ResDay, ResNight, (Fellow), Consultant]
+    // Exactly 3 = no fellow, 4 = with fellow
     const dayResident = cols[0] || '';
     const nightResident = cols[1] || '';
     let fellow = '';
     let consultant = '';
 
     if (cols.length === 3) {
-      // No fellow: cols[2] is consultant
       consultant = cols[2] || '';
-    } else if (cols.length >= 4) {
-      // cols[2]=fellow, cols[3]=consultant
+    } else {
       fellow = cols[2] || '';
       consultant = cols[3] || '';
     }
