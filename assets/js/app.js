@@ -1860,7 +1860,6 @@ async function parseUploadedPdf(file, deptKey) {
   } catch (err) {
     console.warn('[SERVER] Contact extraction failed, using client-side:', err.message);
   }
-  }
 
   // Use registry for parser dispatch
   const strategy = getParserForDept(deptKey, file.name);
