@@ -154,7 +154,7 @@ async function buildCard(deptKey, dept, entries) {
 
   // Imaging On-Duty: always show "Needs Review" instead of doctor list
   if (deptKey === 'radiology_duty') {
-    rowsHtml = `<div class="empty" style="text-align:center;padding:14px 12px;font-size:13px;">Needs Review</div>`;
+    rowsHtml = `<div class="empty" style="text-align:center;padding:14px 12px;font-size:13px;">Needs Review<br>يرجى مراجعة الجدول الأصلي للتأكد من البيانات</div>`;
   } else if (isDeptHardBlocked(deptKey) && !hasRenderableEntries) {
     const uploaded = uploadedRecordForDept(deptKey);
     const reasonText = uploadBlockReasonSummary(uploaded);
