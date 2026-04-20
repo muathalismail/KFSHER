@@ -102,7 +102,12 @@ async function showPdfPreview(deptKey, context=null) {
   document.getElementById('openPdfBtn').href = `${meta.href}${pageSuffix}`;
   document.getElementById('downloadPdfBtn').href = meta.href;
   document.getElementById('downloadPdfBtn').setAttribute('download', meta.name || 'rota.pdf');
-  renderPdfSourceHint(currentPdfPreviewContext);
+  // Hide doctor name tags for radiology_duty — only show PDF
+  if (deptKey === 'radiology_duty') {
+    renderPdfSourceHint(null);
+  } else {
+    renderPdfSourceHint(currentPdfPreviewContext);
+  }
   await renderPdfPreviewPages(meta, currentPdfPreviewContext);
   document.getElementById('pdfPreviewWrap').scrollIntoView({behavior:'smooth', block:'start'});
 }
