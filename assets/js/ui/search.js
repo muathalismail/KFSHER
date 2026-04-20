@@ -220,6 +220,11 @@ async function renderDeptList(matched, qLow, exactMode=false) {
   }));
   cards.querySelectorAll('[data-copy-phone]').forEach(btn => btn.addEventListener('click', () => copyPhoneNumber(btn.dataset.copyPhone, btn)));
   results.classList.add('show');
+
+  // Imaging On-Duty: auto-open PDF after card renders
+  if (matched.some(([k]) => k === 'radiology_duty')) {
+    showPdfPreview('radiology_duty', lastPreviewContextByDept.get('radiology_duty') || null);
+  }
 }
 
 async function showExactDept(deptKey) {
