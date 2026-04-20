@@ -154,9 +154,9 @@ async function buildCard(deptKey, dept, entries) {
 
   // Imaging On-Duty: always show "Needs Review" instead of doctor list
   if (deptKey === 'radiology_duty') {
-    rowsHtml = `<div class="empty" style="text-align:center;padding:20px 12px;">
-      <div style="font-size:15px;font-weight:600;color:var(--text,#e0e8f0);margin-bottom:8px;">يرجى مراجعة الجدول الأصلي</div>
-      <div style="font-size:12px;color:var(--muted,#888);">البيانات متاحة في ملف PDF أدناه</div>
+    rowsHtml = `<div class="empty" style="text-align:center;padding:16px 12px;">
+      <div style="font-size:18px;margin-bottom:6px;">⚠️ Needs Review</div>
+      <div style="font-size:13px;color:var(--muted,#888);">يرجى مراجعة الجدول الأصلي للتأكد من البيانات</div>
     </div>`;
   } else if (isDeptHardBlocked(deptKey) && !hasRenderableEntries) {
     const uploaded = uploadedRecordForDept(deptKey);
@@ -229,7 +229,7 @@ async function buildCard(deptKey, dept, entries) {
     <button class="ghostbtn" type="button" data-preview="${deptKey}">عرض داخل الصفحة</button>
     <a class="ghostbtn" href="${pdf.href}" target="_blank" rel="noopener">فتح PDF</a>
     <a class="ghostbtn" href="${pdf.href}" download="${pdf.name || 'rota.pdf'}">تحميل</a>` : '';
-  const traceHtml = '';
+  const traceHtml = deptKey === 'radiology_duty' ? buildRadiologyDutyTraceHtml() : '';
   card.innerHTML = `
     <div class="dhead">
       <div class="dname"><div class="dicon" data-exact-specialty="${deptKey}" title="Show only this specialty">${dept.icon}</div>${dept.label}</div>
