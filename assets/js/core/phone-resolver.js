@@ -156,20 +156,35 @@ function resolvePhone(dept, entry) {
   const nameNorm = canonicalName(entry.name || '');
   for (const [scName, scPhone] of Object.entries(sc)) {
     if (scPhone && canonicalName(scName) === nameNorm) {
-      return { phone: scPhone, uncertain: false, matchedName: scName, matchRule: 'exact' };
+      // Reconstruct a Dr.-prefixed display name for server contacts (Dr. stripped by pdfplumber)
+      const displayName = /^Dr\.?\s/i.test(scName) ? scName : `Dr. ${scName}`;
+      return { phone: scPhone, uncertain: false, matchedName: displayName, matchRule: 'exact' };
     }
   }
-  const scTokens = nameNorm.split(' ').filter(t => t.length >= 3);
-  if (scTokens.length && Object.keys(sc).length) {
+  const scAllTokens = nameNorm.split(' ').filter(Boolean);
+  const scSigTokens = scAllTokens.filter(t => t.length >= 3);
+  const scInitial = scAllTokens.find(t => t.length === 1);
+  if (scSigTokens.length && Object.keys(sc).length) {
     const scPrefix = Object.entries(sc).filter(([cn, ph]) => {
       if (!ph) return false;
       const cnToks = canonicalName(cn).split(' ').filter(t => t.length >= 3);
-      return scTokens.some(tt => cnToks.some(ct =>
+      return scSigTokens.some(tt => cnToks.some(ct =>
         (ct.startsWith(tt) || tt.startsWith(ct)) && Math.abs(ct.length - tt.length) <= 2
       ));
     });
+    const _scDisplayName = (scName) => /^Dr\.?\s/i.test(scName) ? scName : `Dr. ${scName}`;
     if (scPrefix.length === 1) {
-      return { phone: scPrefix[0][1], uncertain: false, matchedName: scPrefix[0][0], matchRule: 'prefix' };
+      return { phone: scPrefix[0][1], uncertain: false, matchedName: _scDisplayName(scPrefix[0][0]), matchRule: 'prefix' };
+    }
+    // Ambiguous prefix match: use the initial to disambiguate (e.g. "A.Mohammed" → only one "A" Mohammed)
+    if (scPrefix.length > 1 && scInitial) {
+      const initFiltered = scPrefix.filter(([cn]) => {
+        const cnFirst = canonicalName(cn).split(' ').filter(Boolean)[0];
+        return cnFirst && cnFirst.startsWith(scInitial);
+      });
+      if (initFiltered.length === 1) {
+        return { phone: initFiltered[0][1], uncertain: false, matchedName: _scDisplayName(initFiltered[0][0]), matchRule: 'prefix' };
+      }
     }
   }
 

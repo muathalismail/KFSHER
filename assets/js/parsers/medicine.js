@@ -98,7 +98,16 @@ function resolveMedicineOnCallName(raw='', contactResult=null) {
   const normalizedToken = normalizeText(token.replace(/\./g, ' '));
   const bareToken = normalizedToken.replace(/^dr\b/, '').trim();
   let best = null;
-  Object.keys(contactResult?.map || {}).forEach(name => {
+
+  // Build unified candidate pool: PDF-extracted contacts + server-extracted contacts (pdfplumber).
+  // Server contacts have Dr. stripped by extract-contacts.py, so we prefix them for uniform handling.
+  const sc = (typeof window !== 'undefined' && window._serverExtractedContacts) || {};
+  const serverCandidates = Object.fromEntries(
+    Object.entries(sc).map(([n, p]) => [/^dr\.?\s/i.test(n) ? n : `Dr. ${n}`, p])
+  );
+  const allCandidates = { ...serverCandidates, ...(contactResult?.map || {}) };
+
+  Object.keys(allCandidates).forEach(name => {
     const candidateNorm = normalizeText(String(name || '').replace(/^Dr\.?\s*/i, '').replace(/\./g, ' '));
     if (!candidateNorm) return;
     const candidateTokens = candidateNorm.split(' ').filter(Boolean);
@@ -115,9 +124,10 @@ function resolveMedicineOnCallName(raw='', contactResult=null) {
     if (!firstMatch || !lastMatch) return;
     const score = scoreNameMatch(token, name) || scoreNameMatch(`Dr. ${token}`, name);
     if (!score) return;
-    // Prefer names already in ROTAS contacts over PDF-extracted-only names when scores tie
+    // Prefer names already in ROTAS contacts, then PDF-extracted, then server-extracted
     const inRotas = name in (dept.contacts || {});
-    const effectiveScore = score.score + (inRotas ? 1 : 0);
+    const inPdf = name in (contactResult?.map || {});
+    const effectiveScore = score.score + (inRotas ? 2 : inPdf ? 1 : 0);
     if (!best || effectiveScore > best.score) best = { name, score: effectiveScore };
   });
   if (best?.name) return cleanMedicineOnCallResolvedName(best.name);
