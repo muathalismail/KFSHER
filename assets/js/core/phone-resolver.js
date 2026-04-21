@@ -49,6 +49,7 @@ function canonicalName(s='') {
     .replace(/^dr\.?\s*/i,' ')
     .replace(/\([^)]*\)/g,' ')
     .replace(/\bdr\b/g,' ')
+    .replace(/[-]+/g, '')              // remove hyphens: "Al-Ghazal" → "AlGhazal"
     .replace(/[^a-z0-9\u0600-\u06FF]+/g,' ')
     .replace(/\s+/g,' ')
     .trim()
@@ -56,7 +57,8 @@ function canonicalName(s='') {
     .filter(Boolean)
     .map(token => {
       if (token === 'al' || token === 'el') return '';
-      if (/^(al|el)[a-z]{3,}$/.test(token)) return token.slice(2);
+      // Strip al/el prefix if remainder ≥ 2 chars (was 3, now 2 per rules)
+      if (/^(al|el)[a-z]{2,}$/.test(token)) return token.slice(2);
       return token;
     })
     .filter(Boolean)
