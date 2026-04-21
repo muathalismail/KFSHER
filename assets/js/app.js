@@ -1868,59 +1868,69 @@ async function extractSurgeryColumnarText(file) {
       allPageRows.push(rows);
     }
 
-    // Find "ER" and "Ward" sub-header items to detect column x-positions
-    // The header has: Junior(ER, Ward) Senior(ER, Ward) then GS columns
+    // Find column x-positions from header keywords on first page.
+    // Expected layout: Junior(ER, Ward) Senior(ER, Ward) GS(Associate, Consultant)
+    // Then subspecialties to the right (ignored).
     const erXs = [], wardXs = [];
-    const assistantXs = [], consultantXs = [];
+    let gsAssocX = null, gsConsultX = null;
     for (const rows of allPageRows.slice(0, 1)) { // first page only
       for (const row of rows) {
         for (const it of row.items) {
           const s = it.str.trim();
           if (/^ER$/i.test(s)) erXs.push(it.x);
           if (/^Ward$/i.test(s)) wardXs.push(it.x);
-          // "Assistant/" or "Associate" near the GS section (x > ER/Ward columns)
-          if (/^Assistant/i.test(s) && it.x > 200) assistantXs.push(it.x);
-          // "Consultant" — take the first occurrence after GS Associate
-          if (/^Consultant$/i.test(s) && it.x > 200) consultantXs.push(it.x);
+          // "Assistant/A" or "Associate" label for the GS column
+          if (/^Assistant\/A/i.test(s) || (/^Associate$/i.test(s) && it.x < 310)) {
+            if (gsAssocX === null || it.x < gsAssocX) gsAssocX = it.x;
+          }
+        }
+      }
+      // Find the FIRST "Consultant" to the RIGHT of the Ward columns
+      // but BEFORE the Thoracic section (x < ~310 based on PDF layout)
+      for (const row of rows) {
+        for (const it of row.items) {
+          if (/^Consultant$/i.test(it.str.trim()) && it.x > 200 && it.x < 310) {
+            if (gsConsultX === null || it.x < gsConsultX) gsConsultX = it.x;
+          }
         }
       }
     }
 
-    // Sort and pick: ER[0]=Jr ER, ER[1]=Sr ER; Ward[0]=Jr Ward, Ward[1]=Sr Ward
     erXs.sort((a, b) => a - b);
     wardXs.sort((a, b) => a - b);
-    assistantXs.sort((a, b) => a - b);
-    consultantXs.sort((a, b) => a - b);
 
     if (erXs.length < 2 || wardXs.length < 2) {
+      console.warn('[SURGERY COL] ER/Ward headers not found, falling back to plain text');
       return { text: await extractPdfText(file), columnar: false };
     }
 
-    // Build column definitions: [Jr ER, Jr Ward, Sr ER, Sr Ward, GS Assoc, GS Consult]
+    // Build column definitions from detected x-positions
     const colDefs = [
       { label: 'jr_er', x: erXs[0] },
       { label: 'jr_ward', x: wardXs[0] },
       { label: 'sr_er', x: erXs[1] },
       { label: 'sr_ward', x: wardXs[1] },
     ];
-    if (assistantXs.length) colDefs.push({ label: 'gs_assoc', x: assistantXs[0] });
-    if (consultantXs.length) colDefs.push({ label: 'gs_consult', x: consultantXs[0] });
+    if (gsAssocX !== null) colDefs.push({ label: 'gs_assoc', x: gsAssocX });
+    if (gsConsultX !== null) colDefs.push({ label: 'gs_consult', x: gsConsultX });
     colDefs.sort((a, b) => a.x - b.x);
+    console.log('[SURGERY COL] Detected columns:', colDefs.map(c => `${c.label}@${Math.round(c.x)}`).join(', '));
 
-    // Build boundary midpoints
-    const boundaries = [];
-    for (let i = 0; i < colDefs.length; i++) {
-      boundaries.push({
-        label: colDefs[i].label,
-        minX: i === 0 ? -Infinity : (colDefs[i - 1].x + colDefs[i].x) / 2,
-        maxX: i < colDefs.length - 1 ? (colDefs[i].x + colDefs[i + 1].x) / 2 : Infinity,
-      });
-    }
+    // Assign column label to an x-position using midpoint boundaries.
+    // Items left of the first data column (jr_er) are "date".
+    // Items right of the last defined column (gs_consult) are "skip".
+    const firstDataX = colDefs[0].x;
     const getCol = (x) => {
-      for (const b of boundaries) {
-        if (x >= b.minX && x < b.maxX) return b.label;
+      if (x < firstDataX - 15) return 'date'; // date/day text is well left of ER
+      // Find closest column
+      let bestLabel = 'skip', bestDist = Infinity;
+      for (const cd of colDefs) {
+        const dist = Math.abs(x - cd.x);
+        if (dist < bestDist) { bestDist = dist; bestLabel = cd.label; }
       }
-      return 'skip';
+      // If the closest column is far away (>40px), it's a subspecialty column — skip
+      if (bestDist > 40) return 'skip';
+      return bestLabel;
     };
 
     // Rebuild text with tab-separated columns
@@ -1936,8 +1946,7 @@ async function extractSurgeryColumnarText(file) {
           colTexts[col].push(it.str);
         }
         // Output: date_area \t jr_er \t sr_er \t gs_assoc \t gs_consult
-        // (skip jr_ward and sr_ward)
-        const datePart = colTexts['skip'] ? colTexts['skip'].join(' ') : '';
+        const datePart = (colTexts['date'] || []).join(' ');
         const parts = [
           datePart,
           (colTexts['jr_er'] || []).join(' '),
