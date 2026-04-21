@@ -225,6 +225,10 @@ async function renderDeptList(matched, qLow, exactMode=false) {
   if (matched.some(([k]) => k === 'radiology_duty')) {
     showPdfPreview('radiology_duty', lastPreviewContextByDept.get('radiology_duty') || null);
   }
+  // Oncology: auto-open PDF after card renders (same as Imaging On-Duty)
+  if (matched.some(([k]) => k === 'oncology')) {
+    showPdfPreview('oncology', lastPreviewContextByDept.get('oncology') || null);
+  }
 }
 
 async function showExactDept(deptKey) {
@@ -265,6 +269,7 @@ const TAG_LIST = [
   ['neuro_ir','Neuro IR'],
   ['urology','Urology'],
   ['ophthalmology','Eye'],
+  ['oncology','Oncology'],
   ['hematology','Heme-Onco'],
   ['radonc','Rad-Onc'],
   ['nephrology','Nephrology'],

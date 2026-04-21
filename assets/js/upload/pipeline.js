@@ -168,6 +168,9 @@ const SPECIALTY_PIPELINE_RULES = {
     requiredRoles: ['fellow', 'consultant'],
     autoActivate: true,
   },
+  oncology: {
+    autoActivate: true,
+  },
 };
 
 // uploadedPdfRecords → now in store/memory-cache.js (loaded as global)

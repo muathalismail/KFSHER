@@ -962,6 +962,7 @@ const SPECIALTY_FILENAME_INTERPRETERS = [
   { key:'physical_medicine_rehabilitation', icon:'♿', label:'Physical Medicine & Rehabilitation / الطب الطبيعي والتأهيل', terms:['physical medicine rehabilitation','physical medicine rehabilitaion','pm r','pmr','rehabilitation','rehabilitaion'] },
   { key:'pediatric_neurology', icon:'🧠', label:'Pediatric Neurology / أعصاب الأطفال', terms:['ped neuro','pediatric neuro','paediatric neuro','child neurology','pediatric neurology','ped neurology'] },
   { key:'pediatric_cardiology', icon:'🫀', label:'Pediatric Cardiology / قلب الأطفال', terms:['pediatric cardiology','ped cardiology','ped card','pediatric cardiac'] },
+  { key:'oncology', icon:'🎗️', label:'Adult Medical Oncology / أورام', terms:['adult medical oncology','medical oncology department','medical oncology on-call','medical oncology duty'] },
   { key:'pediatric_heme_onc', icon:'🩸', label:'Pediatric Heme-Onc & SCT / دم وأورام الأطفال', terms:['pediatric hematology','pediaric hematology','ped heme','ped oncology','pediatric oncology','sct pediatric','pediatric hematology oncology'] },
   { key:'picu', icon:'🍼', label:'PICU / وحدة العناية المركزة للأطفال', terms:['picu','pediatric icu','pediatric intensive care'] },
   { key:'pediatrics', icon:'👶', label:'Pediatrics / طب الأطفال', terms:['pediatrics department','pidiatric duty','pediatrics duty','pediatric duty'] },
@@ -1000,6 +1001,7 @@ const HOMEPAGE_PRIORITY = [
   'neuro_ir',
   'urology',
   'ophthalmology',
+  'oncology',
   'hematology',
   'radonc',
   'nephrology',
@@ -1029,6 +1031,7 @@ const PDF_DETECTION_RULES = [
   { key:'spine', terms:['spine surgery','spine','spinal','جراحة العمود الفقري','ssd duty'] },
   { key:'ophthalmology', terms:['opthalmology','ophthalmology','eye','عيون'] },
   { key:'urology', terms:['urology','adult urology','مسالك'] },
+  { key:'oncology', terms:['adult medical oncology','medical oncology department','medical oncology on-call'] },
   { key:'hematology', terms:['hematology','haematology','adult hematology','sct department','stem cell transplant','هيماتولوجي','أورام الدم'] },
   { key:'pediatric_heme_onc', terms:['pediatric hematology','pediaric hematology','ped heme','pediatric oncology sct','pediaric hematology oncology'] },
   { key:'radonc', terms:['radonc','radiation oncology','oncologist oncall','أورام الإشعاع'] },
@@ -2400,6 +2403,22 @@ function getEntries(deptKey, dept, schedKey, now, qLow='') {
     return getRadiologyEntries(schedKey, now, qLow);
   }
   if (deptKey === 'hospitalist') return splitMultiDoctorEntries(getHospitalistEntries(schedKey, now), deptKey);
+  if (deptKey === 'oncology') {
+    // Show oncology uploaded entries + current hospitalist on-duty doctor
+    const oncologyEntries = splitMultiDoctorEntries(filterActiveEntriesV2(dept.schedule[schedKey] || [], now, deptKey), deptKey);
+    const hospitalistEntries = getHospitalistEntries(schedKey, now);
+    if (hospitalistEntries.length) {
+      hospitalistEntries.forEach(entry => {
+        oncologyEntries.push({
+          ...entry,
+          specialty: 'oncology',
+          role: 'Hospitalist المداوم',
+          section: 'Hospitalist المداوم',
+        });
+      });
+    }
+    return oncologyEntries;
+  }
   if (deptKey === 'pediatrics') return splitMultiDoctorEntries(getPediatricsEntries(schedKey, now), deptKey);
   if (deptKey === 'picu') return splitMultiDoctorEntries(getPicuEntries(schedKey, now), deptKey);
   if (deptKey === 'orthopedics') return splitMultiDoctorEntries(getOrthopedicsEntries(schedKey, now), deptKey);

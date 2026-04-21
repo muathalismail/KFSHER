@@ -950,6 +950,45 @@ infectious:{
   }
 },
 
+// ── ADULT MEDICAL ONCOLOGY ──────────────────────────────────────
+oncology:{
+  label:'Adult Medical Oncology / أورام', icon:'🎗️',
+  keywords:['oncology','medical oncology','adult oncology','onco','أورام','الأورام'],
+  contacts:{
+    'Dr. Abdulraheem Al Shangiti':'0580592690',
+    'Dr. Ehab Hassan':'0502041045',
+    'Dr. Fahad Ibnshamsah':'0505823725',
+    'Dr. Waleed Alselwi':'0541269703',
+    'Dr. Hulayel Al Harbi':'0505299469',
+    'Dr. Faisal Azam':'0582879333',
+    'Dr. Leonidas Chelis':'0581334953',
+    'Dr. Osama Abdeljalil':'0590097438',
+    'Dr. Ahmed Talal':'0509127249',
+    'Dr. Samer Salah':'0508651464',
+    'Dr. Haider Abbas':'0507326698',
+    'Dr. Abdullah Alhumiqani':'0532020811',
+    'Dr. Mohammed Al Ghamdi':'0506351740',
+    'Dr. Najwa Buhlaiga':'0530263629',
+    'Dr. Wiam Taha':'0559227257',
+    'Dr. Maryam Al Sulaiman':'0583526622',
+    'Dr. Hany El Kady':'0552706180',
+    'Dr. Khaled Elgingihie':'0546124767',
+    'Dr. Osama Soliman':'0548384323',
+    'Dr. Keyan Falfali':'0555061196',
+    'Dr. Mai Abdeljelil':'0506434692',
+    'Dr. Ahmed Wateet':'0544452841',
+    'Dr. Alaa Abo Sleem':'0569732353',
+    'Dr. Eman Hebesh':'0540425416',
+    'Dr. Melad Aramnious':'0562701493',
+    'Dr. Mohamed Abdrabo':'0502550538',
+    "Dr. Wa'ad Alzaher":'0500339681',
+    'Dr. Arwa AlKhuraim':'0530819155',
+    'Dr. Ammar AlJeshi':'0535864280',
+    'Dr. Zainah AlDulaijan':'0505935571',
+  },
+  schedule:{},
+},
+
 // ── NEW SPECIALTIES ─────────────────────────────────────────────
 
 // PICU
