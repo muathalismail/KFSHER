@@ -14,6 +14,9 @@ function parseRadiologyOnCallPdfEntries(text='', deptKey='radiology_oncall') {
   const dept = ROTAS[deptKey] || { contacts:{} };
   const { year: detectedYr, monthPad } = detectPdfMonthYear(text);
 
+  // Build contact map from the PDF text (page 2 has a contact table)
+  const contactResult = buildContactMapFromText(text);
+
   const lines = String(text || '').split(/\n/).map(l => l.trim()).filter(Boolean);
   const dateRe = /(\d{1,2})\/(\d{1,2})\/(\d{4})/;
   const timeRe = /(7:30\s*[ap]m)\s*[-–]\s*(7:30\s*[ap]m)/i;
@@ -85,7 +88,12 @@ function parseRadiologyOnCallPdfEntries(text='', deptKey='radiology_oncall') {
         n && n !== '-' && !_ONCALL_SKIP_WORDS.test(n)
       );
       for (const name of names) {
-        const resolved = resolvePhone(dept, { name, phone: '' }) || { phone: '', uncertain: true };
+        // Try PDF contact table first, then rotas.js contacts
+        const fromPdf = resolvePhoneFromContactMap(name, contactResult);
+        const fromRotas = resolvePhone(dept, { name, phone: '' });
+        const resolved = (fromPdf && fromPdf.phone) ? fromPdf
+          : (fromRotas && fromRotas.phone) ? fromRotas
+          : { phone: '', uncertain: true };
         entries.push({
           specialty: deptKey, date: dateKey, role, name,
           phone: resolved.phone || '',
@@ -130,7 +138,11 @@ function parseRadiologyOnCallPdfEntries(text='', deptKey='radiology_oncall') {
       if (!name || _ONCALL_SKIP_WORDS.test(name)) return;
       const names = name.split(/\s*\/\s*/).map(n => n.trim()).filter(Boolean);
       for (const n of names) {
-        const resolved = resolvePhone(dept, { name: n, phone: '' }) || { phone: '', uncertain: true };
+        const fromPdf = resolvePhoneFromContactMap(n, contactResult);
+        const fromRotas = resolvePhone(dept, { name: n, phone: '' });
+        const resolved = (fromPdf && fromPdf.phone) ? fromPdf
+          : (fromRotas && fromRotas.phone) ? fromRotas
+          : { phone: '', uncertain: true };
         entries.push({
           specialty: deptKey, date: dateKey, role, name: n,
           phone: resolved.phone || '', phoneUncertain: !resolved.phone || !!resolved.uncertain,
