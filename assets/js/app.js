@@ -1837,6 +1837,126 @@ async function hydrateBundledPicuSchedule() {
   }
 }
 
+// ── SURGERY: column-aware PDF extraction ─────────────────────
+// Uses PDF.js x-coordinates to detect columns from headers.
+// Returns tab-separated text with columns: Date | Jr ER | Jr Ward | Sr ER | Sr Ward | GS Assoc | GS Consult
+async function extractSurgeryColumnarText(file) {
+  try {
+    const pdfjs = await loadPdfJs();
+    const buffer = await file.arrayBuffer();
+    const pdf = await pdfjs.getDocument({ data: buffer }).promise;
+
+    // Header keywords for column detection (only first page)
+    // We detect "ER" and "Ward" sub-headers plus "Assistant" and "Consultant" for GS
+    const allPageRows = [];
+    for (let p = 1; p <= pdf.numPages; p++) {
+      const page = await pdf.getPage(p);
+      const content = await page.getTextContent();
+      const rows = [];
+      let curY = null, curItems = [];
+      const flush = () => { if (curItems.length) rows.push({ y: curY, items: [...curItems] }); curItems = []; };
+      for (const item of content.items) {
+        if (!item.str || !item.str.trim()) continue;
+        const y = item.transform ? Math.round(item.transform[5]) : 0;
+        const x = item.transform ? item.transform[4] : 0;
+        const width = item.width || 0;
+        if (curY !== null && Math.abs(y - curY) > 2) flush();
+        curItems.push({ str: item.str.trim(), x, width });
+        curY = y;
+      }
+      flush();
+      allPageRows.push(rows);
+    }
+
+    // Find "ER" and "Ward" sub-header items to detect column x-positions
+    // The header has: Junior(ER, Ward) Senior(ER, Ward) then GS columns
+    const erXs = [], wardXs = [];
+    const assistantXs = [], consultantXs = [];
+    for (const rows of allPageRows.slice(0, 1)) { // first page only
+      for (const row of rows) {
+        for (const it of row.items) {
+          const s = it.str.trim();
+          if (/^ER$/i.test(s)) erXs.push(it.x);
+          if (/^Ward$/i.test(s)) wardXs.push(it.x);
+          // "Assistant/" or "Associate" near the GS section (x > ER/Ward columns)
+          if (/^Assistant/i.test(s) && it.x > 200) assistantXs.push(it.x);
+          // "Consultant" — take the first occurrence after GS Associate
+          if (/^Consultant$/i.test(s) && it.x > 200) consultantXs.push(it.x);
+        }
+      }
+    }
+
+    // Sort and pick: ER[0]=Jr ER, ER[1]=Sr ER; Ward[0]=Jr Ward, Ward[1]=Sr Ward
+    erXs.sort((a, b) => a - b);
+    wardXs.sort((a, b) => a - b);
+    assistantXs.sort((a, b) => a - b);
+    consultantXs.sort((a, b) => a - b);
+
+    if (erXs.length < 2 || wardXs.length < 2) {
+      return { text: await extractPdfText(file), columnar: false };
+    }
+
+    // Build column definitions: [Jr ER, Jr Ward, Sr ER, Sr Ward, GS Assoc, GS Consult]
+    const colDefs = [
+      { label: 'jr_er', x: erXs[0] },
+      { label: 'jr_ward', x: wardXs[0] },
+      { label: 'sr_er', x: erXs[1] },
+      { label: 'sr_ward', x: wardXs[1] },
+    ];
+    if (assistantXs.length) colDefs.push({ label: 'gs_assoc', x: assistantXs[0] });
+    if (consultantXs.length) colDefs.push({ label: 'gs_consult', x: consultantXs[0] });
+    colDefs.sort((a, b) => a.x - b.x);
+
+    // Build boundary midpoints
+    const boundaries = [];
+    for (let i = 0; i < colDefs.length; i++) {
+      boundaries.push({
+        label: colDefs[i].label,
+        minX: i === 0 ? -Infinity : (colDefs[i - 1].x + colDefs[i].x) / 2,
+        maxX: i < colDefs.length - 1 ? (colDefs[i].x + colDefs[i + 1].x) / 2 : Infinity,
+      });
+    }
+    const getCol = (x) => {
+      for (const b of boundaries) {
+        if (x >= b.minX && x < b.maxX) return b.label;
+      }
+      return 'skip';
+    };
+
+    // Rebuild text with tab-separated columns
+    const pageTexts = [];
+    for (const rows of allPageRows) {
+      const lineChunks = [];
+      for (const row of rows) {
+        row.items.sort((a, b) => a.x - b.x);
+        const colTexts = {};
+        for (const it of row.items) {
+          const col = getCol(it.x);
+          if (!colTexts[col]) colTexts[col] = [];
+          colTexts[col].push(it.str);
+        }
+        // Output: date_area \t jr_er \t sr_er \t gs_assoc \t gs_consult
+        // (skip jr_ward and sr_ward)
+        const datePart = colTexts['skip'] ? colTexts['skip'].join(' ') : '';
+        const parts = [
+          datePart,
+          (colTexts['jr_er'] || []).join(' '),
+          (colTexts['sr_er'] || []).join(' '),
+          (colTexts['gs_assoc'] || []).join(' '),
+          (colTexts['gs_consult'] || []).join(' '),
+        ];
+        lineChunks.push(parts.join('\t'));
+      }
+      pageTexts.push(lineChunks.join('\n'));
+    }
+    const text = pageTexts.join('\n\n').trim();
+    return { text, columnar: true };
+  } catch (err) {
+    console.warn('Surgery columnar extraction failed, falling back:', err);
+    return { text: await extractPdfText(file), columnar: false };
+  }
+}
+
 // ── DAY-SEQUENCE PARSER ───────────────────────────────────────
 
 async function parseUploadedPdf(file, deptKey) {
@@ -1862,12 +1982,14 @@ async function parseUploadedPdf(file, deptKey) {
     return null;
   })();
 
-  // Liver rota: use column-aware extraction to prevent empty-cell drift
-  let liverColumnar = null;
+  // Column-aware extraction for specialties with complex table layouts
+  let columnarResult = null;
   if (deptKey === 'liver') {
-    try { liverColumnar = await extractLiverColumnarText(file); } catch (_) {}
+    try { columnarResult = await extractLiverColumnarText(file); } catch (_) {}
+  } else if (deptKey === 'surgery') {
+    try { columnarResult = await extractSurgeryColumnarText(file); } catch (_) {}
   }
-  const text = (liverColumnar && liverColumnar.columnar) ? liverColumnar.text : await extractPdfText(file);
+  const text = (columnarResult && columnarResult.columnar) ? columnarResult.text : await extractPdfText(file);
 
   // ── Wait for server contacts before parsing (parser may use them) ──
   const serverContacts = await serverContactsPromise;

@@ -63,112 +63,70 @@ function parseSurgeryPdfEntries(text='', deptKey='surgery') {
   const contactMap = buildContactMapFromText(text);
   const residentPhones = extractSurgeryResidentPhones(text);
   const consultantPhones = extractSurgeryConsultantPhones(text);
-  const lines = text.split('\n').map(line => line.trim()).filter(Boolean);
-  // Detect month/year from this PDF (auto-detects any month, not just April)
   const { month: detectedMon, year: detectedYr, monthPad } = detectPdfMonthYear(text);
-  // Flexible: captures any month name + any 4-digit year
-  const dayRowRe = /^(SUN|MON|TUE|WED|THU|FRI|SAT)\s+(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})\s+(.+)$/i;
-  const mainRows = [];
+  const section = normalizeUploadedSpecialtyLabel(ROTAS[deptKey]?.label || deptKey);
 
-  lines.forEach(line => {
-    const match = line.match(dayRowRe);
-    if (!match) return;
+  // Columnar format: tab-separated columns from extractSurgeryColumnarText
+  // Cols: datePart \t Jr ER \t Sr ER \t GS Assoc \t GS Consult
+  const isColumnar = text.includes('\t');
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  const dayRe = /\b(SUN|MON|TUE|WED|THU|FRI|SAT)\s+(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})\b/i;
+  let rowCount = 0;
+
+  for (const line of lines) {
+    const cols = isColumnar ? line.split('\t') : null;
+    const dateSource = cols ? cols[0] : line;
+    const match = dateSource.match(dayRe);
+    if (!match) continue;
     const rowMon = _MONTH_NAMES_FULL.indexOf(match[3].toLowerCase()) + 1;
-    const rowYr  = parseInt(match[4], 10);
-    if (rowMon !== detectedMon || rowYr !== detectedYr) return;
-    const day = String(parseInt(match[2], 10)).padStart(2, '0');
-    const tokens = match[5].split(/\s+/).filter(Boolean);
-    if (tokens.length < 2) return;
-    mainRows.push({
-      date: `${day}/${monthPad}`,
-      associateAlias: tokens[0],
-      consultantAlias: tokens[1],
-    });
-  });
+    const rowYr = parseInt(match[4], 10);
+    if (rowMon !== detectedMon || rowYr !== detectedYr) continue;
+    const dateKey = `${String(parseInt(match[2], 10)).padStart(2, '0')}/${monthPad}`;
 
-  mainRows.forEach((row, idx) => {
-    const residentTemplate = SURGERY_TEMPLATE_RESIDENTS[row.date] || null;
-    const juniorAlias = residentTemplate?.junior || '';
-    const seniorAlias = residentTemplate?.senior || '';
-
-    if (juniorAlias) {
-      const junior = resolveSurgeryTemplateName(juniorAlias, contactMap);
-      if (junior.name) {
-        const residentPhone = junior.phone || residentPhones[canonicalName(junior.name)] || '';
-        entries.push({
-          specialty: deptKey,
-          date: row.date,
-          role: 'Junior Resident',
-          name: junior.name,
-          phone: residentPhone,
-          phoneUncertain: !residentPhone,
-          shiftType: '24h',
-          startTime: '07:30',
-          endTime: '07:30',
-          section: normalizeUploadedSpecialtyLabel(ROTAS[deptKey]?.label || deptKey),
-          parsedFromPdf: true,
-        });
+    let jrErAlias = '', srErAlias = '', assocAlias = '', consultAlias = '';
+    if (isColumnar && cols.length >= 5) {
+      // Tab-separated: columns already isolated by x-coordinate detection
+      jrErAlias = (cols[1] || '').trim();
+      srErAlias = (cols[2] || '').trim();
+      assocAlias = (cols[3] || '').trim();
+      consultAlias = (cols[4] || '').trim();
+    } else {
+      // Fallback: plain text — take first 4 tokens after date as Jr ER, (skip Ward), Sr ER, (skip Ward)
+      const tail = dateSource.slice(match.index + match[0].length).trim();
+      const tokens = tail.split(/\s+/).filter(Boolean);
+      if (tokens.length >= 4) {
+        jrErAlias = tokens[0];
+        srErAlias = tokens[2]; // skip [1]=Jr Ward
+        // GS columns are unreliable in plain text — skip
       }
     }
 
-    if (seniorAlias) {
-      const senior = resolveSurgeryTemplateName(seniorAlias, contactMap);
-      if (senior.name) {
-        const residentPhone = senior.phone || residentPhones[canonicalName(senior.name)] || '';
-        entries.push({
-          specialty: deptKey,
-          date: row.date,
-          role: 'Senior Resident',
-          name: senior.name,
-          phone: residentPhone,
-          phoneUncertain: !residentPhone,
-          shiftType: '24h',
-          startTime: '07:30',
-          endTime: '07:30',
-          section: normalizeUploadedSpecialtyLabel(ROTAS[deptKey]?.label || deptKey),
-          parsedFromPdf: true,
-        });
-      }
-    }
-
-    const associate = resolveSurgeryTemplateName(row.associateAlias, contactMap);
-    if (associate.name) {
+    const pushEntry = (alias, role) => {
+      if (!alias || /^GS\s/i.test(alias)) return; // skip "GS Asst" placeholder
+      const resolved = resolveSurgeryTemplateName(alias, contactMap);
+      if (!resolved.name) return;
+      const phone = resolved.phone
+        || residentPhones[canonicalName(resolved.name)]
+        || consultantPhones[canonicalName(resolved.name)]
+        || resolvePhone(ROTAS[deptKey], { name: resolved.name, phone: '' })?.phone
+        || '';
       entries.push({
-        specialty: deptKey,
-        date: row.date,
-        role: 'Associate On-Call',
-        name: associate.name,
-        phone: associate.phone,
-        phoneUncertain: associate.phoneUncertain,
-        shiftType: 'on-duty',
-        startTime: '07:30',
-        endTime: '16:30',
-        section: normalizeUploadedSpecialtyLabel(ROTAS[deptKey]?.label || deptKey),
-        parsedFromPdf: true,
+        specialty: deptKey, date: dateKey, role, name: resolved.name,
+        phone, phoneUncertain: !phone,
+        shiftType: '24h', startTime: '07:30', endTime: '07:30',
+        section, parsedFromPdf: true,
       });
-    }
+    };
 
-    const consultant = resolveSurgeryTemplateName(row.consultantAlias, contactMap);
-    if (consultant.name) {
-      const consultantPhone = consultant.phone || consultantPhones[canonicalName(consultant.name)] || resolvePhone(ROTAS[deptKey], { name:consultant.name, phone:'' })?.phone || '';
-      entries.push({
-        specialty: deptKey,
-        date: row.date,
-        role: 'Consultant On-Call',
-        name: consultant.name,
-        phone: consultantPhone,
-        phoneUncertain: !consultantPhone,
-        shiftType: 'on-duty',
-        startTime: '07:30',
-        endTime: '16:30',
-        section: normalizeUploadedSpecialtyLabel(ROTAS[deptKey]?.label || deptKey),
-        parsedFromPdf: true,
-      });
-    }
-  });
+    pushEntry(jrErAlias, 'Junior ER');
+    pushEntry(srErAlias, 'Senior ER');
+    pushEntry(assocAlias, 'Associate On-Call');
+    pushEntry(consultAlias, 'Consultant On-Call');
+    rowCount++;
+  }
 
   const deduped = dedupeParsedEntries(entries);
-  deduped._templateDetected = mainRows.length >= 20;
+  deduped._templateDetected = rowCount >= 20;
   deduped._templateName = deduped._templateDetected ? `surgery-${monthPad}-${detectedYr}` : '';
   return deduped;
 }

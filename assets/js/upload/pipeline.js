@@ -89,7 +89,7 @@ const UPLOAD_REASON_CODES = {
 
 const SPECIALTY_PIPELINE_RULES = {
   surgery: {
-    requiredRoles: ['junior', 'senior', 'associate', 'consultant'],
+    requiredRoles: ['junior er', 'senior er', 'consultant'],
     autoActivate: true,
   },
   neurology: {
