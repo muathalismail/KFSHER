@@ -2412,8 +2412,8 @@ function getEntries(deptKey, dept, schedKey, now, qLow='') {
         oncologyEntries.push({
           ...entry,
           specialty: 'oncology',
-          role: 'Hospitalist المداوم',
-          section: 'Hospitalist المداوم',
+          role: 'Hospitalist',
+          section: 'Hospitalist',
         });
       });
     }
