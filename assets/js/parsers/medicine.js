@@ -23,6 +23,7 @@ function compactMedicineAlias(value='') {
 
 function cleanMedicineOnCallResolvedName(name='') {
   return String(name || '')
+    .replace(/\bDr\.([A-Za-z])/gi, 'Dr. $1')  // "Dr.Bushra" → "Dr. Bushra"
     .replace(/\bResiden\s*t?\b.*$/i, '')
     .replace(/\bResident\b.*$/i, '')
     .replace(/\s+/g, ' ')
@@ -51,7 +52,22 @@ function buildMedicineOnCallAliasIndex(contactResult=null) {
 }
 
 function splitMedicineOnCallRowNames(body='', aliasIndex=null, expectedCount=MEDICINE_ON_CALL_ROLE_SEQUENCE.length) {
-  const tokens = String(body || '').trim().split(/\s+/).filter(Boolean);
+  // Pre-process tokens:
+  // 1. Normalize "Dr.Bushra" → "Dr. Bushra" (PDF sometimes omits the space)
+  // 2. Merge standalone "Dr." / "Dr" tokens with the following token
+  //    so "Dr." doesn't consume a slot by itself in the DP split.
+  const rawTokens = String(body || '').trim()
+    .replace(/\bDr\.([A-Za-z])/gi, 'Dr. $1')  // "Dr.Bushra" → "Dr. Bushra"
+    .split(/\s+/).filter(Boolean);
+  const tokens = [];
+  for (let i = 0; i < rawTokens.length; i++) {
+    if (/^Dr\.?$/i.test(rawTokens[i]) && i + 1 < rawTokens.length && !/^Dr\.?$/i.test(rawTokens[i + 1])) {
+      tokens.push(`${rawTokens[i]} ${rawTokens[i + 1]}`);
+      i++; // skip next token — already merged
+    } else {
+      tokens.push(rawTokens[i]);
+    }
+  }
   const memo = new Map();
   const maxWidth = 4;
 
@@ -82,7 +98,8 @@ function splitMedicineOnCallRowNames(body='', aliasIndex=null, expectedCount=MED
 }
 
 function resolveMedicineOnCallName(raw='', contactResult=null) {
-  const token = String(raw || '').trim().replace(/^[.-]+|[.-]+$/g, '');
+  // Normalize "Dr.Name" → "Dr. Name" early — PDF sometimes omits the space
+  const token = String(raw || '').trim().replace(/^[.-]+|[.-]+$/g, '').replace(/^Dr\.([A-Za-z])/i, 'Dr. $1');
   if (!token) return '';
   const dept = ROTAS.medicine_on_call || { contacts:{} };
   const directCandidates = [
@@ -161,9 +178,22 @@ function buildMedicineOnCallRow(dateKey='', roleMeta={}, rawName='', contactResu
   const _resolvedDisplay = (_matchedRealTokens.length >= 1 && _bareMatched.length > name.replace(/^Dr\.?\s*/i,'').trim().length)
     ? cleanMedicineOnCallResolvedName(_rawMatched)
     : name;
+  // Normalize "Dr.Name" → "Dr. Name" before prefix check — PDF sometimes omits space
+  const _normalized = (_resolvedDisplay || '').replace(/^Dr\.([A-Za-z])/i, 'Dr. $1');
   // Always ensure "Dr." prefix — matchedName from PDF map may lack the honorific
-  const displayName = _resolvedDisplay && _resolvedDisplay.replace(/^Dr\.?\s*/i,'').trim().length > 1 && !/^Dr\.?\s/i.test(_resolvedDisplay)
-    ? `Dr. ${_resolvedDisplay}` : _resolvedDisplay;
+  let displayName = _normalized && _normalized.replace(/^Dr\.?\s*/i,'').trim().length > 1 && !/^Dr\.?\s/i.test(_normalized)
+    ? `Dr. ${_normalized}` : _normalized;
+  // Safety net: if displayName is just "Dr." (bare honorific with no real name),
+  // try to recover the real name from ROTAS contacts by phone number reverse lookup.
+  if (displayName && displayName.replace(/^Dr\.?\s*/i,'').trim().length <= 1 && phoneMeta.phone) {
+    const dept = ROTAS[deptKey] || { contacts:{} };
+    for (const [cn, cp] of Object.entries(dept.contacts || {})) {
+      if (cp === phoneMeta.phone && cn.replace(/^Dr\.?\s*/i,'').trim().length >= 2) {
+        displayName = /^Dr\.?\s/i.test(cn) ? cn : `Dr. ${cn}`;
+        break;
+      }
+    }
+  }
   return {
     specialty: deptKey,
     date: dateKey,

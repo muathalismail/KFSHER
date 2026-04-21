@@ -1048,8 +1048,10 @@ function normalizeParsedEntries(entries=[]) {
     .map(entry => {
       const meta = parseRoleMeta(entry.role || '');
       let name = (entry.name || '').replace(/\bTAAM\b/gi, '').replace(/\s+/g, ' ').trim();
-      // Normalize "Dr.Name" → "Dr. Name"
-      name = name.replace(/^Dr\.([A-Z])/i, 'Dr. $1');
+      // Normalize ALL "Dr.Name" → "Dr. Name" (PDF sometimes omits space after dot)
+      name = name.replace(/\bDr\.([A-Za-z])/gi, 'Dr. $1');
+      // Collapse duplicate "Dr." honorifics: "Dr. Dr. Sara" → "Dr. Sara"
+      name = name.replace(/^Dr\.?\s+Dr\.?\s*/i, 'Dr. ').trim();
       // Strip embedded day names left from Urology-style lines (e.g. "Wed Faisal" → "Faisal")
       name = name.replace(/^\s*(mon|tue|wed|thu|fri|sat|sun)\w*\s+/i, '').trim();
       return {
