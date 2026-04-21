@@ -1178,44 +1178,28 @@ function resolveSurgeryTemplateName(rawName='', contactMap={}) {
   const canonicalKey = canonicalName(clean);
   const normalizedKey = normalizeText(clean).replace(/\./g, ' ').replace(/\s+/g, ' ').trim();
   const hint = SURGERY_NAME_HINTS[canonicalKey] || SURGERY_NAME_HINTS[normalizedKey] || clean;
-  const resolved = resolvePhoneFromContactMap(hint, contactMap) || resolvePhoneFromContactMap(clean, contactMap);
-  if (resolved && resolved.phone) {
-    const knownName = resolved.matchedName || hint;
-    return { name: knownName, phone: resolved.phone, phoneUncertain: !!resolved.uncertain };
+
+  // 1. Try ROTAS contacts first (most reliable — manually verified phones)
+  const rotasPhone = resolvePhone(ROTAS.surgery || { contacts:{} }, { name: hint, phone:'' });
+  if (rotasPhone && rotasPhone.phone && !rotasPhone.uncertain) {
+    return { name: rotasPhone.matchedName || hint, phone: rotasPhone.phone, phoneUncertain: false };
   }
-  // Fallback: "Ahmad.S" → first name + initial of last name → try to find unique match
-  // Handles patterns like "Ahmad.S" → "Ahmad AlSafar" (S = first letter of Safar after Al strip)
-  const dotInitialMatch = clean.match(/^([A-Za-z]{2,})\.?\s*([A-Z])\.?\s*$/);
-  if (dotInitialMatch) {
-    const firstName = dotInitialMatch[1].toLowerCase();
-    const lastInitial = dotInitialMatch[2].toLowerCase();
-    const allContacts = { ...(ROTAS.surgery?.contacts || {}), ...(contactMap?.map || contactMap || {}) };
-    const hits = [];
-    for (const [cn] of Object.entries(allContacts)) {
-      const tokens = canonicalName(cn).split(' ').filter(Boolean);
-      if (tokens.length < 2) continue;
-      const cFirst = tokens[0];
-      const cLast = tokens[tokens.length - 1];
-      if (levenshtein(cFirst, firstName) <= 1 && cLast.startsWith(lastInitial)) {
-        hits.push(cn);
-      }
-    }
-    if (hits.length === 1) {
-      const matchedPhone = resolvePhoneFromContactMap(hits[0], contactMap);
-      return { name: hits[0], phone: matchedPhone?.phone || '', phoneUncertain: !matchedPhone?.phone };
-    }
+  // Also try the raw alias directly in ROTAS (e.g. "Ahmad.S" → ROTAS key)
+  const rotasRaw = resolvePhone(ROTAS.surgery || { contacts:{} }, { name: clean, phone:'' });
+  if (rotasRaw && rotasRaw.phone && !rotasRaw.uncertain) {
+    return { name: rotasRaw.matchedName || hint, phone: rotasRaw.phone, phoneUncertain: false };
   }
-  // Fallback: "A.AlTala" → initial + last name
-  const initialLastMatch = clean.match(/^([A-Z])\.?\s*([A-Za-z]{3,}.*)$/);
-  if (initialLastMatch && !dotInitialMatch) {
-    const tryName = `${initialLastMatch[1]}. ${initialLastMatch[2]}`;
-    const tryResolved = resolvePhoneFromContactMap(tryName, contactMap);
-    if (tryResolved && tryResolved.phone) {
-      return { name: tryResolved.matchedName || tryName, phone: tryResolved.phone, phoneUncertain: !!tryResolved.uncertain };
-    }
+
+  // 2. Try PDF contact map
+  const pdfResolved = resolvePhoneFromContactMap(hint, contactMap) || resolvePhoneFromContactMap(clean, contactMap);
+  if (pdfResolved && pdfResolved.phone && !pdfResolved.uncertain) {
+    return { name: pdfResolved.matchedName || hint, phone: pdfResolved.phone, phoneUncertain: false };
   }
-  if (resolved) {
-    return { name: resolved.matchedName || hint, phone: resolved.phone || '', phoneUncertain: !!resolved.uncertain };
+
+  // 3. Return with best available (ROTAS uncertain > PDF uncertain > no phone)
+  const bestPhone = rotasPhone || rotasRaw || pdfResolved;
+  if (bestPhone && bestPhone.phone) {
+    return { name: bestPhone.matchedName || hint, phone: bestPhone.phone, phoneUncertain: !!bestPhone.uncertain };
   }
   return { name: hint, phone:'', phoneUncertain:true };
 }
