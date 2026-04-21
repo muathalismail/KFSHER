@@ -201,7 +201,7 @@ function getSurgeryEntries(schedKey, now) {
   if (!dept) return [];
   const entries = (dept.schedule[schedKey] || []).map(entry => ({ ...entry }));
   if (!entries.length) return [];
-  const hasStructuredOnCallTeam = entries.some(entry => /junior resident|senior resident|associate on-call|consultant on-call/i.test(entry.role || ''));
+  const hasStructuredOnCallTeam = entries.some(entry => /junior (resident|er)|senior (resident|er)|associate on-call|consultant on-call/i.test(entry.role || ''));
   if (hasStructuredOnCallTeam) return entries;
   return filterActiveEntriesV2(entries, now, 'surgery');
 }
@@ -822,6 +822,7 @@ function resolveSpecialtyEntries(deptKey, base, schedKey, now, qLow='') {
     return filterRadiologyDutyByIntent(base.map(cloneEntry), intent);
   }
   if (deptKey === 'radiology_oncall') return base;
+  if (deptKey === 'surgery') return splitMultiDoctorEntries(base.map(cloneEntry), deptKey);
   if (deptKey === 'neurology') return splitMultiDoctorEntries(getNeurologyEntriesFromRows(base, now), deptKey);
   if (deptKey === 'picu') return splitMultiDoctorEntries(resolvePicuActiveEntries(getPicuEntriesFromRows(base), now), deptKey);
   if (deptKey === 'kptx') return splitMultiDoctorEntries(getKptxEntriesFromRows(base, now), deptKey);
