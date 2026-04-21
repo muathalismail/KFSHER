@@ -126,7 +126,12 @@ function resolveMedicineOnCallName(raw='', contactResult=null) {
     const effectiveScore = score.score + (inRotas ? 1 : 0);
     if (!best || effectiveScore > best.score) best = { name, score: effectiveScore };
   });
-  if (best?.name) return cleanMedicineOnCallResolvedName(best.name);
+  if (best?.name) {
+    const resolved = cleanMedicineOnCallResolvedName(best.name);
+    // Always display with "Dr." prefix — the match may come from PDF contact map
+    // entries that lack the honorific (e.g. "Bushra Alshehri" stored without "Dr.").
+    return /^Dr\.?\s/i.test(resolved) ? resolved : `Dr. ${resolved}`;
+  }
   const fallback = token.replace(/\b([A-Z])\./g, '$1. ').replace(/\s+/g, ' ').trim();
   return cleanMedicineOnCallResolvedName(/^dr\.?/i.test(fallback) ? fallback : `Dr. ${fallback}`.trim());
 }
@@ -153,9 +158,12 @@ function buildMedicineOnCallRow(dateKey='', roleMeta={}, rawName='', contactResu
   const _matchedRealTokens = _bareMatched
     ? _bareMatched.split(/\s+/).filter(t => t.length >= 3 && !/^(resident|consultant|associate|fellow|senior|junior|physician|specialist)$/i.test(t))
     : [];
-  const displayName = (_matchedRealTokens.length >= 1 && _bareMatched.length > name.replace(/^Dr\.?\s*/i,'').trim().length)
+  const _resolvedDisplay = (_matchedRealTokens.length >= 1 && _bareMatched.length > name.replace(/^Dr\.?\s*/i,'').trim().length)
     ? cleanMedicineOnCallResolvedName(_rawMatched)
     : name;
+  // Always ensure "Dr." prefix — matchedName from PDF map may lack the honorific
+  const displayName = _resolvedDisplay && _resolvedDisplay.replace(/^Dr\.?\s*/i,'').trim().length > 1 && !/^Dr\.?\s/i.test(_resolvedDisplay)
+    ? `Dr. ${_resolvedDisplay}` : _resolvedDisplay;
   return {
     specialty: deptKey,
     date: dateKey,
