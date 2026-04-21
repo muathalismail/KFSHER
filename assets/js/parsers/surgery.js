@@ -102,9 +102,9 @@ function parseSurgeryPdfEntries(text='', deptKey='surgery') {
           name: junior.name,
           phone: residentPhone,
           phoneUncertain: !residentPhone,
-          shiftType: 'on-duty',
+          shiftType: '24h',
           startTime: '07:30',
-          endTime: '16:30',
+          endTime: '07:30',
           section: normalizeUploadedSpecialtyLabel(ROTAS[deptKey]?.label || deptKey),
           parsedFromPdf: true,
         });
@@ -122,9 +122,9 @@ function parseSurgeryPdfEntries(text='', deptKey='surgery') {
           name: senior.name,
           phone: residentPhone,
           phoneUncertain: !residentPhone,
-          shiftType: 'on-duty',
+          shiftType: '24h',
           startTime: '07:30',
-          endTime: '16:30',
+          endTime: '07:30',
           section: normalizeUploadedSpecialtyLabel(ROTAS[deptKey]?.label || deptKey),
           parsedFromPdf: true,
         });
