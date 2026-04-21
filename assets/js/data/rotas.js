@@ -612,7 +612,7 @@ radiology_oncall:{
     'Dr. Ahmed AlZahrani':'0543448882','Dr. Enas Al Wuhaib':'0565898840',
     'Dr. Abdullah Al Umair':'0597301241','Dr. Nourah Almakhaitah':'0596662319',
     'Mona Awaji':'0501874527','Maryam Al Khalifah':'0554833069',
-    'Fatimah Buqais':'','Rawan Alanezi':'0532040901',
+    'Fatimah Buqais':'0596141763','Rawan Alanezi':'0532040901',
     'Bayan Al Kaby':'0535345529','Abdullah Al Mujaljal':'0595636067',
     'Mohammed Al Ibrahim':'0508063629','Watin Hashash':'0536600226',
     'Adi Al Obud':'0563402011','Mohammed Al Saffar':'0540655113',
