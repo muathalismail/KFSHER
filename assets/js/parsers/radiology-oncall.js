@@ -9,6 +9,90 @@
 // Words that are NOT doctor names — skip if matched
 const _ONCALL_SKIP_WORDS = /^(RESIDENTS?|GENERAL|ON-CALL|DAY|DATE|1st|2nd|3rd|NEURO|NUCLEAR|ABDOMEN|CHEST|MSK|PEDIA|BREAST|X-Ray|Weekend|CONSULTANT|MEDICINE|ER|In-Patient|-+\s*Weekend\s*-+|-+\s*GENERAL\s*IT\s*SUPPORT\s*-+|case\s+assignments)/i;
 
+/**
+ * Extract contacts from the on-call rota PDF text.
+ * The contact table has two side-by-side sub-tables that get merged into single lines.
+ * Pattern: "Name1 ext1 phone1 Name2 phone2" or "Name phone" per line.
+ * Handles phones without leading 0 (e.g. 549747372 → 0549747372).
+ */
+function _extractOnCallContacts(text) {
+  const contacts = {};
+  const lines = String(text || '').split('\n');
+  // Match: word sequences followed by a 9-10 digit number
+  const phoneRe = /\b(5\d{8})\b/g;
+
+  for (const line of lines) {
+    // Skip schedule rows (contain dates)
+    if (/\d{1,2}\/\d{1,2}\/\d{4}/.test(line)) continue;
+    // Skip headers
+    if (/^(DAY|DATE|MEDICAL IMAGING|APRIL|NAME|EXTENSION|MISC PHYS|MID RESID|ON-CALL GENERAL IT)/i.test(line.trim())) continue;
+
+    // Find all phone numbers in this line
+    const phones = [];
+    let m;
+    while ((m = phoneRe.exec(line)) !== null) {
+      phones.push({ phone: '0' + m[1], index: m.index });
+    }
+    if (!phones.length) continue;
+
+    // For each phone, extract the name text BEFORE it
+    // Work backwards: the text between the previous phone (or line start) and this phone is the name
+    for (let i = 0; i < phones.length; i++) {
+      const start = i === 0 ? 0 : phones[i - 1].index + phones[i - 1].phone.length;
+      const nameText = line.slice(start, phones[i].index).trim();
+      // Clean: remove extension numbers (4-digit), parenthetical suffixes, "Dr." variations
+      let name = nameText
+        .replace(/\b\d{4}\b/g, ' ')           // extension numbers
+        .replace(/\([^)]*\)/g, '')             // (F1 - Neuro) etc.
+        .replace(/\b(ext\.?|on training)\b/gi, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (name && name.length >= 3 && !/^\d+$/.test(name) && !/^(MISC|MID|CONTACT|DETAILS)$/i.test(name)) {
+        contacts[name] = phones[i].phone;
+      }
+    }
+  }
+  return contacts;
+}
+
+/**
+ * Resolve a name against the PDF-extracted contacts map.
+ * Tries exact match, then first-name unique match, then last-name match.
+ */
+function _resolveFromPdfContacts(name, contacts) {
+  if (!name || !contacts) return null;
+  const norm = n => (n || '').toLowerCase().replace(/^dr\.?\s*/i, '').replace(/\s+/g, ' ').trim();
+  const target = norm(name);
+  if (!target) return null;
+
+  // Exact match
+  for (const [cn, ph] of Object.entries(contacts)) {
+    if (norm(cn) === target) return ph;
+  }
+
+  // First-name match (unique)
+  const targetFirst = target.split(' ')[0];
+  if (targetFirst && targetFirst.length >= 3) {
+    const matches = Object.entries(contacts).filter(([cn]) =>
+      norm(cn).split(' ')[0] === targetFirst
+    );
+    if (matches.length === 1) return matches[0][1];
+  }
+
+  // Last-name match
+  const targetParts = target.split(' ');
+  const targetLast = targetParts[targetParts.length - 1];
+  if (targetLast && targetLast.length >= 4) {
+    const matches = Object.entries(contacts).filter(([cn]) => {
+      const cnLast = norm(cn).split(' ').pop();
+      return cnLast === targetLast || cnLast.replace(/^al/, '') === targetLast.replace(/^al/, '');
+    });
+    if (matches.length === 1) return matches[0][1];
+  }
+
+  return null;
+}
+
 function parseRadiologyOnCallPdfEntries(text='', deptKey='radiology_oncall') {
   const entries = [];
   const dept = ROTAS[deptKey] || { contacts:{} };
@@ -16,6 +100,8 @@ function parseRadiologyOnCallPdfEntries(text='', deptKey='radiology_oncall') {
 
   // Build contact map from the PDF text (page 2 has a contact table)
   const contactResult = buildContactMapFromText(text);
+  // Also extract contacts using the dedicated on-call layout parser
+  const pdfContacts = _extractOnCallContacts(text);
 
   const lines = String(text || '').split(/\n/).map(l => l.trim()).filter(Boolean);
   const dateRe = /(\d{1,2})\/(\d{1,2})\/(\d{4})/;
@@ -88,10 +174,12 @@ function parseRadiologyOnCallPdfEntries(text='', deptKey='radiology_oncall') {
         n && n !== '-' && !_ONCALL_SKIP_WORDS.test(n)
       );
       for (const name of names) {
-        // Try PDF contact table first, then rotas.js contacts
-        const fromPdf = resolvePhoneFromContactMap(name, contactResult);
-        const fromRotas = resolvePhone(dept, { name, phone: '' });
-        const resolved = (fromPdf && fromPdf.phone) ? fromPdf
+        // Try: 1) dedicated PDF contacts, 2) generic PDF contact map, 3) rotas.js contacts
+        const directMatch = _resolveFromPdfContacts(name, pdfContacts);
+        const fromPdf = directMatch ? null : resolvePhoneFromContactMap(name, contactResult);
+        const fromRotas = (!directMatch && !(fromPdf && fromPdf.phone)) ? resolvePhone(dept, { name, phone: '' }) : null;
+        const resolved = directMatch ? { phone: directMatch, uncertain: false }
+          : (fromPdf && fromPdf.phone) ? fromPdf
           : (fromRotas && fromRotas.phone) ? fromRotas
           : { phone: '', uncertain: true };
         entries.push({
@@ -138,9 +226,11 @@ function parseRadiologyOnCallPdfEntries(text='', deptKey='radiology_oncall') {
       if (!name || _ONCALL_SKIP_WORDS.test(name)) return;
       const names = name.split(/\s*\/\s*/).map(n => n.trim()).filter(Boolean);
       for (const n of names) {
-        const fromPdf = resolvePhoneFromContactMap(n, contactResult);
-        const fromRotas = resolvePhone(dept, { name: n, phone: '' });
-        const resolved = (fromPdf && fromPdf.phone) ? fromPdf
+        const directMatch = _resolveFromPdfContacts(n, pdfContacts);
+        const fromPdf = directMatch ? null : resolvePhoneFromContactMap(n, contactResult);
+        const fromRotas = (!directMatch && !(fromPdf && fromPdf.phone)) ? resolvePhone(dept, { name: n, phone: '' }) : null;
+        const resolved = directMatch ? { phone: directMatch, uncertain: false }
+          : (fromPdf && fromPdf.phone) ? fromPdf
           : (fromRotas && fromRotas.phone) ? fromRotas
           : { phone: '', uncertain: true };
         entries.push({
