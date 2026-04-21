@@ -618,6 +618,10 @@ radiology_oncall:{
     'Adi Al Obud':'0563402011','Mohammed Al Saffar':'0540655113',
     'Khaled Al Zahrani':'0501808354','Sokaina Al Khuder':'0562058856',
     'Manar Al Naji':'0532007232','Abdulrahman Alshammari':'0558718972',
+    'Alhanoof Al Khunaifer':'0549747372','Alhanouf Al Khunaifer':'0549747372',
+    'Nujood Natto':'0548320910','Nujood khalid Natto':'0548320910',
+    'Mohammed Al Anaki':'0592037777','Fatimah Albahhar':'0565085007',
+    'Maha Alshahrani':'0553714449','Bayan Al Ghadeer':'0536934530',
   },
   // On-call: after 16:30 weekdays, 24h weekends
   // schedule shows who covers after 16:30
