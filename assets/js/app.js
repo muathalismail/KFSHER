@@ -1868,117 +1868,51 @@ async function extractSurgeryColumnarText(file) {
       allPageRows.push(rows);
     }
 
-    // Detect column x-positions from the FIRST DATA ROW rather than headers.
-    // Headers have misaligned x-positions (e.g. "Senior" label at x=193 but
-    // Sr ER data at x=229). Data rows are consistent across all 30 days.
-    //
-    // Strategy:
-    // 1. Find the first data row (matches day pattern like "WED 1 April 2026")
-    // 2. Collect all text item x-positions from that row
-    // 3. Cluster them into columns — the first 4 clusters are:
-    //    [date area, Jr ER, Jr Ward, Sr ER, Sr Ward, GS Assoc, GS Consult, ...]
-    // 4. Keep only Jr ER (idx 1), Sr ER (idx 3), GS Assoc (idx 5), GS Consult (idx 6)
-    const dayPattern = /^(SUN|MON|TUE|WED|THU|FRI|SAT)$/i;
-    let dataRowItems = null;
-    for (const rows of allPageRows.slice(0, 1)) {
-      for (const row of rows) {
-        if (row.items.some(it => dayPattern.test(it.str.trim()))) {
-          dataRowItems = row.items;
-          break;
-        }
-      }
-      if (dataRowItems) break;
-    }
+    // PDF.js sometimes merges date text + Jr ER + Jr Ward into a single text run,
+    // making x-coordinate clustering unreliable. Instead, directly parse each
+    // data row by splitting the joined text after stripping the date prefix.
+    // Column order is fixed: Jr ER, Jr Ward, Sr ER, Sr Ward, GS Assoc, GS Consult, ...subspecialties
+    // We extract items by POSITION in the row, not by x-coordinate detection.
+    console.log('[SURGERY COL] Using row-order extraction (no x-coordinate detection)');
 
-    if (!dataRowItems || dataRowItems.length < 8) {
-      console.warn('[SURGERY COL] No data row found, falling back');
-      return { text: await extractPdfText(file), columnar: false };
-    }
-
-    // Cluster items by x-position: items within 12px of each other are in the same column
-    const sorted = [...dataRowItems].sort((a, b) => a.x - b.x);
-    const clusters = [];
-    let curCluster = [sorted[0]];
-    for (let i = 1; i < sorted.length; i++) {
-      if (sorted[i].x - curCluster[curCluster.length - 1].x > 12) {
-        clusters.push(curCluster);
-        curCluster = [sorted[i]];
-      } else {
-        curCluster.push(sorted[i]);
-      }
-    }
-    clusters.push(curCluster);
-
-    // Get median x of each cluster
-    const clusterXs = clusters.map(c => {
-      const xs = c.map(it => it.x).sort((a, b) => a - b);
-      return xs[Math.floor(xs.length / 2)];
-    });
-
-    // Columns layout (from PDF): Day, Date, JrER, JrWard, SrER, SrWard, GSAssoc, GSConsult, ...subspecialties
-    // We need at least 8 clusters to have all required columns
-    // Day+Date may be 1-2 clusters depending on spacing
-    // Find the first cluster that is a day name — everything before it is irrelevant
-    let dateEndIdx = 0;
-    for (let i = 0; i < clusters.length; i++) {
-      const text = clusters[i].map(it => it.str).join(' ');
-      if (/\b\d{4}\b/.test(text)) { dateEndIdx = i; break; } // year marks end of date area
-    }
-
-    // After date area: [Jr ER, Jr Ward, Sr ER, Sr Ward, GS Assoc, GS Consult, ...]
-    const dataCols = clusterXs.slice(dateEndIdx + 1);
-    if (dataCols.length < 6) {
-      console.warn('[SURGERY COL] Not enough data columns found (' + dataCols.length + '), falling back');
-      return { text: await extractPdfText(file), columnar: false };
-    }
-
-    const colDefs = [
-      { label: 'jr_er', x: dataCols[0] },       // 1st data col = Junior ER
-      { label: 'sr_er', x: dataCols[2] },        // 3rd data col = Senior ER (skip [1]=Jr Ward)
-      { label: 'gs_assoc', x: dataCols[4] },     // 5th data col = GS Associate (skip [3]=Sr Ward)
-      { label: 'gs_consult', x: dataCols[5] },   // 6th data col = GS Consultant
-    ];
-    console.log('[SURGERY COL] Detected columns:', colDefs.map(c => `${c.label}@${Math.round(c.x)}`).join(', '),
-      '| all clusters:', clusterXs.map(x => Math.round(x)).join(','));
-
-    // Assign column label by proximity.
-    // Data items land ~10px right of their header x-position.
-    // Ward items are ~28px right of their ER header and ~10px right of their Ward header.
-    // Use a 20px radius from each column's x-position to capture only ER data,
-    // skipping Ward data that sits between columns.
-    const firstDataX = colDefs[0].x;
-    const COL_RADIUS = 20; // max distance from column center to match
-
-    const getCol = (x) => {
-      if (x < firstDataX - 15) return 'date';
-      let bestLabel = 'skip', bestDist = Infinity;
-      for (const cd of colDefs) {
-        const dist = Math.abs(x - cd.x);
-        if (dist < bestDist) { bestDist = dist; bestLabel = cd.label; }
-      }
-      return bestDist <= COL_RADIUS ? bestLabel : 'skip';
-    };
-
-    // Rebuild text with tab-separated columns
+    // Build text where each data row has tab-separated columns.
+    // Parse each row: strip date prefix, split remaining names by whitespace,
+    // then map by POSITION to: Jr ER[0], Jr Ward[1], Sr ER[2], Sr Ward[3], GS Assoc[4], GS Consult[5]
+    const dayRe = /\b(SUN|MON|TUE|WED|THU|FRI|SAT)\b/i;
+    const dateRe = /^(.*?\b\d{4})\b(.*)$/;
     const pageTexts = [];
     for (const rows of allPageRows) {
       const lineChunks = [];
       for (const row of rows) {
         row.items.sort((a, b) => a.x - b.x);
-        const colTexts = {};
-        for (const it of row.items) {
-          const col = getCol(it.x);
-          if (!colTexts[col]) colTexts[col] = [];
-          colTexts[col].push(it.str);
+        const fullLine = row.items.map(it => it.str).join(' ');
+        // Only process data rows (contain a day name)
+        if (!dayRe.test(fullLine)) {
+          lineChunks.push(fullLine); // pass through non-data rows for contact extraction
+          continue;
         }
-        // Output: date_area \t jr_er \t sr_er \t gs_assoc \t gs_consult
-        const datePart = (colTexts['date'] || []).join(' ');
+        const dateMatch = fullLine.match(dateRe);
+        if (!dateMatch) { lineChunks.push(fullLine); continue; }
+        const datePart = dateMatch[1].trim();
+        const namePart = dateMatch[2].trim();
+        // Split names — handle "M. Tawfeeq" by merging single-letter tokens with next
+        const rawTokens = namePart.split(/\s+/).filter(Boolean);
+        const names = [];
+        for (let i = 0; i < rawTokens.length; i++) {
+          if (/^[A-Z]\.?$/i.test(rawTokens[i]) && i + 1 < rawTokens.length && !/^[A-Z]\.?$/i.test(rawTokens[i + 1])) {
+            names.push(`${rawTokens[i]} ${rawTokens[i + 1]}`);
+            i++;
+          } else {
+            names.push(rawTokens[i]);
+          }
+        }
+        // Map by position: 0=Jr ER, 1=Jr Ward, 2=Sr ER, 3=Sr Ward, 4=GS Assoc, 5=GS Consult
         const parts = [
           datePart,
-          (colTexts['jr_er'] || []).join(' '),
-          (colTexts['sr_er'] || []).join(' '),
-          (colTexts['gs_assoc'] || []).join(' '),
-          (colTexts['gs_consult'] || []).join(' '),
+          names[0] || '', // Jr ER
+          names[2] || '', // Sr ER (skip [1]=Jr Ward)
+          names[4] || '', // GS Associate (skip [3]=Sr Ward)
+          names[5] || '', // GS Consultant
         ];
         lineChunks.push(parts.join('\t'));
       }
