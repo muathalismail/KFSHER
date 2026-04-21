@@ -1837,95 +1837,6 @@ async function hydrateBundledPicuSchedule() {
   }
 }
 
-// ── SURGERY: column-aware PDF extraction ─────────────────────
-// Uses PDF.js x-coordinates to detect columns from headers.
-// Returns tab-separated text with columns: Date | Jr ER | Jr Ward | Sr ER | Sr Ward | GS Assoc | GS Consult
-async function extractSurgeryColumnarText(file) {
-  try {
-    const pdfjs = await loadPdfJs();
-    const buffer = await file.arrayBuffer();
-    const pdf = await pdfjs.getDocument({ data: buffer }).promise;
-
-    // Header keywords for column detection (only first page)
-    // We detect "ER" and "Ward" sub-headers plus "Assistant" and "Consultant" for GS
-    const allPageRows = [];
-    for (let p = 1; p <= pdf.numPages; p++) {
-      const page = await pdf.getPage(p);
-      const content = await page.getTextContent();
-      const rows = [];
-      let curY = null, curItems = [];
-      const flush = () => { if (curItems.length) rows.push({ y: curY, items: [...curItems] }); curItems = []; };
-      for (const item of content.items) {
-        if (!item.str || !item.str.trim()) continue;
-        const y = item.transform ? Math.round(item.transform[5]) : 0;
-        const x = item.transform ? item.transform[4] : 0;
-        const width = item.width || 0;
-        if (curY !== null && Math.abs(y - curY) > 2) flush();
-        curItems.push({ str: item.str.trim(), x, width });
-        curY = y;
-      }
-      flush();
-      allPageRows.push(rows);
-    }
-
-    // PDF.js sometimes merges date text + Jr ER + Jr Ward into a single text run,
-    // making x-coordinate clustering unreliable. Instead, directly parse each
-    // data row by splitting the joined text after stripping the date prefix.
-    // Column order is fixed: Jr ER, Jr Ward, Sr ER, Sr Ward, GS Assoc, GS Consult, ...subspecialties
-    // We extract items by POSITION in the row, not by x-coordinate detection.
-    console.log('[SURGERY COL] Using row-order extraction (no x-coordinate detection)');
-
-    // Build text where each data row has tab-separated columns.
-    // Parse each row: strip date prefix, split remaining names by whitespace,
-    // then map by POSITION to: Jr ER[0], Jr Ward[1], Sr ER[2], Sr Ward[3], GS Assoc[4], GS Consult[5]
-    const dayRe = /\b(SUN|MON|TUE|WED|THU|FRI|SAT)\b/i;
-    const dateRe = /^(.*?\b\d{4})\b(.*)$/;
-    const pageTexts = [];
-    for (const rows of allPageRows) {
-      const lineChunks = [];
-      for (const row of rows) {
-        row.items.sort((a, b) => a.x - b.x);
-        const fullLine = row.items.map(it => it.str).join(' ');
-        // Only process data rows (contain a day name)
-        if (!dayRe.test(fullLine)) {
-          lineChunks.push(fullLine); // pass through non-data rows for contact extraction
-          continue;
-        }
-        const dateMatch = fullLine.match(dateRe);
-        if (!dateMatch) { lineChunks.push(fullLine); continue; }
-        const datePart = dateMatch[1].trim();
-        const namePart = dateMatch[2].trim();
-        // Split names — handle "M. Tawfeeq" by merging single-letter tokens with next
-        const rawTokens = namePart.split(/\s+/).filter(Boolean);
-        const names = [];
-        for (let i = 0; i < rawTokens.length; i++) {
-          if (/^[A-Z]\.?$/i.test(rawTokens[i]) && i + 1 < rawTokens.length && !/^[A-Z]\.?$/i.test(rawTokens[i + 1])) {
-            names.push(`${rawTokens[i]} ${rawTokens[i + 1]}`);
-            i++;
-          } else {
-            names.push(rawTokens[i]);
-          }
-        }
-        // Map by position: 0=Jr ER, 1=Jr Ward, 2=Sr ER, 3=Sr Ward, 4=GS Assoc, 5=GS Consult
-        const parts = [
-          datePart,
-          names[0] || '', // Jr ER
-          names[2] || '', // Sr ER (skip [1]=Jr Ward)
-          names[4] || '', // GS Associate (skip [3]=Sr Ward)
-          names[5] || '', // GS Consultant
-        ];
-        lineChunks.push(parts.join('\t'));
-      }
-      pageTexts.push(lineChunks.join('\n'));
-    }
-    const text = pageTexts.join('\n\n').trim();
-    return { text, columnar: true };
-  } catch (err) {
-    console.warn('Surgery columnar extraction failed, falling back:', err);
-    return { text: await extractPdfText(file), columnar: false };
-  }
-}
-
 // ── DAY-SEQUENCE PARSER ───────────────────────────────────────
 
 async function parseUploadedPdf(file, deptKey) {
@@ -1951,14 +1862,38 @@ async function parseUploadedPdf(file, deptKey) {
     return null;
   })();
 
-  // Column-aware extraction for specialties with complex table layouts
-  let columnarResult = null;
+  // Column-aware extraction for complex table layouts
+  let columnarText = null;
   if (deptKey === 'liver') {
-    try { columnarResult = await extractLiverColumnarText(file); } catch (_) {}
+    try {
+      const result = await extractLiverColumnarText(file);
+      if (result && result.columnar) columnarText = result.text;
+    } catch (_) {}
   } else if (deptKey === 'surgery') {
-    try { columnarResult = await extractSurgeryColumnarText(file); } catch (_) {}
+    // Use server-side pdfplumber table extraction — handles empty cells correctly
+    try {
+      const buffer = await file.arrayBuffer();
+      const b64 = btoa(new Uint8Array(buffer).reduce((s, b) => s + String.fromCharCode(b), ''));
+      const resp = await fetch('/api/extract-surgery', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pdf_base64: b64 }),
+      });
+      if (resp.ok) {
+        const rows = await resp.json();
+        if (Array.isArray(rows) && rows.length) {
+          // Tab-separated schedule lines + plain text for contact extraction
+          const schedLines = rows.map(r => `${r.date}\t${r.jr_er}\t${r.sr_er}\t${r.gs_assoc}\t${r.gs_consult}`);
+          const plainText = await extractPdfText(file);
+          columnarText = schedLines.join('\n') + '\n\n' + plainText;
+          console.log(`[SURGERY] Server extracted ${rows.length} schedule rows`);
+        }
+      }
+    } catch (err) {
+      console.warn('[SURGERY] Server extraction failed, using client-side:', err.message);
+    }
   }
-  const text = (columnarResult && columnarResult.columnar) ? columnarResult.text : await extractPdfText(file);
+  const text = columnarText || await extractPdfText(file);
 
   // ── Wait for server contacts before parsing (parser may use them) ──
   const serverContacts = await serverContactsPromise;
