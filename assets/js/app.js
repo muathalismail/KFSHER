@@ -1868,69 +1868,95 @@ async function extractSurgeryColumnarText(file) {
       allPageRows.push(rows);
     }
 
-    // Find column x-positions from header keywords on first page.
-    // Expected layout: Junior(ER, Ward) Senior(ER, Ward) GS(Associate, Consultant)
-    // Then subspecialties to the right (ignored).
-    const erXs = [], wardXs = [];
-    let gsAssocX = null, gsConsultX = null;
-    for (const rows of allPageRows.slice(0, 1)) { // first page only
+    // Detect column x-positions from the FIRST DATA ROW rather than headers.
+    // Headers have misaligned x-positions (e.g. "Senior" label at x=193 but
+    // Sr ER data at x=229). Data rows are consistent across all 30 days.
+    //
+    // Strategy:
+    // 1. Find the first data row (matches day pattern like "WED 1 April 2026")
+    // 2. Collect all text item x-positions from that row
+    // 3. Cluster them into columns — the first 4 clusters are:
+    //    [date area, Jr ER, Jr Ward, Sr ER, Sr Ward, GS Assoc, GS Consult, ...]
+    // 4. Keep only Jr ER (idx 1), Sr ER (idx 3), GS Assoc (idx 5), GS Consult (idx 6)
+    const dayPattern = /^(SUN|MON|TUE|WED|THU|FRI|SAT)$/i;
+    let dataRowItems = null;
+    for (const rows of allPageRows.slice(0, 1)) {
       for (const row of rows) {
-        for (const it of row.items) {
-          const s = it.str.trim();
-          if (/^ER$/i.test(s)) erXs.push(it.x);
-          if (/^Ward$/i.test(s)) wardXs.push(it.x);
-          // "Assistant/A" or "Associate" label for the GS column
-          if (/^Assistant\/A/i.test(s) || (/^Associate$/i.test(s) && it.x < 310)) {
-            if (gsAssocX === null || it.x < gsAssocX) gsAssocX = it.x;
-          }
+        if (row.items.some(it => dayPattern.test(it.str.trim()))) {
+          dataRowItems = row.items;
+          break;
         }
       }
-      // Find the FIRST "Consultant" to the RIGHT of the Ward columns
-      // but BEFORE the Thoracic section (x < ~310 based on PDF layout)
-      for (const row of rows) {
-        for (const it of row.items) {
-          if (/^Consultant$/i.test(it.str.trim()) && it.x > 200 && it.x < 310) {
-            if (gsConsultX === null || it.x < gsConsultX) gsConsultX = it.x;
-          }
-        }
-      }
+      if (dataRowItems) break;
     }
 
-    erXs.sort((a, b) => a - b);
-    wardXs.sort((a, b) => a - b);
-
-    if (erXs.length < 2 || wardXs.length < 2) {
-      console.warn('[SURGERY COL] ER/Ward headers not found, falling back to plain text');
+    if (!dataRowItems || dataRowItems.length < 8) {
+      console.warn('[SURGERY COL] No data row found, falling back');
       return { text: await extractPdfText(file), columnar: false };
     }
 
-    // Build column definitions from detected x-positions
-    const colDefs = [
-      { label: 'jr_er', x: erXs[0] },
-      { label: 'jr_ward', x: wardXs[0] },
-      { label: 'sr_er', x: erXs[1] },
-      { label: 'sr_ward', x: wardXs[1] },
-    ];
-    if (gsAssocX !== null) colDefs.push({ label: 'gs_assoc', x: gsAssocX });
-    if (gsConsultX !== null) colDefs.push({ label: 'gs_consult', x: gsConsultX });
-    colDefs.sort((a, b) => a.x - b.x);
-    console.log('[SURGERY COL] Detected columns:', colDefs.map(c => `${c.label}@${Math.round(c.x)}`).join(', '));
+    // Cluster items by x-position: items within 12px of each other are in the same column
+    const sorted = [...dataRowItems].sort((a, b) => a.x - b.x);
+    const clusters = [];
+    let curCluster = [sorted[0]];
+    for (let i = 1; i < sorted.length; i++) {
+      if (sorted[i].x - curCluster[curCluster.length - 1].x > 12) {
+        clusters.push(curCluster);
+        curCluster = [sorted[i]];
+      } else {
+        curCluster.push(sorted[i]);
+      }
+    }
+    clusters.push(curCluster);
 
-    // Assign column label to an x-position using midpoint boundaries.
-    // Items left of the first data column (jr_er) are "date".
-    // Items right of the last defined column (gs_consult) are "skip".
+    // Get median x of each cluster
+    const clusterXs = clusters.map(c => {
+      const xs = c.map(it => it.x).sort((a, b) => a - b);
+      return xs[Math.floor(xs.length / 2)];
+    });
+
+    // Columns layout (from PDF): Day, Date, JrER, JrWard, SrER, SrWard, GSAssoc, GSConsult, ...subspecialties
+    // We need at least 8 clusters to have all required columns
+    // Day+Date may be 1-2 clusters depending on spacing
+    // Find the first cluster that is a day name — everything before it is irrelevant
+    let dateEndIdx = 0;
+    for (let i = 0; i < clusters.length; i++) {
+      const text = clusters[i].map(it => it.str).join(' ');
+      if (/\b\d{4}\b/.test(text)) { dateEndIdx = i; break; } // year marks end of date area
+    }
+
+    // After date area: [Jr ER, Jr Ward, Sr ER, Sr Ward, GS Assoc, GS Consult, ...]
+    const dataCols = clusterXs.slice(dateEndIdx + 1);
+    if (dataCols.length < 6) {
+      console.warn('[SURGERY COL] Not enough data columns found (' + dataCols.length + '), falling back');
+      return { text: await extractPdfText(file), columnar: false };
+    }
+
+    const colDefs = [
+      { label: 'jr_er', x: dataCols[0] },       // 1st data col = Junior ER
+      { label: 'sr_er', x: dataCols[2] },        // 3rd data col = Senior ER (skip [1]=Jr Ward)
+      { label: 'gs_assoc', x: dataCols[4] },     // 5th data col = GS Associate (skip [3]=Sr Ward)
+      { label: 'gs_consult', x: dataCols[5] },   // 6th data col = GS Consultant
+    ];
+    console.log('[SURGERY COL] Detected columns:', colDefs.map(c => `${c.label}@${Math.round(c.x)}`).join(', '),
+      '| all clusters:', clusterXs.map(x => Math.round(x)).join(','));
+
+    // Assign column label by proximity.
+    // Data items land ~10px right of their header x-position.
+    // Ward items are ~28px right of their ER header and ~10px right of their Ward header.
+    // Use a 20px radius from each column's x-position to capture only ER data,
+    // skipping Ward data that sits between columns.
     const firstDataX = colDefs[0].x;
+    const COL_RADIUS = 20; // max distance from column center to match
+
     const getCol = (x) => {
-      if (x < firstDataX - 15) return 'date'; // date/day text is well left of ER
-      // Find closest column
+      if (x < firstDataX - 15) return 'date';
       let bestLabel = 'skip', bestDist = Infinity;
       for (const cd of colDefs) {
         const dist = Math.abs(x - cd.x);
         if (dist < bestDist) { bestDist = dist; bestLabel = cd.label; }
       }
-      // If the closest column is far away (>40px), it's a subspecialty column — skip
-      if (bestDist > 40) return 'skip';
-      return bestLabel;
+      return bestDist <= COL_RADIUS ? bestLabel : 'skip';
     };
 
     // Rebuild text with tab-separated columns
