@@ -79,15 +79,46 @@ function _resolveFromPdfContacts(name, contacts) {
     if (matches.length === 1) return matches[0][1];
   }
 
-  // Last-name match
+  // Last-name match (strip "al"/"al-" prefix, tolerate minor spelling variants)
   const targetParts = target.split(' ');
   const targetLast = targetParts[targetParts.length - 1];
-  if (targetLast && targetLast.length >= 4) {
+  if (targetLast && targetLast.length >= 3) {
+    const stripAl = s => s.replace(/^al[-\s]?/, '');
+    const tl = stripAl(targetLast);
     const matches = Object.entries(contacts).filter(([cn]) => {
-      const cnLast = norm(cn).split(' ').pop();
-      return cnLast === targetLast || cnLast.replace(/^al/, '') === targetLast.replace(/^al/, '');
+      const cnLast = stripAl(norm(cn).split(' ').pop());
+      // Exact or close match (levenshtein ≤ 2 for names ≥ 5 chars)
+      if (cnLast === tl) return true;
+      if (tl.length >= 5 && cnLast.length >= 5) {
+        // Simple distance check: shared prefix ≥ 4 chars
+        let shared = 0;
+        for (let i = 0; i < Math.min(tl.length, cnLast.length); i++) {
+          if (tl[i] === cnLast[i]) shared++; else break;
+        }
+        if (shared >= 4) return true;
+      }
+      return false;
     });
     if (matches.length === 1) return matches[0][1];
+  }
+
+  // Initial + last name (e.g. "R. Wosaibi" → find "Reda AlWosaibi")
+  const initialMatch = target.match(/^([a-z])\.?\s+(.+)$/);
+  if (initialMatch) {
+    const initial = initialMatch[1];
+    const lastName = initialMatch[2].replace(/^al[-\s]?/, '');
+    if (lastName.length >= 4) {
+      const matches = Object.entries(contacts).filter(([cn]) => {
+        const cnNorm = norm(cn);
+        const cnFirst = cnNorm.split(' ')[0];
+        const cnLast = cnNorm.split(' ').pop().replace(/^al[-\s]?/, '');
+        return cnFirst.startsWith(initial) && (cnLast === lastName || (
+          lastName.length >= 5 && cnLast.length >= 5 &&
+          cnLast.slice(0, 4) === lastName.slice(0, 4)
+        ));
+      });
+      if (matches.length === 1) return matches[0][1];
+    }
   }
 
   return null;
