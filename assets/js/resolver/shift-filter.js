@@ -89,10 +89,25 @@ function filterActiveEntriesV2(entries, now, deptKey) {
   const noCoverage = usable.filter(isNoCoverageEntry);
   if (noCoverage.length) return noCoverage;
 
-  // Try ShiftWindow-based filtering
-  const active = usable.filter(entry => isEntryActiveNow(entry, now, deptKey));
+  // Try ShiftWindow-based filtering, counting entries with determinable windows
+  const active = [];
+  let determinedCount = 0;
+
+  for (const entry of usable) {
+    const sw = inferShiftWindow(entry, deptKey);
+    if (sw) {
+      determinedCount++;
+      if (isShiftWindowActive(sw, now)) active.push(entry);
+    }
+  }
+
   if (active.length) return active;
 
-  // Fallback: if nothing matched via ShiftWindow, fall back to original logic
+  // If every entry had a determinable shift window but none are active now,
+  // nothing is on-call at this time — return empty rather than falling back
+  // to the legacy filter which would return ALL consultant-role entries.
+  if (determinedCount === usable.length) return [];
+
+  // Fallback: only when some/all entries lack inferable shift windows
   return filterActiveEntries(usable, now);
 }
