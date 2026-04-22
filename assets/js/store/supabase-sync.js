@@ -133,10 +133,13 @@ async function pullFromSupabase() {
         const record = {
           ...cloudRecord.data,
           deptKey,
-          parsedActive: cloudRecord.data.parsedActive !== false,
           _cloudSync: true,
           _cloudPdfUrl: cloudRecord.pdf_url || null,
         };
+        // Sprint 2 (H4): validate before activating — don't blindly trust cloud parsedActive
+        record.parsedActive = !!(cloudRecord.data.parsedActive !== false
+          && typeof isPublishableUploadRecord === 'function'
+          && isPublishableUploadRecord(record));
         await savePdfRecord(record).catch(err => {
           console.warn('[SUPABASE SYNC] Local save failed:', deptKey, err);
         });

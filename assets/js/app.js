@@ -746,8 +746,12 @@ function cacheUploadedRecord(record) {
     if (normalized.originalDeptKey) uploadedPdfRecords.set(normalized.originalDeptKey, normalized);
     return;
   }
-  uploadedPdfRecords.delete(normalized.deptKey);
-  if (normalized.originalDeptKey) uploadedPdfRecords.delete(normalized.originalDeptKey);
+  // Sprint 2 (M6): don't delete an existing valid record when a newer non-publishable one arrives
+  const existing = uploadedPdfRecords.get(normalized.deptKey);
+  if (!existing || !isPublishableUploadRecord(existing) || (normalized.uploadedAt || 0) > (existing.uploadedAt || 0)) {
+    uploadedPdfRecords.delete(normalized.deptKey);
+    if (normalized.originalDeptKey) uploadedPdfRecords.delete(normalized.originalDeptKey);
+  }
 }
 
 function resolveImagingActiveRecordSync(deptKey) {
@@ -1282,6 +1286,20 @@ function canonicalizeUploadedRecord(record) {
       specialtyLabel: specialtyLabelForKey(record.deptKey, record.name || ''),
       icon: specialtyIconForKey(record.deptKey, record.name || ''),
     };
+  }
+  // Sprint 2 (M4): don't reassign deptKey if the target already has a valid record
+  if (interpreted.key !== record.deptKey) {
+    const existingTarget = uploadedPdfRecords.get(interpreted.key);
+    if (existingTarget && isPublishableUploadRecord(existingTarget)) {
+      console.warn(`[canonicalize] Would reassign ${record.deptKey} → ${interpreted.key}, but target has valid data. Keeping original key.`);
+      return {
+        ...record,
+        normalized: normalizedPayload,
+        review,
+        specialtyLabel: specialtyLabelForKey(record.deptKey, record.name || ''),
+        icon: specialtyIconForKey(record.deptKey, record.name || ''),
+      };
+    }
   }
   return {
     ...record,
@@ -2538,22 +2556,17 @@ async function saveActivePdfRecord(record) {
     livePublished: true,
     // Preserve original publishable/confidence — don't force-overwrite
   };
-  await savePdfRecord({
+  // Sprint 2 (H5): build record once, write IDB first, cache only on success
+  const finalRecord = {
     ...record,
     review: normalizedReview,
     audit: normalizedAudit,
     isActive: true,
     pendingReviewUpload: null,
     archivedVersions,
-  });
-  cacheUploadedRecord({
-    ...record,
-    review: normalizedReview,
-    audit: normalizedAudit,
-    isActive: true,
-    pendingReviewUpload: null,
-    archivedVersions,
-  });
+  };
+  await savePdfRecord(finalRecord);
+  cacheUploadedRecord(finalRecord);
 }
 
 async function saveRejectedPdfRecord(record) {
@@ -2609,10 +2622,8 @@ async function getLatestActivePdfRecord(deptKey) {
       }
       return null;
     }
-    const normalized = canonicalizeUploadedRecord(dbRecord);
-    uploadedPdfRecords.set(normalized.deptKey, normalized);
-    if (normalized.originalDeptKey) uploadedPdfRecords.set(normalized.originalDeptKey, normalized);
-    return normalized;
+    // Sprint 2 (H1): return without mutating the Map — render path must be side-effect-free
+    return canonicalizeUploadedRecord(dbRecord);
   }
   const fallbackKey = PDF_FALLBACKS[deptKey];
   const mapPrimary = uploadedPdfRecords.get(deptKey) || null;
@@ -2624,10 +2635,8 @@ async function getLatestActivePdfRecord(deptKey) {
     .filter(isPublishableUploadRecord);
   if (!candidates.length) return null;
   const latest = candidates.sort((a, b) => (b.uploadedAt || 0) - (a.uploadedAt || 0))[0];
-  const normalized = canonicalizeUploadedRecord(latest);
-  uploadedPdfRecords.set(normalized.deptKey, normalized);
-  if (normalized.originalDeptKey) uploadedPdfRecords.set(normalized.originalDeptKey, normalized);
-  return normalized;
+  // Sprint 2 (H1): return without mutating the Map — render path must be side-effect-free
+  return canonicalizeUploadedRecord(latest);
 }
 
 async function getPdfHref(deptKey) {
