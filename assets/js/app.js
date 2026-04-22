@@ -46,7 +46,7 @@ function buildUploadedPdfDataModel(deptKey, review={}) {
     review: { ...(entry.review || {}), specialty: !!review.specialty },
   });
   if (deptKey === 'radiology_duty') {
-    const sampleDate = new Date(2026, 3, 6);
+    const sampleDate = new Date();
     return getDutyRadiologyEntries(sampleDate).map(entry => withSpecialtyReview(normalizePdfEntryModel(deptKey, dept, entry, 'dynamic-weekday')));
   }
   return Object.entries(dept.schedule || {}).flatMap(([dateKey, entries]) =>
@@ -756,6 +756,28 @@ function resolveImagingActiveRecordSync(deptKey) {
   return null;
 }
 
+// ── Month-staleness helpers (Sprint 0) ──────────────────────
+// Prevent stale records from a prior month leaking into the current month.
+// These are safe for the current month: if the record's month matches now, nothing changes.
+function inferRecordMonth(record) {
+  const entries = record?.entries || [];
+  const months = {};
+  for (const e of entries) {
+    const m = (e.date || '').split('/')[1];
+    if (m && /^\d{2}$/.test(m)) months[m] = (months[m] || 0) + 1;
+  }
+  const sorted = Object.entries(months).sort((a, b) => b[1] - a[1]);
+  return sorted.length ? sorted[0][0] : null;
+}
+
+function isRecordCurrentMonth(record, now) {
+  if (!record) return false;
+  const recordMonth = inferRecordMonth(record);
+  if (!recordMonth) return true; // undated records pass through (safe fallback)
+  const currentMonth = String((now || new Date()).getMonth() + 1).padStart(2, '0');
+  return recordMonth === currentMonth;
+}
+
 function uploadedRecordForDept(deptKey) {
   if (isImagingDeptKey(deptKey)) return resolveImagingActiveRecordSync(deptKey);
   const direct = uploadedPdfRecords.get(deptKey) || null;
@@ -852,6 +874,8 @@ function uploadedEntriesForDept(deptKey, schedKey, now, qLow='') {
   if (deptKey === 'radiology_duty') return null;
   const record = uploadedRecordForDept(deptKey);
   if (!record || !record.parsedActive || !Array.isArray(record.entries)) return null;
+  // Sprint 0: skip stale records from a prior month
+  if (!isRecordCurrentMonth(record, now)) return null;
   if (deptKey === 'medicine_on_call' && isLegacyMedicineOnCallRecord(record)) return null;
   if (deptKey === 'hospitalist' && isLegacyHospitalistRecord(record)) return null;
   if (deptKey === 'picu' && isLegacyPicuRecord(record)) return null;
@@ -2638,7 +2662,14 @@ async function getPdfHref(deptKey) {
       recordName: fallbackMeta?.name || '',
     };
   }
-  return DEFAULT_PDF_MAP[deptKey] || DEFAULT_PDF_MAP[fallbackKey] || null;
+  // Sprint 0: DEFAULT_PDF_MAP contains April-specific static PDFs.
+  // Only show them during April. In May+, return null to avoid misleading users.
+  const staticPdf = DEFAULT_PDF_MAP[deptKey] || DEFAULT_PDF_MAP[fallbackKey] || null;
+  if (staticPdf) {
+    const currentMonth = new Date().getMonth(); // 0-indexed: 3 = April
+    if (currentMonth !== 3) return null; // April PDFs only valid in April
+  }
+  return staticPdf;
 }
 
 // closePdfPreview, renderPdfSourceHint, renderPdfPreviewPages, showPdfPreview → now in ui/pdf-preview.js

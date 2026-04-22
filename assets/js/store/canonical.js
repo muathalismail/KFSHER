@@ -35,16 +35,17 @@ const ALLOWED_FALLBACK_SOURCES = {
  * Returns { record, source: 'uploaded' } or null.
  */
 function getCanonicalUploadedRecord(deptKey) {
+  const now = new Date();
   // Direct match
   const direct = uploadedPdfRecords.get(deptKey) || null;
-  if (direct && isPublishableUploadRecord(direct) && direct.parsedActive && direct.isActive !== false) {
+  if (direct && isPublishableUploadRecord(direct) && direct.parsedActive && direct.isActive !== false && isRecordCurrentMonth(direct, now)) {
     return { record: direct, source: 'uploaded', via: deptKey };
   }
   // Allowed fallback (medicine subspecialties only)
   const fallbackKey = ALLOWED_FALLBACK_SOURCES[deptKey];
   if (fallbackKey) {
     const fallback = uploadedPdfRecords.get(fallbackKey) || null;
-    if (fallback && isPublishableUploadRecord(fallback) && fallback.parsedActive && fallback.isActive !== false) {
+    if (fallback && isPublishableUploadRecord(fallback) && fallback.parsedActive && fallback.isActive !== false && isRecordCurrentMonth(fallback, now)) {
       return { record: fallback, source: 'uploaded-fallback', via: fallbackKey };
     }
   }
