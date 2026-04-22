@@ -2414,11 +2414,14 @@ function getRadiologyEntries(schedKey, now, qLow='') {
 
 // Radiology uses explicit duty/on-call rules; other specialties use active role filters.
 function getEntries(deptKey, dept, schedKey, now, qLow='') {
-  const uploadedEntries = uploadedEntriesForDept(deptKey, schedKey, now, qLow);
-  // Only use uploaded data if it actually has entries for this date.
-  // An empty array means the upload had no data for this schedKey —
-  // fall through to built-in schedule instead of showing "No active on-call".
-  if (uploadedEntries && uploadedEntries.length) return uploadedEntries;
+  // Oncology is hospitalist-only — skip uploaded entries entirely
+  if (deptKey !== 'oncology') {
+    const uploadedEntries = uploadedEntriesForDept(deptKey, schedKey, now, qLow);
+    // Only use uploaded data if it actually has entries for this date.
+    // An empty array means the upload had no data for this schedKey —
+    // fall through to built-in schedule instead of showing "No active on-call".
+    if (uploadedEntries && uploadedEntries.length) return uploadedEntries;
+  }
   if (deptKey === 'medicine_on_call') return splitMultiDoctorEntries(getMedicineOnCallEntries(schedKey, now, qLow), deptKey);
   if (deptKey === 'medicine') {
     return splitMultiDoctorEntries(MEDICINE_SUBSPECIALTY_KEYS.flatMap(key => {
@@ -2431,12 +2434,14 @@ function getEntries(deptKey, dept, schedKey, now, qLow='') {
   }
   if (deptKey === 'hospitalist') return splitMultiDoctorEntries(getHospitalistEntries(schedKey, now), deptKey);
   if (deptKey === 'oncology') {
-    // Show oncology uploaded entries + current hospitalist on-duty doctor
-    const oncologyEntries = splitMultiDoctorEntries(filterActiveEntriesV2(dept.schedule[schedKey] || [], now, deptKey), deptKey);
+    // Oncology shows only the current hospitalist doctor covering.
+    // Uploaded oncology entries (if any) are intentionally ignored — the
+    // upload path at line 2421 is bypassed by the early-return guard below.
+    const entries = [];
     const hospitalistEntries = getHospitalistEntries(schedKey, now);
     if (hospitalistEntries.length) {
       hospitalistEntries.forEach(entry => {
-        oncologyEntries.push({
+        entries.push({
           ...entry,
           specialty: 'oncology',
           role: 'Hospitalist',
@@ -2444,7 +2449,7 @@ function getEntries(deptKey, dept, schedKey, now, qLow='') {
         });
       });
     }
-    return oncologyEntries;
+    return entries;
   }
   if (deptKey === 'pediatrics') return splitMultiDoctorEntries(getPediatricsEntries(schedKey, now), deptKey);
   if (deptKey === 'picu') return splitMultiDoctorEntries(getPicuEntries(schedKey, now), deptKey);
