@@ -2942,32 +2942,6 @@ document.addEventListener('DOMContentLoaded', () => {
         review,
       };
 
-      // Sprint 1: month mismatch warning — compare parsed entries month vs current month
-      const _pdfMonth = inferRecordMonth(uploadRecord);
-      const _curMonth = String(new Date().getMonth() + 1).padStart(2, '0');
-      if (_pdfMonth && _pdfMonth !== _curMonth) {
-        const _monthNames = ['','January','February','March','April','May','June','July','August','September','October','November','December'];
-        const pdfMonthName = _monthNames[parseInt(_pdfMonth, 10)] || _pdfMonth;
-        const curMonthName = _monthNames[parseInt(_curMonth, 10)] || _curMonth;
-        if (!confirm(`⚠️ This PDF appears to be for ${pdfMonthName}, but the current month is ${curMonthName}.\n\nUpload anyway?`)) {
-          skipped.push(`${file.name} — month mismatch (${pdfMonthName}), skipped by user`);
-          continue;
-        }
-      }
-
-      // Sprint 1: confirmation before overwriting active schedule
-      if (publishToLive) {
-        const _existingRecord = uploadedRecordForDept(deptKey);
-        const _deptLabel = ROTAS[deptKey]?.label || deptKey;
-        if (_existingRecord && _existingRecord.parsedActive) {
-          const _existingDate = _existingRecord.uploadedAt ? new Date(_existingRecord.uploadedAt).toLocaleDateString() : 'unknown';
-          if (!confirm(`Replace active ${_deptLabel} schedule?\n\nCurrent: ${_existingRecord.name || 'existing'} (uploaded ${_existingDate})\nNew: ${file.name}\n\nProceed?`)) {
-            skipped.push(`${file.name} — overwrite cancelled by user`);
-            continue;
-          }
-        }
-      }
-
       if (publishToLive) {
         await saveActivePdfRecord(uploadRecord);
         registerUploadedSpecialty(canonicalizeUploadedRecord(uploadRecord));
