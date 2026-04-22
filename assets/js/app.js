@@ -762,24 +762,24 @@ function resolveImagingActiveRecordSync(deptKey) {
 
 // ── Month-staleness helpers (Sprint 0) ──────────────────────
 // Prevent stale records from a prior month leaking into the current month.
-// These are safe for the current month: if the record's month matches now, nothing changes.
-function inferRecordMonth(record) {
+// A record is valid if it has ANY entries for the current month.
+// This handles PDFs that span two months (e.g., April 20 – May 10).
+function getRecordMonths(record) {
   const entries = record?.entries || [];
-  const months = {};
+  const months = new Set();
   for (const e of entries) {
     const m = (e.date || '').split('/')[1];
-    if (m && /^\d{2}$/.test(m)) months[m] = (months[m] || 0) + 1;
+    if (m && /^\d{2}$/.test(m)) months.add(m);
   }
-  const sorted = Object.entries(months).sort((a, b) => b[1] - a[1]);
-  return sorted.length ? sorted[0][0] : null;
+  return months;
 }
 
 function isRecordCurrentMonth(record, now) {
   if (!record) return false;
-  const recordMonth = inferRecordMonth(record);
-  if (!recordMonth) return true; // undated records pass through (safe fallback)
+  const months = getRecordMonths(record);
+  if (!months.size) return true; // undated records pass through (safe fallback)
   const currentMonth = String((now || new Date()).getMonth() + 1).padStart(2, '0');
-  return recordMonth === currentMonth;
+  return months.has(currentMonth);
 }
 
 function uploadedRecordForDept(deptKey) {
