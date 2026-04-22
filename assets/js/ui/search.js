@@ -388,6 +388,14 @@ async function search(q) {
   await uploadedSpecialtiesReadyPromise.catch(() => null);
   imagingIconForced = '';
   const qLow = q.trim().toLowerCase();
+  if (qLow === '000') {
+    const monthBtn = document.getElementById('month-checklist-toggle');
+    const auditBtn = document.getElementById('auditor-toggle');
+    if (monthBtn) monthBtn.style.display = '';
+    if (auditBtn) auditBtn.style.display = '';
+    document.getElementById('search').value = '';
+    return;
+  }
   if (currentPdfPreviewKey) closePdfPreview();
   const welcome = document.getElementById('welcome');
   if (!qLow) {

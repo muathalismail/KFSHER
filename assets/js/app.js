@@ -2824,10 +2824,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const status = document.getElementById('uploadStatus');
     if (!status) return;
     const warn = document.createElement('div');
-    warn.style.cssText = 'background:rgba(255,80,80,0.15);border:1px solid rgba(255,80,80,0.4);color:#ff8a80;border-radius:6px;padding:8px 12px;margin-top:8px;font-size:12px;';
-    warn.textContent = message;
+    warn.style.cssText = 'background:rgba(255,80,80,0.15);border:1px solid rgba(255,80,80,0.4);color:#ff8a80;border-radius:6px;padding:8px 12px;margin-top:8px;font-size:12px;display:flex;justify-content:space-between;align-items:center;';
+    const text = document.createElement('span');
+    text.textContent = message;
+    const closeBtn = document.createElement('span');
+    closeBtn.textContent = '✕';
+    closeBtn.style.cssText = 'cursor:pointer;margin-right:4px;font-size:14px;opacity:0.7;';
+    closeBtn.onclick = () => warn.remove();
+    warn.appendChild(text);
+    warn.appendChild(closeBtn);
     status.parentElement.appendChild(warn);
-    setTimeout(() => warn.remove(), 12000);
+    setTimeout(() => warn.remove(), 30000);
   }
 
   async function handlePdfUpload(files) {
