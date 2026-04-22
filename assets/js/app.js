@@ -2413,14 +2413,21 @@ function getRadiologyEntries(schedKey, now, qLow='') {
 }
 
 // Radiology uses explicit duty/on-call rules; other specialties use active role filters.
+// Specialties whose built-in schedule in rotas.js is manually verified
+// and should NOT be overridden by uploaded PDF data (parser can misparse names).
+const BUILTIN_PRIORITY_DEPTS = new Set(['neurology']);
+
 function getEntries(deptKey, dept, schedKey, now, qLow='') {
-  // Built-in schedule is manually verified — prefer it when it has data for this date.
-  // Only check uploaded PDF data as a fallback when built-in is empty.
-  // This prevents PDF parsing errors from overriding correct built-in data.
-  const builtInEntries = dept.schedule?.[schedKey] || [];
-  if (!builtInEntries.length && deptKey !== 'oncology') {
-    const uploadedEntries = uploadedEntriesForDept(deptKey, schedKey, now, qLow);
-    if (uploadedEntries && uploadedEntries.length) return uploadedEntries;
+  // For most specialties: uploaded PDF data takes priority (more complete).
+  // For BUILTIN_PRIORITY_DEPTS: built-in schedule wins when it has data.
+  if (deptKey !== 'oncology') {
+    const builtInEntries = dept.schedule?.[schedKey] || [];
+    if (BUILTIN_PRIORITY_DEPTS.has(deptKey) && builtInEntries.length) {
+      // Skip uploaded data — built-in is manually verified for this specialty
+    } else {
+      const uploadedEntries = uploadedEntriesForDept(deptKey, schedKey, now, qLow);
+      if (uploadedEntries && uploadedEntries.length) return uploadedEntries;
+    }
   }
   if (deptKey === 'medicine_on_call') return splitMultiDoctorEntries(getMedicineOnCallEntries(schedKey, now, qLow), deptKey);
   if (deptKey === 'medicine') {
