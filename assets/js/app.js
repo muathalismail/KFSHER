@@ -2459,6 +2459,43 @@ function getRadiologyEntries(schedKey, now, qLow='') {
 // and should NOT be overridden by uploaded PDF data (parser can misparse names).
 const BUILTIN_PRIORITY_DEPTS = new Set(['neurology']);
 
+// Sprint 5 (H11): Registry-based specialty dispatch.
+// Each specialty registers its built-in resolver. New specialties only need an entry here.
+// The default resolver uses filterActiveEntriesV2 — works for simple on-call schedules.
+const SPECIALTY_RESOLVERS = {
+  medicine_on_call: (dk, dept, sk, now, q) => splitMultiDoctorEntries(getMedicineOnCallEntries(sk, now, q), dk),
+  medicine: (dk, dept, sk, now, q) => splitMultiDoctorEntries(MEDICINE_SUBSPECIALTY_KEYS.flatMap(key => {
+    const subDept = ROTAS[key];
+    return subDept ? getMedicineEntries(key, sk, now).map(entry => ({ ...entry, specialty: key, section: subDept.label })) : [];
+  }), dk),
+  radiology_duty: (dk, dept, sk, now, q) => getRadiologyEntries(sk, now, q),
+  radiology_oncall: (dk, dept, sk, now, q) => getRadiologyEntries(sk, now, q),
+  hospitalist: (dk, dept, sk, now) => splitMultiDoctorEntries(getHospitalistEntries(sk, now), dk),
+  oncology: (dk, dept, sk, now) => {
+    const entries = [];
+    const hospitalistEntries = getHospitalistEntries(sk, now);
+    hospitalistEntries.forEach(entry => {
+      entries.push({ ...entry, specialty: 'oncology', role: 'Hospitalist', section: 'Hospitalist' });
+    });
+    return entries;
+  },
+  pediatrics: (dk, dept, sk, now) => splitMultiDoctorEntries(getPediatricsEntries(sk, now), dk),
+  picu: (dk, dept, sk, now) => splitMultiDoctorEntries(getPicuEntries(sk, now), dk),
+  orthopedics: (dk, dept, sk, now) => splitMultiDoctorEntries(getOrthopedicsEntries(sk, now), dk),
+  kptx: (dk, dept, sk, now) => splitMultiDoctorEntries(getKptxEntries(sk, now), dk),
+  liver: (dk, dept, sk, now) => splitMultiDoctorEntries(getLiverEntries(sk, now), dk),
+  hematology: (dk, dept, sk, now) => splitMultiDoctorEntries(getHematologyEntries(sk, now), dk),
+  surgery: (dk, dept, sk, now) => splitMultiDoctorEntries(getSurgeryEntries(sk, now), dk),
+  neurosurgery: (dk, dept, sk, now) => splitMultiDoctorEntries(getNeurosurgeryEntries(sk, now), dk),
+  neurology: (dk, dept, sk, now) => splitMultiDoctorEntries(getNeurologyEntriesFromRows(dept.schedule[sk] || [], now), dk),
+  gynecology: (dk, dept, sk) => splitMultiDoctorEntries(dept.schedule[sk] || [], dk),
+};
+
+function defaultBuiltInResolver(deptKey, dept, schedKey, now) {
+  if (isMedicineSubspecialty(deptKey)) return splitMultiDoctorEntries(getMedicineEntries(deptKey, schedKey, now), deptKey);
+  return splitMultiDoctorEntries(filterActiveEntriesV2(dept.schedule[schedKey] || [], now, deptKey), deptKey);
+}
+
 function getEntries(deptKey, dept, schedKey, now, qLow='') {
   // For most specialties: uploaded PDF data takes priority (more complete).
   // For BUILTIN_PRIORITY_DEPTS: built-in schedule wins when it has data.
@@ -2471,47 +2508,8 @@ function getEntries(deptKey, dept, schedKey, now, qLow='') {
       if (uploadedEntries && uploadedEntries.length) return uploadedEntries;
     }
   }
-  if (deptKey === 'medicine_on_call') return splitMultiDoctorEntries(getMedicineOnCallEntries(schedKey, now, qLow), deptKey);
-  if (deptKey === 'medicine') {
-    return splitMultiDoctorEntries(MEDICINE_SUBSPECIALTY_KEYS.flatMap(key => {
-      const subDept = ROTAS[key];
-      return subDept ? getMedicineEntries(key, schedKey, now).map(entry => ({ ...entry, specialty: key, section: subDept.label })) : [];
-    }), deptKey);
-  }
-  if (deptKey === 'radiology_duty' || deptKey === 'radiology_oncall') {
-    return getRadiologyEntries(schedKey, now, qLow);
-  }
-  if (deptKey === 'hospitalist') return splitMultiDoctorEntries(getHospitalistEntries(schedKey, now), deptKey);
-  if (deptKey === 'oncology') {
-    // Oncology shows only the current hospitalist doctor covering.
-    // Uploaded oncology entries (if any) are intentionally ignored — the
-    // upload path at line 2421 is bypassed by the early-return guard below.
-    const entries = [];
-    const hospitalistEntries = getHospitalistEntries(schedKey, now);
-    if (hospitalistEntries.length) {
-      hospitalistEntries.forEach(entry => {
-        entries.push({
-          ...entry,
-          specialty: 'oncology',
-          role: 'Hospitalist',
-          section: 'Hospitalist',
-        });
-      });
-    }
-    return entries;
-  }
-  if (deptKey === 'pediatrics') return splitMultiDoctorEntries(getPediatricsEntries(schedKey, now), deptKey);
-  if (deptKey === 'picu') return splitMultiDoctorEntries(getPicuEntries(schedKey, now), deptKey);
-  if (deptKey === 'orthopedics') return splitMultiDoctorEntries(getOrthopedicsEntries(schedKey, now), deptKey);
-  if (deptKey === 'kptx') return splitMultiDoctorEntries(getKptxEntries(schedKey, now), deptKey);
-  if (deptKey === 'liver') return splitMultiDoctorEntries(getLiverEntries(schedKey, now), deptKey);
-  if (deptKey === 'hematology') return splitMultiDoctorEntries(getHematologyEntries(schedKey, now), deptKey);
-  if (deptKey === 'surgery') return splitMultiDoctorEntries(getSurgeryEntries(schedKey, now), deptKey);
-  if (deptKey === 'neurosurgery') return splitMultiDoctorEntries(getNeurosurgeryEntries(schedKey, now), deptKey);
-  if (deptKey === 'neurology') return splitMultiDoctorEntries(getNeurologyEntriesFromRows(dept.schedule[schedKey] || [], now), deptKey);
-  if (isMedicineSubspecialty(deptKey)) return splitMultiDoctorEntries(getMedicineEntries(deptKey, schedKey, now), deptKey);
-  if (deptKey === 'gynecology') return splitMultiDoctorEntries(dept.schedule[schedKey] || [], deptKey);
-  return splitMultiDoctorEntries(filterActiveEntriesV2(dept.schedule[schedKey] || [], now, deptKey), deptKey);
+  const resolver = SPECIALTY_RESOLVERS[deptKey] || defaultBuiltInResolver;
+  return resolver(deptKey, dept, schedKey, now, qLow);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2763,6 +2761,62 @@ document.addEventListener('DOMContentLoaded', () => {
       auditWrap.style.display = isHidden ? 'block' : 'none';
       if (isHidden) Auditor.renderReviewPanel();
     });
+  }
+
+  // ── Sprint 5 (C1): Month transition checklist ──────────────────
+  const monthCheckBtn = document.getElementById('month-checklist-toggle');
+  const monthCheckWrap = document.getElementById('month-checklist-wrap');
+  if (monthCheckBtn && monthCheckWrap) {
+    monthCheckBtn.addEventListener('click', () => {
+      const isHidden = monthCheckWrap.style.display === 'none' || !monthCheckWrap.style.display;
+      monthCheckWrap.style.display = isHidden ? 'block' : 'none';
+      if (isHidden) renderMonthChecklist();
+    });
+  }
+
+  function renderMonthChecklist() {
+    const panel = document.getElementById('month-checklist-panel');
+    if (!panel) return;
+    const now = new Date();
+    const curMonth = String(now.getMonth() + 1).padStart(2, '0');
+    const curYear = now.getFullYear();
+    const monthNames = ['','January','February','March','April','May','June','July','August','September','October','November','December'];
+    const monthLabel = `${monthNames[parseInt(curMonth, 10)]} ${curYear}`;
+    const schedKey = fmtKey(now);
+
+    const rows = [];
+    const deptKeys = Object.keys(ROTAS).filter(k => ROTAS[k].label && !ROTAS[k].hidden);
+    for (const dk of deptKeys) {
+      const dept = ROTAS[dk];
+      const builtIn = dept.schedule?.[schedKey] || [];
+      const record = uploadedRecordForDept(dk);
+      const recordMonths = record ? getRecordMonths(record) : new Set();
+      const hasUpload = record && recordMonths.has(curMonth);
+      const hasBuiltIn = builtIn.length > 0;
+
+      let status, color;
+      if (hasUpload) {
+        status = '✅ Uploaded';
+        color = '#66bb6a';
+      } else if (hasBuiltIn) {
+        status = '📋 Built-in';
+        color = '#7ee8fa';
+      } else {
+        status = '❌ No data';
+        color = '#ff5252';
+      }
+      rows.push(`<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.05);font-size:12px;">
+        <span>${dept.icon || ''} ${dept.label?.split('/')[0]?.trim() || dk}</span>
+        <span style="color:${color};font-weight:600">${status}</span>
+      </div>`);
+    }
+
+    const missing = rows.filter(r => r.includes('No data')).length;
+    const header = `<div style="margin-bottom:10px;font-size:13px;color:var(--text-2,#aaa);">
+      Status for <strong style="color:var(--text-1,#e0e8f0)">${monthLabel}</strong> ·
+      <span style="color:${missing ? '#ff5252' : '#66bb6a'}">${missing ? `${missing} missing` : 'All covered'}</span>
+    </div>`;
+    panel.innerHTML = header + rows.join('');
   }
 
   // Sprint 3 (H12): user-visible upload warning — replaces silent console.warn
