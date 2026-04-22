@@ -10,3 +10,7 @@
 // This is the FIRST place checked during search — if a record
 // is here and publishable, it takes priority over built-in data.
 const uploadedPdfRecords = new Map();
+// Sprint 4 (M3): distinguishes "not loaded yet" from "loaded but empty"
+let _uploadedCacheLoaded = false;
+function markCacheLoaded() { _uploadedCacheLoaded = true; }
+function isCacheLoaded() { return _uploadedCacheLoaded; }

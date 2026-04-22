@@ -2712,6 +2712,7 @@ async function loadUploadedSpecialties() {
     cacheUploadedRecord(normalized);
     if (shouldRegisterUploadedSpecialty(normalized)) registerUploadedSpecialty(normalized);
   }
+  markCacheLoaded();
   return uploaded;
 }
 

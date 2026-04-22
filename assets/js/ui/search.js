@@ -154,10 +154,15 @@ function normalizeMatchedForActiveShift(matched=[], now=new Date(), qLow='', exa
 
 // When set, a radiology icon/card click should show that clicked mode only.
 let imagingIconForced = '';
+// Sprint 4 (M1): render generation counter — prevents concurrent render interleaving
+let _renderGeneration = 0;
 
 async function renderDeptList(matched, qLow, exactMode=false) {
+  const myGeneration = ++_renderGeneration;
   const now = new Date();
-  const isImagingIconMode = imagingIconForced === 'radiology_duty' || imagingIconForced === 'radiology_oncall';
+  // Sprint 4 (M2): capture imaging mode at call time, not from global mid-render
+  const capturedImagingForced = imagingIconForced;
+  const isImagingIconMode = capturedImagingForced === 'radiology_duty' || capturedImagingForced === 'radiology_oncall';
   if (!isImagingIconMode) {
     matched = normalizeMatchedForActiveShift(matched, now, qLow, exactMode);
   }
@@ -170,9 +175,10 @@ async function renderDeptList(matched, qLow, exactMode=false) {
   cards.innerHTML = '<div class="empty" style="text-align:center;padding:18px 12px;font-size:13px;color:var(--text-2,#aaa);">Loading…</div>';
   results.classList.add('show');
   await uploadedSpecialtiesReadyPromise.catch(() => null);
+  if (myGeneration !== _renderGeneration) return; // stale render — abort
 
   if (isImagingIconMode) {
-    matched = [[imagingIconForced, ROTAS[imagingIconForced]]];
+    matched = [[capturedImagingForced, ROTAS[capturedImagingForced]]];
   }
 
   cards.innerHTML = '';
@@ -191,16 +197,17 @@ async function renderDeptList(matched, qLow, exactMode=false) {
     const warn = document.createElement('div');
     warn.className = 'upload-debug';
     warn.style.cssText = 'background:rgba(255,200,0,0.13);border:1px solid rgba(255,200,0,0.4);color:#ffe066;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;';
-    warn.innerHTML = getRadiologyForcedBannerHtml(imagingIconForced, now);
+    warn.innerHTML = getRadiologyForcedBannerHtml(capturedImagingForced, now);
     cards.appendChild(warn);
   }
 
   const smart = exactMode ? null : findSmartIntent(qLow);
   for (const [k, d] of matched) {
     await ensureDeptSupportReady(k);
+    if (myGeneration !== _renderGeneration) return; // stale render — abort
     let entries;
     if (isImagingIconMode) {
-      if (imagingIconForced === 'radiology_oncall') {
+      if (capturedImagingForced === 'radiology_oncall') {
         const shift = getSpecialtyCurrentShiftMeta('radiology_oncall', now);
         entries = isSpecialtyActiveNow('radiology_oncall', now) ? getEntries('radiology_oncall', ROTAS.radiology_oncall, schedKey, now, '') : [];
         entries = entries.map(e => ({ ...e, shiftLabel: `On-Call (${shift.time})`, shiftTime: shift.time }));
@@ -216,6 +223,7 @@ async function renderDeptList(matched, qLow, exactMode=false) {
     entries = sortEntries(entries, k);
     lastPreviewContextByDept.set(k, getPdfPreviewContext(k, entries, qLow));
     cards.appendChild(await buildCard(k, d, entries));
+    if (myGeneration !== _renderGeneration) return; // stale render — abort
   }
   // Manual "عرض داخل الصفحة" button → open PDF and scroll to it
   cards.querySelectorAll('[data-preview]').forEach(btn => btn.addEventListener('click', () => showPdfPreview(btn.dataset.preview, lastPreviewContextByDept.get(btn.dataset.preview) || null, true)));
