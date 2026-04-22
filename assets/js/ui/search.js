@@ -224,13 +224,11 @@ async function renderDeptList(matched, qLow, exactMode=false) {
   cards.querySelectorAll('[data-copy-phone]').forEach(btn => btn.addEventListener('click', () => copyPhoneNumber(btn.dataset.copyPhone, btn)));
   results.classList.add('show');
 
-  // Imaging On-Duty: auto-open PDF after card renders
-  if (matched.some(([k]) => k === 'radiology_duty')) {
-    showPdfPreview('radiology_duty', lastPreviewContextByDept.get('radiology_duty') || null);
-  }
-  // Oncology: auto-open PDF after card renders (same as Imaging On-Duty)
-  if (matched.some(([k]) => k === 'oncology')) {
-    showPdfPreview('oncology', lastPreviewContextByDept.get('oncology') || null);
+  // Auto-open PDF when a specialty is shown in exact (icon-click) mode.
+  // showPdfPreview is a no-op when no PDF exists for a specialty.
+  if (exactMode && matched.length === 1) {
+    const [[autoKey]] = matched;
+    showPdfPreview(autoKey, lastPreviewContextByDept.get(autoKey) || null);
   }
 }
 
