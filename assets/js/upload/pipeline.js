@@ -110,11 +110,11 @@ const SPECIALTY_PIPELINE_RULES = {
   },
   radiology_oncall: {
     requiredRoles: ['on-call'],
-    autoActivate: true,
+    autoActivate: false, // review-only: complex multi-section PDF, verify before publish
   },
   medicine_on_call: {
     requiredRoles: ['junior er', 'senior er'],
-    autoActivate: true,
+    autoActivate: false, // review-only: critical specialty, verify before publish
   },
   pediatrics: {
     requiredRoles: ['1st on-call', '2nd on-call', 'hospitalist'],
@@ -138,7 +138,7 @@ const SPECIALTY_PIPELINE_RULES = {
   },
   ent: {
     requiredRoles: ['1st on-call', '2nd on-call', 'consultant'],
-    autoActivate: true,
+    autoActivate: false, // review-only: generic parser, verify before publish
   },
   neurosurgery: {
     requiredRoles: ['resident', 'consultant'],
