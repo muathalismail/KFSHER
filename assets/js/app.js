@@ -1911,7 +1911,7 @@ async function parseUploadedPdf(file, deptKey) {
     try {
       const result = await extractLiverColumnarText(file);
       if (result && result.columnar) columnarText = result.text;
-    } catch (_) {}
+    } catch (err) { console.warn('Liver columnar extraction error:', err); }
   } else if (deptKey === 'surgery') {
     // Use server-side pdfplumber table extraction — handles empty cells correctly
     try {
@@ -2764,6 +2764,17 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // Sprint 3 (H12): user-visible upload warning — replaces silent console.warn
+  function showUploadWarning(message) {
+    const status = document.getElementById('uploadStatus');
+    if (!status) return;
+    const warn = document.createElement('div');
+    warn.style.cssText = 'background:rgba(255,80,80,0.15);border:1px solid rgba(255,80,80,0.4);color:#ff8a80;border-radius:6px;padding:8px 12px;margin-top:8px;font-size:12px;';
+    warn.textContent = message;
+    status.parentElement.appendChild(warn);
+    setTimeout(() => warn.remove(), 12000);
+  }
+
   async function handlePdfUpload(files) {
     const status = document.getElementById('uploadStatus');
     const list = Array.from(files || []).filter(file => file.type === 'application/pdf' || /\.pdf$/i.test(file.name));
@@ -2808,6 +2819,7 @@ document.addEventListener('DOMContentLoaded', () => {
         parsed = await parseUploadedPdf(file, deptKey);
       } catch (err) {
         console.warn('Uploaded PDF parsing failed:', err);
+        showUploadWarning(`⚠ ${file.name}: PDF parsing failed — ${err.message || 'unknown error'}`);
       }
       debug.textChars = (parsed.textSample || '').length;
       debug.specialty = `${deptKey}${uncertain ? '?' : ''}`;

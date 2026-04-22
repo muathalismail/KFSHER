@@ -96,7 +96,9 @@ function stripPicuContactListBleed(tokens=[], line='') {
 
 function maybeCorrectPicuDayAssistant2(dateKey='', token='') {
   const normalized = normalizePicuName(token || '');
-  if (dateKey === '11/04' && canonicalName(normalized) === canonicalName('Dr. Ayman')) {
+  // Sprint 3 (H10): one-time correction for April 2026 only — expires after April 2026
+  const now = new Date();
+  if (now.getFullYear() === 2026 && now.getMonth() === 3 && dateKey === '11/04' && canonicalName(normalized) === canonicalName('Dr. Ayman')) {
     return 'Dr. Ali';
   }
   return normalized;
