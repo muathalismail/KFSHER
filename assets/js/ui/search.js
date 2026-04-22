@@ -167,12 +167,15 @@ async function renderDeptList(matched, qLow, exactMode=false) {
   const results = document.getElementById('results');
   const cards = document.getElementById('cards');
   const rcount = document.getElementById('rcount');
-  cards.innerHTML = '';
+  cards.innerHTML = '<div class="empty" style="text-align:center;padding:18px 12px;font-size:13px;color:var(--text-2,#aaa);">Loading…</div>';
+  results.classList.add('show');
+  await uploadedSpecialtiesReadyPromise.catch(() => null);
 
   if (isImagingIconMode) {
     matched = [[imagingIconForced, ROTAS[imagingIconForced]]];
   }
 
+  cards.innerHTML = '';
   if (!matched.length) {
     cards.innerHTML = '<div class="noq"><div class="em">🔍</div><p>No specialty found. Try: ENT, Oncology, Dental, CT brain, Ultrasound, PET-CT...</p></div>';
     rcount.textContent = '';
