@@ -217,7 +217,8 @@ async function renderDeptList(matched, qLow, exactMode=false) {
     lastPreviewContextByDept.set(k, getPdfPreviewContext(k, entries, qLow));
     cards.appendChild(await buildCard(k, d, entries));
   }
-  cards.querySelectorAll('[data-preview]').forEach(btn => btn.addEventListener('click', () => showPdfPreview(btn.dataset.preview, lastPreviewContextByDept.get(btn.dataset.preview) || null)));
+  // Manual "عرض داخل الصفحة" button → open PDF and scroll to it
+  cards.querySelectorAll('[data-preview]').forEach(btn => btn.addEventListener('click', () => showPdfPreview(btn.dataset.preview, lastPreviewContextByDept.get(btn.dataset.preview) || null, true)));
   cards.querySelectorAll('[data-exact-specialty]').forEach(btn => btn.addEventListener('click', () => {
     showExactDept(btn.dataset.exactSpecialty);
   }));
@@ -226,9 +227,15 @@ async function renderDeptList(matched, qLow, exactMode=false) {
 
   // Auto-open PDF when a specialty is shown in exact (icon-click) mode.
   // showPdfPreview is a no-op when no PDF exists for a specialty.
+  // scrollToPdf=false so the view stays on the names list, not the PDF.
   if (exactMode && matched.length === 1) {
     const [[autoKey]] = matched;
-    showPdfPreview(autoKey, lastPreviewContextByDept.get(autoKey) || null);
+    showPdfPreview(autoKey, lastPreviewContextByDept.get(autoKey) || null, false);
+  }
+
+  // Scroll to the results/names section on icon-click, not to the PDF.
+  if (exactMode) {
+    results.scrollIntoView({behavior: 'smooth', block: 'start'});
   }
 }
 

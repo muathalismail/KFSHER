@@ -90,7 +90,7 @@ async function renderPdfPreviewPages(meta, context=null) {
   }
 }
 
-async function showPdfPreview(deptKey, context=null) {
+async function showPdfPreview(deptKey, context=null, scrollToPdf=false) {
   const meta = await getPdfHref(deptKey);
   if (!meta) return;
   closePdfPreview();
@@ -109,5 +109,7 @@ async function showPdfPreview(deptKey, context=null) {
     renderPdfSourceHint(currentPdfPreviewContext);
   }
   await renderPdfPreviewPages(meta, currentPdfPreviewContext);
-  document.getElementById('pdfPreviewWrap').scrollIntoView({behavior:'smooth', block:'start'});
+  if (scrollToPdf) {
+    document.getElementById('pdfPreviewWrap').scrollIntoView({behavior:'smooth', block:'start'});
+  }
 }
