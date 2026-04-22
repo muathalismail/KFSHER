@@ -2414,12 +2414,12 @@ function getRadiologyEntries(schedKey, now, qLow='') {
 
 // Radiology uses explicit duty/on-call rules; other specialties use active role filters.
 function getEntries(deptKey, dept, schedKey, now, qLow='') {
-  // Oncology is hospitalist-only — skip uploaded entries entirely
-  if (deptKey !== 'oncology') {
+  // Built-in schedule is manually verified — prefer it when it has data for this date.
+  // Only check uploaded PDF data as a fallback when built-in is empty.
+  // This prevents PDF parsing errors from overriding correct built-in data.
+  const builtInEntries = dept.schedule?.[schedKey] || [];
+  if (!builtInEntries.length && deptKey !== 'oncology') {
     const uploadedEntries = uploadedEntriesForDept(deptKey, schedKey, now, qLow);
-    // Only use uploaded data if it actually has entries for this date.
-    // An empty array means the upload had no data for this schedKey —
-    // fall through to built-in schedule instead of showing "No active on-call".
     if (uploadedEntries && uploadedEntries.length) return uploadedEntries;
   }
   if (deptKey === 'medicine_on_call') return splitMultiDoctorEntries(getMedicineOnCallEntries(schedKey, now, qLow), deptKey);
