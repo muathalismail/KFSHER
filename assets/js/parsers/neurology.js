@@ -42,6 +42,10 @@ function buildNeurologyUploadContactMap(text='') {
 function resolveNeurologyTemplatePerson(alias='', contactMap={}) {
   const trimmed = alias.replace(/\s+/g, ' ').trim();
   if (!trimmed) return { name:'', phone:'' };
+  // If name is already fully resolved (starts with "Dr."), skip fuzzy matching.
+  if (/^Dr\.?\s/i.test(trimmed)) {
+    return { name: trimmed, phone: contactMap[trimmed] || '' };
+  }
   const hinted = NEUROLOGY_ALIAS_HINTS[trimmed] || trimmed;
   const normalizedHint = hinted.replace(/^Dr\.?\s*/i, '').toLowerCase();
   const exactKey = Object.keys(contactMap).find(key => key.replace(/^Dr\.?\s*/i, '').toLowerCase() === normalizedHint);
