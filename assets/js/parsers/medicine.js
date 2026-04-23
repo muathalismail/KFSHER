@@ -101,6 +101,8 @@ function resolveMedicineOnCallName(raw='', contactResult=null) {
   // Normalize "Dr.Name" → "Dr. Name" early — PDF sometimes omits the space
   const token = String(raw || '').trim().replace(/^[.-]+|[.-]+$/g, '').replace(/^Dr\.([A-Za-z])/i, 'Dr. $1');
   if (!token) return '';
+  // If name is already fully resolved (starts with "Dr."), skip fuzzy matching.
+  if (/^Dr\.?\s/i.test(token)) return token;
   const dept = ROTAS.medicine_on_call || { contacts:{} };
   const directCandidates = [
     token,
