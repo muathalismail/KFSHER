@@ -1840,6 +1840,28 @@ async function parseUploadedPdf(file, deptKey) {
   let parserMode = 'generic';
   let parserMeta = { templateDetected: false };
 
+  // For radiology_oncall: fetch contacts server-side via pdfplumber before parsing
+  if (deptKey === 'radiology_oncall' && typeof parseRadiologyOnCallPdfEntries !== 'undefined') {
+    try {
+      const buffer = await file.arrayBuffer();
+      const b64 = btoa(new Uint8Array(buffer).reduce((s, b) => s + String.fromCharCode(b), ''));
+      const resp = await fetch('/api/extract-contacts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pdf_base64: b64 }),
+      });
+      if (resp.ok) {
+        const serverContacts = await resp.json();
+        if (serverContacts && !serverContacts.error) {
+          parseRadiologyOnCallPdfEntries._serverContacts = serverContacts;
+          console.log('[ONCALL] Server extracted', Object.keys(serverContacts).length, 'contacts');
+        }
+      }
+    } catch (err) {
+      console.warn('[ONCALL] Server contact extraction failed, using client-side:', err.message);
+    }
+  }
+
   // Use registry for parser dispatch
   const strategy = getParserForDept(deptKey, file.name);
   if (strategy) {
@@ -1849,6 +1871,11 @@ async function parseUploadedPdf(file, deptKey) {
     parserMeta = result.meta || parserMeta;
   } else {
     parsed = parseGenericPdfEntries(text, deptKey);
+  }
+
+  // Clean up server contacts after use
+  if (deptKey === 'radiology_oncall' && typeof parseRadiologyOnCallPdfEntries !== 'undefined') {
+    delete parseRadiologyOnCallPdfEntries._serverContacts;
   }
 
   const parseDebug = {

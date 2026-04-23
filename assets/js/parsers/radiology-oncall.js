@@ -131,8 +131,10 @@ function parseRadiologyOnCallPdfEntries(text='', deptKey='radiology_oncall') {
 
   // Build contact map from the PDF text (page 2 has a contact table)
   const contactResult = buildContactMapFromText(text);
-  // Also extract contacts using the dedicated on-call layout parser
+  // Also extract contacts using the dedicated on-call layout parser (client-side fallback)
   const pdfContacts = _extractOnCallContacts(text);
+  // Server-side contacts will be merged in if available (set by upload handler)
+  const serverContacts = parseRadiologyOnCallPdfEntries._serverContacts || {};
 
   const lines = String(text || '').split(/\n/).map(l => l.trim()).filter(Boolean);
   const dateRe = /(\d{1,2})\/(\d{1,2})\/(\d{4})/;
@@ -205,11 +207,13 @@ function parseRadiologyOnCallPdfEntries(text='', deptKey='radiology_oncall') {
         n && n !== '-' && !_ONCALL_SKIP_WORDS.test(n)
       );
       for (const name of names) {
-        // Try: 1) dedicated PDF contacts, 2) generic PDF contact map, 3) rotas.js contacts
-        const directMatch = _resolveFromPdfContacts(name, pdfContacts);
-        const fromPdf = directMatch ? null : resolvePhoneFromContactMap(name, contactResult);
-        const fromRotas = (!directMatch && !(fromPdf && fromPdf.phone)) ? resolvePhone(dept, { name, phone: '' }) : null;
-        const resolved = directMatch ? { phone: directMatch, uncertain: false }
+        // Try: 1) server-side pdfplumber contacts, 2) client-side PDF contacts, 3) generic map, 4) rotas.js
+        const fromServer = _resolveFromPdfContacts(name, serverContacts);
+        const fromClient = fromServer ? null : _resolveFromPdfContacts(name, pdfContacts);
+        const fromPdf = (fromServer || fromClient) ? null : resolvePhoneFromContactMap(name, contactResult);
+        const fromRotas = (!fromServer && !fromClient && !(fromPdf && fromPdf.phone)) ? resolvePhone(dept, { name, phone: '' }) : null;
+        const resolved = fromServer ? { phone: fromServer, uncertain: false }
+          : fromClient ? { phone: fromClient, uncertain: false }
           : (fromPdf && fromPdf.phone) ? fromPdf
           : (fromRotas && fromRotas.phone) ? fromRotas
           : { phone: '', uncertain: true };
@@ -257,10 +261,12 @@ function parseRadiologyOnCallPdfEntries(text='', deptKey='radiology_oncall') {
       if (!name || _ONCALL_SKIP_WORDS.test(name)) return;
       const names = name.split(/\s*\/\s*/).map(n => n.trim()).filter(Boolean);
       for (const n of names) {
-        const directMatch = _resolveFromPdfContacts(n, pdfContacts);
-        const fromPdf = directMatch ? null : resolvePhoneFromContactMap(n, contactResult);
-        const fromRotas = (!directMatch && !(fromPdf && fromPdf.phone)) ? resolvePhone(dept, { name: n, phone: '' }) : null;
-        const resolved = directMatch ? { phone: directMatch, uncertain: false }
+        const fromServer = _resolveFromPdfContacts(n, serverContacts);
+        const fromClient = fromServer ? null : _resolveFromPdfContacts(n, pdfContacts);
+        const fromPdf = (fromServer || fromClient) ? null : resolvePhoneFromContactMap(n, contactResult);
+        const fromRotas = (!fromServer && !fromClient && !(fromPdf && fromPdf.phone)) ? resolvePhone(dept, { name: n, phone: '' }) : null;
+        const resolved = fromServer ? { phone: fromServer, uncertain: false }
+          : fromClient ? { phone: fromClient, uncertain: false }
           : (fromPdf && fromPdf.phone) ? fromPdf
           : (fromRotas && fromRotas.phone) ? fromRotas
           : { phone: '', uncertain: true };
