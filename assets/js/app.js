@@ -1923,13 +1923,39 @@ async function parseUploadedPdf(file, deptKey) {
         body: JSON.stringify({ pdf_base64: b64 }),
       });
       if (resp.ok) {
-        const rows = await resp.json();
+        let rows = await resp.json();
         if (Array.isArray(rows) && rows.length) {
+          console.log(`[SURGERY] Server extracted ${rows.length} schedule rows`);
+          // Wait for contacts, then use Claude API to resolve abbreviated names
+          const contacts = await serverContactsPromise.catch(() => null);
+          if (contacts && Object.keys(contacts).length) {
+            try {
+              const llmResp = await fetch('/api/llm-parse-surgery', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ schedule_rows: rows, contacts }),
+              });
+              if (llmResp.ok) {
+                const resolved = await llmResp.json();
+                if (Array.isArray(resolved) && resolved.length) {
+                  rows = resolved.map(r => ({
+                    date: r.date || '',
+                    jr_er: r.jr_er || '',
+                    sr_er: r.sr_er || '',
+                    gs_assoc: r.gs_assoc || '',
+                    gs_consult: r.gs_consult || '',
+                  }));
+                  console.log(`[SURGERY] LLM resolved ${resolved.length} rows with full names`);
+                }
+              }
+            } catch (llmErr) {
+              console.warn('[SURGERY] LLM name resolution failed, using pdfplumber names:', llmErr.message);
+            }
+          }
           // Tab-separated schedule lines + plain text for contact extraction
           const schedLines = rows.map(r => `${r.date}\t${r.jr_er}\t${r.sr_er}\t${r.gs_assoc}\t${r.gs_consult}`);
           const plainText = await extractPdfText(file);
           columnarText = schedLines.join('\n') + '\n\n' + plainText;
-          console.log(`[SURGERY] Server extracted ${rows.length} schedule rows`);
         }
       }
     } catch (err) {
