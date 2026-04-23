@@ -10,10 +10,21 @@ import json, base64, io, re
 def extract_surgery_table(pdf_bytes):
     """Extract surgery schedule rows from PDF bytes.
     Returns list of {date, jr_er, sr_er, gs_assoc, gs_consult} dicts.
+    Detects column positions dynamically from the header row.
     """
     import pdfplumber
     rows_out = []
     day_re = re.compile(r'^(SUN|MON|TUE|WED|THU|FRI|SAT)$', re.IGNORECASE)
+
+    # Column header patterns — matched case-insensitively against header cells
+    COL_PATTERNS = {
+        'jr_er':      re.compile(r'jr\.?\s*er|junior\s*er', re.I),
+        'sr_er':      re.compile(r'sr\.?\s*er|senior\s*er', re.I),
+        'gs_assoc':   re.compile(r'gs\s*assoc|associate', re.I),
+        'gs_consult': re.compile(r'gs\s*consult|consultant', re.I),
+    }
+    # Fallback indices if no header detected (legacy layout)
+    FALLBACK = {'jr_er': 2, 'sr_er': 4, 'gs_assoc': 6, 'gs_consult': 7}
 
     with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
         for page in pdf.pages:
@@ -21,6 +32,25 @@ def extract_surgery_table(pdf_bytes):
             if not tables:
                 continue
             table = tables[0]  # main schedule table
+
+            # Detect column indices from header row
+            col_map = {}
+            for row in table:
+                if not row:
+                    continue
+                cells = [(c or '').strip() for c in row]
+                matched = {}
+                for key, pattern in COL_PATTERNS.items():
+                    for ci, cell in enumerate(cells):
+                        if cell and pattern.search(cell):
+                            matched[key] = ci
+                            break
+                if len(matched) >= 3:  # found at least 3 of 4 target columns
+                    col_map = matched
+                    break
+            if not col_map:
+                col_map = FALLBACK
+
             for row in table:
                 if not row or not row[0]:
                     continue
@@ -30,17 +60,17 @@ def extract_surgery_table(pdf_bytes):
                 date_str = (row[1] or '').strip()
                 if not date_str:
                     continue
-                # Columns: [Day, Date, Jr ER, Jr Ward, Sr ER, Sr Ward, GS Assoc, GS Consult, ...]
-                jr_er     = (row[2] or '').strip() if len(row) > 2 else ''
-                sr_er     = (row[4] or '').strip() if len(row) > 4 else ''
-                gs_assoc  = (row[6] or '').strip() if len(row) > 6 else ''
-                gs_consult= (row[7] or '').strip() if len(row) > 7 else ''
+                def _cell(key):
+                    idx = col_map.get(key)
+                    if idx is not None and idx < len(row):
+                        return (row[idx] or '').strip()
+                    return ''
                 rows_out.append({
                     'date': date_str,
-                    'jr_er': jr_er,
-                    'sr_er': sr_er,
-                    'gs_assoc': gs_assoc,
-                    'gs_consult': gs_consult,
+                    'jr_er': _cell('jr_er'),
+                    'sr_er': _cell('sr_er'),
+                    'gs_assoc': _cell('gs_assoc'),
+                    'gs_consult': _cell('gs_consult'),
                 })
     return rows_out
 

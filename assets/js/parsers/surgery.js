@@ -75,6 +75,29 @@ function parseSurgeryPdfEntries(text='', deptKey='surgery') {
 
   const pushEntry = (dateKey, alias, role) => {
     if (!alias || /^GS\s/i.test(alias)) return;
+
+    // If name is already fully resolved by LLM (starts with "Dr."),
+    // skip fuzzy resolveSurgeryTemplateName — use it directly.
+    // This prevents Levenshtein from swapping a correct name to a similar one.
+    const deptContacts = ROTAS[deptKey]?.contacts || {};
+    if (/^Dr\.?\s/i.test(alias)) {
+      const aliasCanon = canonicalName(alias);
+      const directPhone = deptContacts[alias]
+        || contactMap[alias]
+        || Object.entries(deptContacts).find(([k]) => canonicalName(k) === aliasCanon)?.[1]
+        || residentPhones[aliasCanon]
+        || consultantPhones[aliasCanon]
+        || '';
+      entries.push({
+        specialty: deptKey, date: dateKey, role, name: alias,
+        phone: directPhone, phoneUncertain: !directPhone,
+        shiftType: '24h', startTime: '07:30', endTime: '07:30',
+        section, parsedFromPdf: true,
+      });
+      return;
+    }
+
+    // Abbreviated name — use fuzzy resolution
     const resolved = resolveSurgeryTemplateName(alias, contactMap);
     if (!resolved.name) return;
     const phone = resolved.phone
