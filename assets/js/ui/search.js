@@ -209,7 +209,8 @@ async function renderDeptList(matched, qLow, exactMode=false) {
     if (isImagingIconMode) {
       if (capturedImagingForced === 'radiology_oncall') {
         const shift = getSpecialtyCurrentShiftMeta('radiology_oncall', now);
-        entries = isSpecialtyActiveNow('radiology_oncall', now) ? getEntries('radiology_oncall', ROTAS.radiology_oncall, schedKey, now, '') : [];
+        // Always show on-call names when icon is clicked — user wants to know who's on-call tonight
+        entries = getEntries('radiology_oncall', ROTAS.radiology_oncall, schedKey, now, '');
         entries = entries.map(e => ({ ...e, shiftLabel: `On-Call (${shift.time})`, shiftTime: shift.time }));
       } else {
         const shift = getSpecialtyCurrentShiftMeta('radiology_duty', now);
