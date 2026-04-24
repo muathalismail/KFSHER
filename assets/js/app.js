@@ -2428,15 +2428,11 @@ function getRadiologyOnCallEntriesForDate(schedKey) {
   const raw = ROTAS.radiology_oncall.schedule[schedKey] || [];
   const dept = ROTAS.radiology_oncall;
   return raw.flatMap(entry => {
-    const r = (entry.role || '').toLowerCase();
-    let role = '';
-    if (r.includes('1st on-call')) role = '1st On-Call';
-    else if (r.includes('2nd on-call')) role = '2nd On-Call';
-    else if (r.includes('3rd on-call') || r.includes('general on-call consultant')) role = '3rd On-Call Consultant';
-    else if (r.includes('on-call') || r.includes('oncall') || r === 'on call') role = '1st On-Call';
-    else if (r.includes('fellow')) role = 'Fellow On-Call';
-    else if (r.includes('consultant')) role = 'Consultant On-Call';
-    else return [];
+    // Keep the original role from rotas.js — don't rename it.
+    // The built-in data already has descriptive roles like
+    // "Abdomen On-Call", "Neuro On-Call", "General On-Call Consultant".
+    const role = entry.role || '';
+    if (!role) return [];
 
     const names = splitPossibleNames(entry.name || '');
     if (!names.length) return [{ ...entry, role }];
