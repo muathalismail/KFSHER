@@ -2427,10 +2427,9 @@ function getRadiologyDutyEntriesForIntent(now, schedKey, qLow='') {
 function getRadiologyOnCallEntriesForDate(schedKey) {
   const raw = ROTAS.radiology_oncall.schedule[schedKey] || [];
   const dept = ROTAS.radiology_oncall;
-  return raw.flatMap(entry => {
-    // Keep the original role from rotas.js — don't rename it.
-    // The built-in data already has descriptive roles like
-    // "Abdomen On-Call", "Neuro On-Call", "General On-Call Consultant".
+  // Only show numbered On-Call Resident roles (1st, 2nd, 3rd)
+  const onCallResidentRe = /^(1st|2nd|3rd)\s+On-Call/i;
+  return raw.filter(entry => onCallResidentRe.test(entry.role || '')).flatMap(entry => {
     const role = entry.role || '';
     if (!role) return [];
 
