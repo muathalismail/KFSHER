@@ -2433,6 +2433,9 @@ function getRadiologyOnCallEntriesForDate(schedKey) {
     if (r.includes('1st on-call')) role = '1st On-Call';
     else if (r.includes('2nd on-call')) role = '2nd On-Call';
     else if (r.includes('3rd on-call') || r.includes('general on-call consultant')) role = '3rd On-Call Consultant';
+    else if (r.includes('on-call') || r.includes('oncall') || r === 'on call') role = '1st On-Call';
+    else if (r.includes('fellow')) role = 'Fellow On-Call';
+    else if (r.includes('consultant')) role = 'Consultant On-Call';
     else return [];
 
     const names = splitPossibleNames(entry.name || '');
