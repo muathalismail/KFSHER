@@ -1932,6 +1932,26 @@ async function parseUploadedPdf(file, deptKey) {
     } catch (err) {
       console.warn('[MEDICINE_ONCALL] Server schedule extraction failed, using client-side:', err.message);
     }
+  } else if (deptKey === 'hospitalist') {
+    // Use server-side pdfplumber table extraction — Oncology ER columns only
+    try {
+      const buffer = await file.arrayBuffer();
+      const b64 = btoa(new Uint8Array(buffer).reduce((s, b) => s + String.fromCharCode(b), ''));
+      const resp = await fetch('/api/extract-table', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pdf_base64: b64, specialty: 'hospitalist' }),
+      });
+      if (resp.ok) {
+        const result = await resp.json();
+        if (result.rows && result.rows.length) {
+          console.log(`[HOSPITALIST] Server extracted ${result.rows.length} schedule rows`);
+          parseHospitalistPdfEntries._serverSchedule = result.rows;
+        }
+      }
+    } catch (err) {
+      console.warn('[HOSPITALIST] Server schedule extraction failed, using client-side:', err.message);
+    }
   } else if (deptKey === 'radiology_oncall') {
     // Use server-side pdfplumber table extraction — handles empty cells and column alignment correctly
     try {
@@ -2035,6 +2055,9 @@ async function parseUploadedPdf(file, deptKey) {
   }
   if (deptKey === 'medicine_on_call' && typeof parseMedicineOnCallPdfEntries !== 'undefined') {
     delete parseMedicineOnCallPdfEntries._serverSchedule;
+  }
+  if (deptKey === 'hospitalist' && typeof parseHospitalistPdfEntries !== 'undefined') {
+    delete parseHospitalistPdfEntries._serverSchedule;
   }
 
   const parseDebug = {

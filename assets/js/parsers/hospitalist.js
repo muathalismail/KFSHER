@@ -92,9 +92,86 @@ function extractHospitalistRowTokens(rowText='') {
 
 function parseHospitalistPdfEntries(text='', deptKey='hospitalist') {
   const entries = [];
-  // Detect month/year from PDF — supports any month, not just April 2026
   const { month: detectedMon, year: detectedYr, monthPad } = detectPdfMonthYear(text);
-  // Generic: captures any numeric month + any 4-digit year
+  const contactResult = buildContactMapFromText(text);
+  const dept = ROTAS[deptKey] || { contacts:{} };
+
+  // ── PRIMARY PATH: server-side pdfplumber schedule (Oncology ER only) ──
+  const serverSchedule = parseHospitalistPdfEntries._serverSchedule;
+  if (Array.isArray(serverSchedule) && serverSchedule.length) {
+    console.log(`[HOSPITALIST] Using server-extracted schedule (${serverSchedule.length} rows)`);
+
+    // SMROD = Senior Medical Resident On Duty — resolve from medicine_on_call
+    const resolveSMROD = (dateKey, shiftType) => {
+      // 1. Try built-in ROTAS schedule
+      const builtIn = (ROTAS.medicine_on_call?.schedule?.[dateKey] || [])
+        .find(e => /senior/i.test(e.role || '') && e.shiftType === shiftType);
+      if (builtIn && builtIn.name) {
+        return { name: builtIn.name, phone: builtIn.phone || '' };
+      }
+      // 2. Try uploaded medicine_on_call record (IndexedDB → memory cache)
+      if (typeof uploadedRecordForDept === 'function') {
+        const uploaded = uploadedRecordForDept('medicine_on_call');
+        if (uploaded && Array.isArray(uploaded.entries)) {
+          const match = uploaded.entries.find(e =>
+            e.date === dateKey
+            && /senior/i.test(e.role || '')
+            && e.shiftType === shiftType
+          );
+          if (match && match.name) {
+            return { name: match.name, phone: match.phone || '' };
+          }
+        }
+      }
+      return null;
+    };
+
+    for (const row of serverSchedule) {
+      const dateKey = row.date || '';
+      if (!dateKey) continue;
+      const addEntry = (rawName, shiftType, startTime, endTime) => {
+        if (!rawName) return;
+
+        // SMROD — resolve from medicine_on_call Senior ER
+        if (rawName === 'SMROD') {
+          const resolved = resolveSMROD(dateKey, shiftType);
+          if (!resolved) return;
+          entries.push({
+            specialty: deptKey, date: dateKey,
+            role: 'Oncology ER Hospitalist', section: 'Oncology ER',
+            name: resolved.name, phone: resolved.phone,
+            phoneUncertain: !resolved.phone,
+            shiftType, startTime, endTime, parsedFromPdf: true,
+          });
+          return;
+        }
+
+        // Normal name — resolve via contact map
+        const name = rawName.replace(/\s*\([^)]*\)\s*/g, '').trim();
+        if (!name) return;
+        const phoneMeta = resolvePhoneFromContactMap(name, contactResult)
+          || resolvePhone(dept, { name, phone: '' })
+          || { phone: '', uncertain: true };
+        entries.push({
+          specialty: deptKey, date: dateKey,
+          role: 'Oncology ER Hospitalist', section: 'Oncology ER',
+          name, phone: phoneMeta.phone || '',
+          phoneUncertain: !phoneMeta.phone || !!phoneMeta.uncertain,
+          shiftType, startTime, endTime, parsedFromPdf: true,
+        });
+      };
+      addEntry(row.onc_er_day, 'day', '08:00', '20:00');
+      addEntry(row.onc_er_night, 'night', '20:00', '08:00');
+    }
+    const deduped = dedupeParsedEntries(entries);
+    deduped._templateDetected = deduped.length >= 20;
+    deduped._templateName = deduped._templateDetected ? `hospitalist-${monthPad}-${detectedYr}` : '';
+    deduped._serverExtracted = true;
+    return deduped;
+  }
+
+  // ── FALLBACK: client-side token extraction (existing logic) ──
+  console.log('[HOSPITALIST] No server schedule — falling back to client-side token parsing');
   const dayRowRe = /^(Wed|Thu|Fri|Sat|Sun|Mon|Tue)\s+(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(.+)$/i;
   const lines = text.split('\n').map(line => line.trim()).filter(Boolean);
   lines.forEach(line => {
