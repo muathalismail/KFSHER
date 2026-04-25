@@ -105,8 +105,10 @@ function parseSurgeryPdfEntries(text='', deptKey='surgery') {
       pushEntry(dateKey, (cols[3] || '').trim(), 'Associate On-Call');
       pushEntry(dateKey, (cols[4] || '').trim(), 'Consultant On-Call');
       rowCount++;
-    } else {
-      // Plain text fallback (old format — tokens[0]=associate, tokens[1]=consultant)
+    } else if (!isColumnar) {
+      // Plain text fallback ONLY when server extraction was unavailable.
+      // When isColumnar=true, plain text is appended only for contact map building —
+      // schedule data comes exclusively from tab-separated lines above.
       const match = line.match(plainDateRe);
       if (!match) continue;
       const rowMon = _MONTH_NAMES_FULL.indexOf(match[3].toLowerCase()) + 1;
