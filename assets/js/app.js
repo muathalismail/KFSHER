@@ -2424,13 +2424,29 @@ function getRadiologyDutyEntriesForIntent(now, schedKey, qLow='') {
   return fallbackRows;
 }
 
-function getRadiologyOnCallEntriesForDate(schedKey) {
+function getRadiologyOnCallEntriesForDate(schedKey, now) {
   const raw = ROTAS.radiology_oncall.schedule[schedKey] || [];
   const dept = ROTAS.radiology_oncall;
   // Only show numbered On-Call roles (1st, 2nd, 3rd)
   const onCallRe = /^(1st|2nd|3rd)\s+On-Call/i;
-  const filtered = raw.filter(entry => onCallRe.test(entry.role || '')).flatMap(entry => {
-    const role = entry.role || '';
+  const timeRangeRe = /\((\d{2}:\d{2})[–-](\d{2}:\d{2})\)/;
+  const nowMins = now ? now.getHours() * 60 + now.getMinutes() : -1;
+
+  const filtered = raw.filter(entry => {
+    if (!onCallRe.test(entry.role || '')) return false;
+    // Filter by current time for weekend AM/PM splits
+    const tm = (entry.role || '').match(timeRangeRe);
+    if (!tm || nowMins < 0) return true; // no time range = always show
+    const [sh, sm] = tm[1].split(':').map(Number);
+    const [eh, em] = tm[2].split(':').map(Number);
+    const startMins = sh * 60 + sm;
+    const endMins = eh * 60 + em;
+    // Handle overnight shifts (e.g. 19:30–07:30)
+    if (startMins <= endMins) return nowMins >= startMins && nowMins < endMins;
+    return nowMins >= startMins || nowMins < endMins;
+  }).flatMap(entry => {
+    // Strip time qualifier from role — only the active shift is shown
+    const role = (entry.role || '').replace(/\s*\([^)]*\)\s*$/, '');
     if (!role) return [];
 
     const names = splitPossibleNames(entry.name || '');
@@ -2446,21 +2462,7 @@ function getRadiologyOnCallEntriesForDate(schedKey) {
       };
     });
   });
-  // Deduplicate same-person AM/PM weekend splits into a single entry
-  const seen = new Map();
-  const result = [];
-  for (const entry of filtered) {
-    const m = (entry.role || '').match(/^(1st|2nd|3rd)/i);
-    if (!m) { result.push(entry); continue; }
-    const key = m[1].toLowerCase() + ':' + (entry.name || '').toLowerCase().trim();
-    if (seen.has(key)) {
-      seen.get(key).role = seen.get(key).role.replace(/\s*\([^)]*\)\s*$/, '');
-    } else {
-      seen.set(key, entry);
-      result.push(entry);
-    }
-  }
-  return result;
+  return filtered;
 }
 
 function withRadiologyShiftMeta(entries, shift) {
@@ -2489,7 +2491,7 @@ function getRadiologyEntries(schedKey, now, qLow='') {
     if (shift.key === 'radiology_duty') {
       return withRadiologyShiftMeta(getRadiologyDutyEntriesForIntent(now, schedKey, qLow), shift);
     }
-    return withRadiologyShiftMeta(getRadiologyOnCallEntriesForDate(schedKey), shift);
+    return withRadiologyShiftMeta(getRadiologyOnCallEntriesForDate(schedKey, now), shift);
   });
 }
 
