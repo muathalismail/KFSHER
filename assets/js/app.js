@@ -2427,9 +2427,9 @@ function getRadiologyDutyEntriesForIntent(now, schedKey, qLow='') {
 function getRadiologyOnCallEntriesForDate(schedKey) {
   const raw = ROTAS.radiology_oncall.schedule[schedKey] || [];
   const dept = ROTAS.radiology_oncall;
-  // Only show numbered On-Call Resident roles (1st, 2nd, 3rd)
-  const onCallResidentRe = /^(1st|2nd|3rd)\s+On-Call/i;
-  return raw.filter(entry => onCallResidentRe.test(entry.role || '')).flatMap(entry => {
+  // Only show numbered On-Call roles (1st, 2nd, 3rd)
+  const onCallRe = /^(1st|2nd|3rd)\s+On-Call/i;
+  const filtered = raw.filter(entry => onCallRe.test(entry.role || '')).flatMap(entry => {
     const role = entry.role || '';
     if (!role) return [];
 
@@ -2446,6 +2446,21 @@ function getRadiologyOnCallEntriesForDate(schedKey) {
       };
     });
   });
+  // Deduplicate same-person AM/PM weekend splits into a single entry
+  const seen = new Map();
+  const result = [];
+  for (const entry of filtered) {
+    const m = (entry.role || '').match(/^(1st|2nd|3rd)/i);
+    if (!m) { result.push(entry); continue; }
+    const key = m[1].toLowerCase() + ':' + (entry.name || '').toLowerCase().trim();
+    if (seen.has(key)) {
+      seen.get(key).role = seen.get(key).role.replace(/\s*\([^)]*\)\s*$/, '');
+    } else {
+      seen.set(key, entry);
+      result.push(entry);
+    }
+  }
+  return result;
 }
 
 function withRadiologyShiftMeta(entries, shift) {
