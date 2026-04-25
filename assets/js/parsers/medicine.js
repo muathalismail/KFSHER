@@ -127,7 +127,8 @@ function resolveMedicineOnCallName(raw='', contactResult=null) {
     const lastBit = tokenBits[tokenBits.length - 1];
     const firstMatch = firstBit.length === 1
       ? !!candidateTokens[0]?.startsWith(firstBit)
-      : candidateTokens.some(bit => bit === firstBit || bit.startsWith(firstBit));
+      : candidateTokens.some(bit => bit === firstBit || bit.startsWith(firstBit)
+          || (firstBit.length >= 5 && bit.length >= 5 && levenshtein(firstBit, bit) <= 1));
     // lastMatch: exact/prefix OR Levenshtein ≤ 2 for tokens ≥ 5 chars.
     // Handles transliteration variants like "aldhakeel" ≈ "aldhakhel" (dist 1).
     const lastMatch = lastBit.length >= 3
