@@ -517,6 +517,33 @@ function refreshUploadedRecordIfNeeded(record) {
       },
     };
   }
+  if (record.deptKey === 'medicine_on_call') {
+    // Always re-parse medicine_on_call on startup to pick up alias/parser fixes
+    const reparsed = normalizeParsedEntries(
+      splitMultiDoctorEntries(parseMedicineOnCallPdfEntries(record.rawText, 'medicine_on_call'), 'medicine_on_call')
+    );
+    if (!reparsed.length) return record;
+    return {
+      ...record,
+      entries: reparsed,
+      isActive: true,
+      parsedActive: true,
+      audit: {
+        ...(record.audit || {}),
+        publishable: true,
+        approved: true,
+        livePublished: true,
+      },
+      review: {
+        ...(record.review || {}),
+        parsing: false,
+        auditRejected: false,
+        pendingUploadReview: false,
+        reviewOnly: false,
+        reviewReason: '',
+      },
+    };
+  }
   if (record.deptKey === 'neurology' && isNeurologyDutyTemplate(record.rawText)) {
     if (!hasLegacyNeurologyUploadEntries(record.entries || [])) return record;
     const reparsed = normalizeParsedEntries(
