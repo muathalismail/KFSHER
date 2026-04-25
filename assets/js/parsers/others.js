@@ -1172,6 +1172,15 @@ const SURGERY_TEMPLATE_RESIDENTS = {
   '30/04': { junior:'Hidar', senior:'Riyadh' },
 };
 
+function _cleanSurgeryDisplayName(name='') {
+  // Strip role labels that leak from PDF contact table extraction:
+  // "Dr. Omar Baasim Assistant Consultant" → "Dr. Omar Baasim"
+  return (name || '')
+    .replace(/\s+(?:Assistant|Associate|Consultant|Fellow|Head|Chairman|Resident)\b.*$/i, '')
+    .replace(/\s+R\d\b.*$/i, '')  // strip "R4", "R5" rank suffixes
+    .replace(/\s+/g, ' ').trim();
+}
+
 function resolveSurgeryTemplateName(rawName='', contactMap={}) {
   const clean = (rawName || '').replace(/\./g, '. ').replace(/\s+/g, ' ').trim();
   if (!clean) return { name:'', phone:'', phoneUncertain:true };
@@ -1182,26 +1191,25 @@ function resolveSurgeryTemplateName(rawName='', contactMap={}) {
   // 1. Try ROTAS contacts first (most reliable — manually verified phones)
   const rotasPhone = resolvePhone(ROTAS.surgery || { contacts:{} }, { name: hint, phone:'' });
   if (rotasPhone && rotasPhone.phone && !rotasPhone.uncertain) {
-    return { name: rotasPhone.matchedName || hint, phone: rotasPhone.phone, phoneUncertain: false };
+    return { name: _cleanSurgeryDisplayName(rotasPhone.matchedName || hint), phone: rotasPhone.phone, phoneUncertain: false };
   }
-  // Also try the raw alias directly in ROTAS (e.g. "Ahmad.S" → ROTAS key)
   const rotasRaw = resolvePhone(ROTAS.surgery || { contacts:{} }, { name: clean, phone:'' });
   if (rotasRaw && rotasRaw.phone && !rotasRaw.uncertain) {
-    return { name: rotasRaw.matchedName || hint, phone: rotasRaw.phone, phoneUncertain: false };
+    return { name: _cleanSurgeryDisplayName(rotasRaw.matchedName || hint), phone: rotasRaw.phone, phoneUncertain: false };
   }
 
   // 2. Try PDF contact map
   const pdfResolved = resolvePhoneFromContactMap(hint, contactMap) || resolvePhoneFromContactMap(clean, contactMap);
   if (pdfResolved && pdfResolved.phone && !pdfResolved.uncertain) {
-    return { name: pdfResolved.matchedName || hint, phone: pdfResolved.phone, phoneUncertain: false };
+    return { name: _cleanSurgeryDisplayName(pdfResolved.matchedName || hint), phone: pdfResolved.phone, phoneUncertain: false };
   }
 
-  // 3. Return with best available (ROTAS uncertain > PDF uncertain > no phone)
+  // 3. Return with best available
   const bestPhone = rotasPhone || rotasRaw || pdfResolved;
   if (bestPhone && bestPhone.phone) {
-    return { name: bestPhone.matchedName || hint, phone: bestPhone.phone, phoneUncertain: !!bestPhone.uncertain };
+    return { name: _cleanSurgeryDisplayName(bestPhone.matchedName || hint), phone: bestPhone.phone, phoneUncertain: !!bestPhone.uncertain };
   }
-  return { name: hint, phone:'', phoneUncertain:true };
+  return { name: _cleanSurgeryDisplayName(hint), phone:'', phoneUncertain:true };
 }
 
 // ═══════════════════════════════════════════════════════════════
