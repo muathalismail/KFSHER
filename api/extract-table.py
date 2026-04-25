@@ -94,19 +94,14 @@ SPECIALTY_CONFIGS = {
         'min_headers': 2,
     },
     'neurosurgery': {
-        'columns': ['resident_onduty', 'fellow_consultant', 'neurosurgeon_assoc',
-                     'neurosurgeon_consultant'],
-        'headers': {
-            'resident_onduty': re.compile(r'resident|1st\s*on.?duty', re.I),
-            'fellow_consultant': re.compile(r'fellow|assistant', re.I),
-            'neurosurgeon_assoc': re.compile(r'associate', re.I),
-            'neurosurgeon_consultant': re.compile(r'neurosurgeon\b|neurosurgery\b', re.I),
-        },
+        'columns': ['resident_day', 'resident_night', 'fellow_assistant',
+                     'associate_consultant', 'neurosurgeon_consultant'],
+        'headers': {},
         'date_pattern': re.compile(r'(\d{1,2})-([A-Za-z]{3})-(\d{2,4})'),
         'date_format': 'dMONyy',
         'day_pattern': re.compile(r'^(Sun|Mon|Tue|Wed|Thu|Fri|Sat)', re.I),
-        'fallback_cols': [3, 5, 6, 7],
-        'min_headers': 2,
+        'fallback_cols': [3, 4, 5, 6, 7],
+        'min_headers': 99,  # merged headers — always use fallback
     },
     'spine': {
         'columns': ['resident_onduty', 'fellow_second', 'consultant'],
