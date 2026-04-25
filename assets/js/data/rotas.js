@@ -1626,7 +1626,7 @@ medicine_on_call:{
     'M.Alramdhan':'0500795348',
     'Ahmed':'0531343324',
     'A.Benabdi':'0536555977',
-    'Razan':'0580411006',
+    'Razan':'0582017101',
     'Neriman':'0538370836',
     'Hashim':'0546909484',
     'H.Barbari':'0569021663',
