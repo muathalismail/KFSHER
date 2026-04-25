@@ -1912,6 +1912,27 @@ async function parseUploadedPdf(file, deptKey) {
       const result = await extractLiverColumnarText(file);
       if (result && result.columnar) columnarText = result.text;
     } catch (err) { console.warn('Liver columnar extraction error:', err); }
+  } else if (deptKey === 'radiology_oncall') {
+    // Use server-side pdfplumber table extraction — handles empty cells and column alignment correctly
+    try {
+      const buffer = await file.arrayBuffer();
+      const b64 = btoa(new Uint8Array(buffer).reduce((s, b) => s + String.fromCharCode(b), ''));
+      const resp = await fetch('/api/extract-radiology-oncall', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pdf_base64: b64 }),
+      });
+      if (resp.ok) {
+        const rows = await resp.json();
+        if (Array.isArray(rows) && rows.length) {
+          console.log(`[RADIOLOGY_ONCALL] Server extracted ${rows.length} schedule rows`);
+          // Store server schedule for the parser to use
+          parseRadiologyOnCallPdfEntries._serverSchedule = rows;
+        }
+      }
+    } catch (err) {
+      console.warn('[RADIOLOGY_ONCALL] Server schedule extraction failed, using client-side:', err.message);
+    }
   } else if (deptKey === 'surgery') {
     // Use server-side pdfplumber table extraction — handles empty cells correctly
     try {
@@ -1987,9 +2008,10 @@ async function parseUploadedPdf(file, deptKey) {
     parsed = parseGenericPdfEntries(text, deptKey);
   }
 
-  // Clean up server contacts after use
+  // Clean up server data after use
   if (deptKey === 'radiology_oncall' && typeof parseRadiologyOnCallPdfEntries !== 'undefined') {
     delete parseRadiologyOnCallPdfEntries._serverContacts;
+    delete parseRadiologyOnCallPdfEntries._serverSchedule;
   }
 
   const parseDebug = {

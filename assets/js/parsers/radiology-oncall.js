@@ -136,6 +136,91 @@ function parseRadiologyOnCallPdfEntries(text='', deptKey='radiology_oncall') {
   // Server-side contacts will be merged in if available (set by upload handler)
   const serverContacts = parseRadiologyOnCallPdfEntries._serverContacts || {};
 
+  // Shared helper: resolve a name to a phone number using all available sources
+  const addEntry = (dateKey, role, rawName, startTime, endTime, shiftType) => {
+    if (!rawName || rawName === '-' || rawName === '--') return;
+    if (_ONCALL_SKIP_WORDS.test(rawName)) return;
+    const names = rawName.split(/\s*\/\s*/).map(n => n.trim()).filter(n =>
+      n && n !== '-' && !_ONCALL_SKIP_WORDS.test(n)
+    );
+    for (const name of names) {
+      const fromServer = _resolveFromPdfContacts(name, serverContacts);
+      const fromClient = fromServer ? null : _resolveFromPdfContacts(name, pdfContacts);
+      const fromPdf = (fromServer || fromClient) ? null : resolvePhoneFromContactMap(name, contactResult);
+      const fromRotas = (!fromServer && !fromClient && !(fromPdf && fromPdf.phone)) ? resolvePhone(dept, { name, phone: '' }) : null;
+      const resolved = fromServer ? { phone: fromServer, uncertain: false }
+        : fromClient ? { phone: fromClient, uncertain: false }
+        : (fromPdf && fromPdf.phone) ? fromPdf
+        : (fromRotas && fromRotas.phone) ? fromRotas
+        : { phone: '', uncertain: true };
+      entries.push({
+        specialty: deptKey, date: dateKey, role, name,
+        phone: resolved.phone || '',
+        phoneUncertain: !resolved.phone || !!resolved.uncertain,
+        startTime, endTime, shiftType, parsedFromPdf: true,
+      });
+    }
+  };
+
+  // ── PRIMARY PATH: server-side pdfplumber schedule (accurate column extraction) ──
+  const serverSchedule = parseRadiologyOnCallPdfEntries._serverSchedule;
+  if (Array.isArray(serverSchedule) && serverSchedule.length) {
+    console.log(`[RADIOLOGY_ONCALL] Using server-extracted schedule (${serverSchedule.length} rows)`);
+    const weekendAM = {};
+
+    for (const row of serverSchedule) {
+      const dateKey = row.date || '';
+      if (!dateKey) continue;
+      const first = (row.first || '').trim();
+      const second = (row.second || '').trim();
+      const third = (row.third || '').trim();
+
+      if (row.shift === 'am') {
+        weekendAM[dateKey] = { first, second, third };
+        continue;
+      }
+
+      if (row.shift === 'pm' && weekendAM[dateKey]) {
+        const am = weekendAM[dateKey];
+        const merge = (role, amName, pmName) => {
+          if (!amName && !pmName) return;
+          if (amName === pmName || (!pmName && amName)) {
+            addEntry(dateKey, role, amName || pmName, '07:30', '07:30', '24h');
+          } else if (!amName && pmName) {
+            addEntry(dateKey, role, pmName, '19:30', '07:30', 'night');
+          } else {
+            addEntry(dateKey, role, amName, '07:30', '19:30', 'day');
+            addEntry(dateKey, role, pmName, '19:30', '07:30', 'night');
+          }
+        };
+        merge('1st On-Call', am.first, first);
+        merge('2nd On-Call', am.second, second);
+        merge('3rd On-Call', am.third, third);
+        delete weekendAM[dateKey];
+      } else if (!row.shift) {
+        // Weekday row
+        addEntry(dateKey, '1st On-Call', first, '16:30', '07:30', 'night');
+        addEntry(dateKey, '2nd On-Call', second, '16:30', '07:30', 'night');
+        addEntry(dateKey, '3rd On-Call', third, '16:30', '07:30', 'night');
+      }
+    }
+
+    // Remaining weekend AM rows without PM counterpart
+    for (const [dateKey, am] of Object.entries(weekendAM)) {
+      addEntry(dateKey, '1st On-Call', am.first, '07:30', '07:30', '24h');
+      addEntry(dateKey, '2nd On-Call', am.second, '07:30', '07:30', '24h');
+      addEntry(dateKey, '3rd On-Call', am.third, '07:30', '07:30', '24h');
+    }
+
+    const deduped = dedupeParsedEntries(entries);
+    deduped._templateDetected = deduped.length >= 15;
+    deduped._templateName = deduped._templateDetected ? `radiology-oncall-${monthPad}-${detectedYr}` : '';
+    deduped._serverExtracted = true;
+    return deduped;
+  }
+
+  // ── FALLBACK: client-side text parsing (whitespace-based column splitting) ──
+  console.log('[RADIOLOGY_ONCALL] No server schedule — falling back to client-side text parsing');
   const lines = String(text || '').split(/\n/).map(l => l.trim()).filter(Boolean);
   const dateRe = /(\d{1,2})\/(\d{1,2})\/(\d{4})/;
   const timeRe = /(7:30\s*[ap]m)\s*[-–]\s*(7:30\s*[ap]m)/i;
@@ -144,11 +229,9 @@ function parseRadiologyOnCallPdfEntries(text='', deptKey='radiology_oncall') {
   const weekendAM = {};
 
   for (const line of lines) {
-    // Split by double-space
     const rawCols = line.split(/\s{2,}/).map(s => s.trim()).filter(Boolean);
     if (rawCols.length < 2) continue;
 
-    // Find date in the first 3 columns
     let dateCol = null;
     let dateIdx = -1;
     for (let i = 0; i < Math.min(rawCols.length, 3); i++) {
@@ -169,7 +252,6 @@ function parseRadiologyOnCallPdfEntries(text='', deptKey='radiology_oncall') {
 
     const dateKey = `${String(dayNum).padStart(2, '0')}/${String(month).padStart(2, '0')}`;
 
-    // Weekend time detection
     const tm = dateCol.match(timeRe);
     let isWeekendAM = false;
     let isWeekendPM = false;
@@ -178,17 +260,14 @@ function parseRadiologyOnCallPdfEntries(text='', deptKey='radiology_oncall') {
       else isWeekendPM = true;
     }
 
-    // Collect ALL tokens after the date, filtering out day names
     const afterDate = rawCols.slice(dateIdx + 1);
-    // Also check: if the column BEFORE the date is a day name, skip it
-    // Extract exactly the first 3 valid name tokens (cols 2,3,4)
     const dataTokens = [];
     for (const tok of afterDate) {
-      if (dataTokens.length >= 3) break; // HARD STOP at 3 columns
-      if (dayRe.test(tok)) continue; // skip day names
-      if (_ONCALL_SKIP_WORDS.test(tok)) continue; // skip headers/labels
-      if (/^\d{5,}/.test(tok)) continue; // skip IDs
-      if (/^0\d{9}/.test(tok)) continue; // skip phone numbers
+      if (dataTokens.length >= 3) break;
+      if (dayRe.test(tok)) continue;
+      if (_ONCALL_SKIP_WORDS.test(tok)) continue;
+      if (/^\d{5,}/.test(tok)) continue;
+      if (/^0\d{9}/.test(tok)) continue;
       dataTokens.push(tok);
     }
 
@@ -196,35 +275,7 @@ function parseRadiologyOnCallPdfEntries(text='', deptKey='radiology_oncall') {
     const secondOnCall = dataTokens[1] || '';
     const thirdOnCall = dataTokens[2] || '';
 
-    // Skip if first token is clearly a header
     if (_ONCALL_SKIP_WORDS.test(firstOnCall)) continue;
-
-    const addEntry = (role, rawName, startTime, endTime, shiftType) => {
-      if (!rawName || rawName === '-' || rawName === '--') return;
-      if (_ONCALL_SKIP_WORDS.test(rawName)) return;
-      // Split slash-separated names
-      const names = rawName.split(/\s*\/\s*/).map(n => n.trim()).filter(n =>
-        n && n !== '-' && !_ONCALL_SKIP_WORDS.test(n)
-      );
-      for (const name of names) {
-        // Try: 1) server-side pdfplumber contacts, 2) client-side PDF contacts, 3) generic map, 4) rotas.js
-        const fromServer = _resolveFromPdfContacts(name, serverContacts);
-        const fromClient = fromServer ? null : _resolveFromPdfContacts(name, pdfContacts);
-        const fromPdf = (fromServer || fromClient) ? null : resolvePhoneFromContactMap(name, contactResult);
-        const fromRotas = (!fromServer && !fromClient && !(fromPdf && fromPdf.phone)) ? resolvePhone(dept, { name, phone: '' }) : null;
-        const resolved = fromServer ? { phone: fromServer, uncertain: false }
-          : fromClient ? { phone: fromClient, uncertain: false }
-          : (fromPdf && fromPdf.phone) ? fromPdf
-          : (fromRotas && fromRotas.phone) ? fromRotas
-          : { phone: '', uncertain: true };
-        entries.push({
-          specialty: deptKey, date: dateKey, role, name,
-          phone: resolved.phone || '',
-          phoneUncertain: !resolved.phone || !!resolved.uncertain,
-          startTime, endTime, shiftType, parsedFromPdf: true,
-        });
-      }
-    };
 
     if (isWeekendAM) {
       weekendAM[dateKey] = { first: firstOnCall, second: secondOnCall, third: thirdOnCall };
@@ -236,12 +287,12 @@ function parseRadiologyOnCallPdfEntries(text='', deptKey='radiology_oncall') {
       const merge = (role, amName, pmName) => {
         if (!amName && !pmName) return;
         if (amName === pmName || (!pmName && amName)) {
-          addEntry(role, amName || pmName, '07:30', '07:30', '24h');
+          addEntry(dateKey, role, amName || pmName, '07:30', '07:30', '24h');
         } else if (!amName && pmName) {
-          addEntry(role, pmName, '19:30', '07:30', 'night');
+          addEntry(dateKey, role, pmName, '19:30', '07:30', 'night');
         } else {
-          addEntry(role, amName, '07:30', '19:30', 'day');
-          addEntry(role, pmName, '19:30', '07:30', 'night');
+          addEntry(dateKey, role, amName, '07:30', '19:30', 'day');
+          addEntry(dateKey, role, pmName, '19:30', '07:30', 'night');
         }
       };
       merge('1st On-Call', am.first, firstOnCall);
@@ -249,37 +300,17 @@ function parseRadiologyOnCallPdfEntries(text='', deptKey='radiology_oncall') {
       merge('3rd On-Call', am.third, thirdOnCall);
       delete weekendAM[dateKey];
     } else if (!isWeekendPM) {
-      addEntry('1st On-Call', firstOnCall, '16:30', '07:30', 'night');
-      addEntry('2nd On-Call', secondOnCall, '16:30', '07:30', 'night');
-      addEntry('3rd On-Call', thirdOnCall, '16:30', '07:30', 'night');
+      addEntry(dateKey, '1st On-Call', firstOnCall, '16:30', '07:30', 'night');
+      addEntry(dateKey, '2nd On-Call', secondOnCall, '16:30', '07:30', 'night');
+      addEntry(dateKey, '3rd On-Call', thirdOnCall, '16:30', '07:30', 'night');
     }
   }
 
   // Remaining weekend AM rows without PM counterpart
   for (const [dateKey, am] of Object.entries(weekendAM)) {
-    const add = (role, name) => {
-      if (!name || _ONCALL_SKIP_WORDS.test(name)) return;
-      const names = name.split(/\s*\/\s*/).map(n => n.trim()).filter(Boolean);
-      for (const n of names) {
-        const fromServer = _resolveFromPdfContacts(n, serverContacts);
-        const fromClient = fromServer ? null : _resolveFromPdfContacts(n, pdfContacts);
-        const fromPdf = (fromServer || fromClient) ? null : resolvePhoneFromContactMap(n, contactResult);
-        const fromRotas = (!fromServer && !fromClient && !(fromPdf && fromPdf.phone)) ? resolvePhone(dept, { name: n, phone: '' }) : null;
-        const resolved = fromServer ? { phone: fromServer, uncertain: false }
-          : fromClient ? { phone: fromClient, uncertain: false }
-          : (fromPdf && fromPdf.phone) ? fromPdf
-          : (fromRotas && fromRotas.phone) ? fromRotas
-          : { phone: '', uncertain: true };
-        entries.push({
-          specialty: deptKey, date: dateKey, role, name: n,
-          phone: resolved.phone || '', phoneUncertain: !resolved.phone || !!resolved.uncertain,
-          startTime: '07:30', endTime: '07:30', shiftType: '24h', parsedFromPdf: true,
-        });
-      }
-    };
-    add('1st On-Call', am.first);
-    add('2nd On-Call', am.second);
-    add('3rd On-Call', am.third);
+    addEntry(dateKey, '1st On-Call', am.first, '07:30', '07:30', '24h');
+    addEntry(dateKey, '2nd On-Call', am.second, '07:30', '07:30', '24h');
+    addEntry(dateKey, '3rd On-Call', am.third, '07:30', '07:30', '24h');
   }
 
   const deduped = dedupeParsedEntries(entries);
