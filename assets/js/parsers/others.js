@@ -556,59 +556,11 @@ function parseLiverPdfEntries(text='', deptKey='liver') {
   return deduped;
 }
 
-const SURGERY_NAME_HINTS = {
-  'reem': 'Dr. Reem Al Hubail',
-  'faisal': 'Dr. Faisal Al Rashid',
-  'mahdi': 'Dr. Mahdi Ahmad',
-  'talal': 'Dr. Talal Dugaither',
-  'ghazal': 'Dr. Thabet Al-Ghazal',
-  'maiman': 'Dr. Hisham Maiman',
-  'gamal': 'Dr. Gamal Abbas',
-  'shareef': 'Dr. Shareef Alqathani',
-  'ashraf': 'Dr. Ashraf Sharkawy',
-  'mughahid': 'Dr. Mugahid Abualhassan',
-  'najdi': 'Dr. Mohammed Elnagdi',
-  'nabegh': 'Dr. Mohamad Nabegh',
-  'halawani': 'Dr. Mahmoud Elhalwany',
-  'wabarai': 'Dr. Abdullah Wabari',
-  'wabari': 'Dr. Abdullah Wabari',
-  'manal': 'Dr. Manal Al Naimi',
-  'ayman': 'Dr. Ayman Ghashan',
-  'ameera': 'Dr. Ameera Balhareth',
-  'a altala': 'Abdulaziz AlTala',
-  'altala': 'Abdulaziz AlTala',
-  'abdulaziz altala': 'Abdulaziz AlTala',
-  'cheema': 'Dr. Ahsan Cheema',
-  'hamidah': 'Dr. Hamidah Abdullah',
-  'hawra': 'Dr. Hawra Alatooq',
-  'hidar': 'Dr. Haidar AlNahwai',
-  'haidar': 'Dr. Haidar AlNahwai',
-  'rawan': 'Dr. Rawan AlIbrahim',
-  'almusained': 'Dr. Mohammed AlMusained',
-  'almusianed': 'Dr. Mohammed AlMusained',
-  'musained': 'Dr. Mohammed AlMusained',
-  'musianed': 'Dr. Mohammed AlMusained',
-  'alsafar': 'Dr. Ahmad AlSafar',
-  'riyadh': 'Dr. Riyadh AlGhamdi',
-  'hebah': 'Dr. Heba AlWafi',
-  'amjad': 'Dr. Amjad AlNemeri',
-  'zainab': 'Dr. Zainab AlRamdhan',
-  'safeer': 'Dr. Safeer AlGhathami',
-  'ahmad': 'Dr. Ahmad AlKhars',
-  'loay': 'Dr. Loay Bojabarah',
-  'sara': 'Dr. Sara Ghazal',
-  'ahmad s': 'Dr. Ahmad AlSafar',
-  'fozan': 'Dr. Fozan A. Al Dulaijan',
-  'mansi': 'Dr. Nabeel Mansi',
-  'zaher': 'Dr. Zaid Zaher',
-  'omar': 'Dr. Omar Baasim',
-  'madkhali': 'Dr. Tariq Madkhali',
-  'abdulmohsen': 'Dr. Abdulmohsin Dilaijan',
-  'nora': 'Dr. Nora Al Mana',
-  'tamadher': 'Dr. Tumadher',
-  'tumadher': 'Dr. Tumadher',
-  'awrad': 'Dr. Awrad Nasralla',
-};
+// SURGERY_NAME_HINTS removed — name resolution is now fully dynamic:
+// 1. /api/extract-contacts (pdfplumber) extracts full names + phones from PDF
+// 2. buildContactMapFromText builds the client-side contact map
+// 3. resolvePhone + resolvePhoneFromContactMap do fuzzy matching
+// No manual updates needed when residents rotate.
 
 // ── PEDIATRICS PARSER ─────────────────────────────────────────
 // Handles the 6-column monthly pediatrics rota:
@@ -1182,34 +1134,36 @@ function _cleanSurgeryDisplayName(name='') {
 }
 
 function resolveSurgeryTemplateName(rawName='', contactMap={}) {
+  // Normalize: "Ahmad.S" → "Ahmad. S", "A.AlTala" → "A. AlTala"
   const clean = (rawName || '').replace(/\./g, '. ').replace(/\s+/g, ' ').trim();
   if (!clean) return { name:'', phone:'', phoneUncertain:true };
-  const canonicalKey = canonicalName(clean);
-  const normalizedKey = normalizeText(clean).replace(/\./g, ' ').replace(/\s+/g, ' ').trim();
-  const hint = SURGERY_NAME_HINTS[canonicalKey] || SURGERY_NAME_HINTS[normalizedKey] || clean;
 
-  // 1. Try ROTAS contacts first (most reliable — manually verified phones)
-  const rotasPhone = resolvePhone(ROTAS.surgery || { contacts:{} }, { name: hint, phone:'' });
-  if (rotasPhone && rotasPhone.phone && !rotasPhone.uncertain) {
-    return { name: _cleanSurgeryDisplayName(rotasPhone.matchedName || hint), phone: rotasPhone.phone, phoneUncertain: false };
-  }
-  const rotasRaw = resolvePhone(ROTAS.surgery || { contacts:{} }, { name: clean, phone:'' });
-  if (rotasRaw && rotasRaw.phone && !rotasRaw.uncertain) {
-    return { name: _cleanSurgeryDisplayName(rotasRaw.matchedName || hint), phone: rotasRaw.phone, phoneUncertain: false };
+  // Build merged contact pool: server-extracted (_serverExtractedContacts) + PDF client map + ROTAS
+  // This is the same approach used by neurology, pediatrics, spine, etc.
+  const dept = ROTAS.surgery || { contacts:{} };
+
+  // 1. Try server-extracted contacts (pdfplumber — most reliable, has full names)
+  const serverResult = resolvePhone(dept, { name: clean, phone: '' });
+
+  // 2. Try PDF client-side contact map
+  const pdfResult = resolvePhoneFromContactMap(clean, contactMap);
+
+  // 3. Pick best: prefer certain over uncertain, server over PDF
+  const candidates = [serverResult, pdfResult].filter(r => r && r.phone);
+  const certain = candidates.find(r => !r.uncertain);
+  const best = certain || candidates[0] || null;
+
+  if (best) {
+    const displayName = _cleanSurgeryDisplayName(best.matchedName || clean);
+    // Ensure "Dr." prefix for display
+    const finalName = displayName && !/^Dr\.?\s/i.test(displayName) ? `Dr. ${displayName}` : displayName;
+    return { name: finalName, phone: best.phone, phoneUncertain: !!best.uncertain };
   }
 
-  // 2. Try PDF contact map
-  const pdfResolved = resolvePhoneFromContactMap(hint, contactMap) || resolvePhoneFromContactMap(clean, contactMap);
-  if (pdfResolved && pdfResolved.phone && !pdfResolved.uncertain) {
-    return { name: _cleanSurgeryDisplayName(pdfResolved.matchedName || hint), phone: pdfResolved.phone, phoneUncertain: false };
-  }
-
-  // 3. Return with best available
-  const bestPhone = rotasPhone || rotasRaw || pdfResolved;
-  if (bestPhone && bestPhone.phone) {
-    return { name: _cleanSurgeryDisplayName(bestPhone.matchedName || hint), phone: bestPhone.phone, phoneUncertain: !!bestPhone.uncertain };
-  }
-  return { name: _cleanSurgeryDisplayName(hint), phone:'', phoneUncertain:true };
+  // No phone found — return cleaned alias with Dr. prefix
+  const fallback = _cleanSurgeryDisplayName(clean);
+  const finalFallback = fallback && !/^Dr\.?\s/i.test(fallback) ? `Dr. ${fallback}` : fallback;
+  return { name: finalFallback, phone: '', phoneUncertain: true };
 }
 
 // ═══════════════════════════════════════════════════════════════

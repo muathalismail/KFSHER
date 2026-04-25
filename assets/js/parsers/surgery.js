@@ -17,7 +17,7 @@ function extractSurgeryResidentPhones(text='') {
       const phone = match[4] ? `0${match[2]}${match[3]}${match[4]}` : match[2];
       if (/^05\d{8}$/.test(phone)) {
         map[canonicalName(rawName)] = phone;
-        map[canonicalName(SURGERY_NAME_HINTS[canonicalName(rawName)] || rawName)] = phone;
+        map[canonicalName(rawName)] = phone;
       }
     }
   });
@@ -43,7 +43,7 @@ function extractSurgeryConsultantPhones(text='') {
     const phone = phoneOnlyLines[index] || '';
     if (!phone) return;
     map[canonicalName(name)] = phone;
-    map[canonicalName(SURGERY_NAME_HINTS[canonicalName(name)] || name)] = phone;
+    map[canonicalName(name)] = phone;
   });
 
   const directMatches = [...compact.matchAll(/(Dr\.?\s+[A-Z][A-Za-z.'-]+(?:\s+[A-Z][A-Za-z.'-]+){1,4}).{0,40}?\b(05\d{8}|\d{2}\s*\d{2}\s*\d{5})\b/gi)];
@@ -53,7 +53,7 @@ function extractSurgeryConsultantPhones(text='') {
     const phone = digits.length === 9 ? `0${digits}` : digits;
     if (!/^05\d{8}$/.test(phone)) return;
     map[canonicalName(name)] = phone;
-    map[canonicalName(SURGERY_NAME_HINTS[canonicalName(name)] || name)] = phone;
+    map[canonicalName(name)] = phone;
   });
   return map;
 }
