@@ -36,15 +36,12 @@ SPECIALTY_CONFIGS = {
     },
     'orthopedics': {
         'columns': ['resident', 'second_oncall', 'pediatric_assoc', 'adult_consultant'],
-        'headers': {
-            'resident': re.compile(r'resident\s*on\s*call', re.I),
-            'second_oncall': re.compile(r'2nd\s*on\s*call', re.I),
-            'adult_consultant': re.compile(r'adult\s*orthop', re.I),
-        },
+        'headers': {},
         'date_pattern': re.compile(r'(\d{1,2})/(\d{1,2})/(\d{4})'),
         'day_pattern': None,
-        'fallback_cols': [3, 6, 10, 15],
-        'min_headers': 2,
+        'fallback_cols': [3, 6, 9, 15],
+        'min_headers': 99,  # merged headers — always use fallback
+        'date_col_offset': True,  # weekends shift date to col 1, data shifts +1
     },
     'pediatrics': {
         'columns': ['first_oncall', 'second_oncall', 'third_oncall', 'hospitalist_er',
@@ -80,6 +77,7 @@ SPECIALTY_CONFIGS = {
         'fallback_cols': [7, 13, 16, 19, 22, 25],
         'min_headers': 99,  # always use fallback — merged header cells break auto-detection
         'date_col_offset': True,  # adjust columns when date shifts (weekends)
+        'base_date_col': 2,  # weekday dates at col 2, weekends at col 3
     },
     'ent': {
         'columns': ['first_oncall', 'second_oncall', 'third_oncall'],
@@ -285,7 +283,7 @@ def extract_table_rows(pdf_bytes, specialty):
                     fallback = config.get('fallback_cols', [])
                     if fallback and col_map == {columns[i]: fallback[i] for i in range(min(len(columns), len(fallback)))}:
                         # Using fallback cols — adjust for date column shift
-                        base_date_col = 2  # expected weekday date col
+                        base_date_col = config.get('base_date_col', 0)
                         offset = date_col - base_date_col
                         if offset != 0:
                             active_col_map = {k: v + offset for k, v in col_map.items()}
