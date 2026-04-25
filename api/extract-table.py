@@ -20,18 +20,12 @@ import json, base64, io, re
 
 SPECIALTY_CONFIGS = {
     'hospitalist': {
-        'columns': [
-            'med_er_day_1', 'med_er_day_2', 'med_er_night_1', 'med_er_night_2', 'med_er_night_3',
-            'onc_er_day', 'onc_er_night',
-            'inpatient_day', 'inpatient_night_1', 'inpatient_night_2',
-            'c6_floor_1', 'c6_floor_2', 'c6_floor_night_1', 'c6_floor_night_2',
-            'c2c4b2_pm1', 'c2c4b2_pm2', 'c2c4b2_am',
-        ],
+        'columns': ['onc_er_day', 'onc_er_night'],
         'headers': {},
         'date_pattern': re.compile(r'(\d{1,2})/(\d{1,2})/(\d{4})'),
         'day_pattern': re.compile(r'^(Sun|Mon|Tue|Wed|Thu|Fri|Sat)', re.I),
-        # Fixed column indices: data starts at col 2 (after Day, Date)
-        'fallback_cols': [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18],
+        # Only Oncology ER columns: day=col 7, night=col 8
+        'fallback_cols': [7, 8],
         'min_headers': 99,  # always use fallback — headers are too complex for auto-detection
     },
     'orthopedics': {
