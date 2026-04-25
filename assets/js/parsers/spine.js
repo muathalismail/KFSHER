@@ -35,38 +35,6 @@ function parseSpinePdfEntries(text='', deptKey='spine') {
   const contactResult = buildContactMapFromText(text);
   const { year: detectedYr, monthPad } = detectPdfMonthYear(text);
 
-  // ── PRIMARY PATH: server-side pdfplumber schedule ──
-  const serverSchedule = parseSpinePdfEntries._serverSchedule;
-  if (Array.isArray(serverSchedule) && serverSchedule.length) {
-    console.log(`[SPINE] Using server-extracted schedule (${serverSchedule.length} rows)`);
-    for (const row of serverSchedule) {
-      const dateKey = row.date || '';
-      if (!dateKey) continue;
-      const addEntry = (role, rawName, startTime, endTime, shiftType) => {
-        if (!rawName) return;
-        const resolved = resolvePhoneFromContactMap(rawName, contactResult)
-          || resolvePhone(dept, { name: rawName, phone: '' })
-          || { phone: '', uncertain: true };
-        entries.push({
-          specialty: deptKey, date: dateKey, role, name: rawName,
-          phone: resolved.phone || '',
-          phoneUncertain: !resolved.phone || !!resolved.uncertain,
-          startTime, endTime, shiftType, parsedFromPdf: true,
-        });
-      };
-      addEntry('Resident On-Duty (Day)', row.resident_day, '07:30', '17:00', 'day');
-      addEntry('Resident On-Duty (Night)', row.resident_night, '17:00', '07:30', 'night');
-      addEntry('2nd On-Duty', row.fellow_second, '07:30', '07:30', '24h');
-      addEntry('Spine Consultant On-Call', row.consultant, '07:30', '07:30', '24h');
-    }
-    const deduped = dedupeParsedEntries(entries);
-    deduped._templateDetected = deduped.length >= 20;
-    deduped._templateName = deduped._templateDetected ? `spine-${monthPad}-${detectedYr}` : '';
-    deduped._serverExtracted = true;
-    return deduped;
-  }
-
-  // ── FALLBACK: client-side column splitting ──
   const rowRe = /^(Wednesday|Thursday|Friday|Saturday|Sunday|Monday|Tuesday)\s+(\d{1,2})-([A-Za-z]{3})-(\d{2,4})\s+(.+)$/i;
   const lines = String(text || '').split(/\n/).map(l => l.trim()).filter(Boolean);
 

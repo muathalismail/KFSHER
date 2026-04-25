@@ -102,42 +102,6 @@ function parseNeurosurgeryPdfEntries(text='', deptKey='neurosurgery') {
   const entries = [];
   // Detect month/year from PDF — supports any abbreviated month + any year
   const { month: detectedMon, year: detectedYr, monthPad } = detectPdfMonthYear(text);
-  const dept = ROTAS[deptKey] || { contacts:{} };
-  const contactResult = buildContactMapFromText(text);
-
-  // ── PRIMARY PATH: server-side pdfplumber schedule ──
-  const serverSchedule = parseNeurosurgeryPdfEntries._serverSchedule;
-  if (Array.isArray(serverSchedule) && serverSchedule.length) {
-    console.log(`[NEUROSURGERY] Using server-extracted schedule (${serverSchedule.length} rows)`);
-    for (const row of serverSchedule) {
-      const dateKey = row.date || '';
-      if (!dateKey) continue;
-      const addEntry = (role, rawName, startTime, endTime, shiftType) => {
-        if (!rawName) return;
-        const resolved = resolvePhoneFromContactMap(rawName, contactResult)
-          || resolvePhone(dept, { name: rawName, phone: '' })
-          || { phone: '', uncertain: true };
-        entries.push({
-          specialty: deptKey, date: dateKey, role, name: rawName,
-          phone: resolved.phone || '',
-          phoneUncertain: !resolved.phone || !!resolved.uncertain,
-          startTime, endTime, shiftType, parsedFromPdf: true,
-        });
-      };
-      addEntry('Resident On-Duty (Day)', row.resident_day, '07:30', '17:00', 'day');
-      addEntry('Resident On-Duty (Night)', row.resident_night, '17:00', '07:30', 'night');
-      addEntry('2nd On-Duty', row.fellow_assistant, '07:30', '07:30', '24h');
-      addEntry('Associate Consultant', row.associate_consultant, '07:30', '07:30', '24h');
-      addEntry('Neurosurgeon Consultant On-Call', row.neurosurgeon_consultant, '07:30', '07:30', '24h');
-    }
-    const deduped = dedupeParsedEntries(entries);
-    deduped._templateDetected = deduped.length >= 20;
-    deduped._templateName = deduped._templateDetected ? `neurosurgery-${monthPad}-${detectedYr}` : '';
-    deduped._serverExtracted = true;
-    return deduped;
-  }
-
-  // ── FALLBACK: client-side column splitting ──
   const rowRe = /^(Wednesday|Thursday|Friday|Saturday|Sunday|Monday|Tuesday)\s+(\d{1,2})-([A-Za-z]{3})-(\d{2,4})\s+(.+)$/i;
   const lines = String(text || '').split(/\n/).map(line => line.trim()).filter(Boolean);
   lines.forEach(line => {
@@ -1039,41 +1003,6 @@ function parseOrthopedicsPdfEntries(text='', deptKey='orthopedics') {
   const pdfContactMap = buildOrthopedicsPdfContactMap(text);
   const entries = [];
 
-  // ── PRIMARY PATH: server-side pdfplumber schedule ──
-  const serverSchedule = parseOrthopedicsPdfEntries._serverSchedule;
-  if (Array.isArray(serverSchedule) && serverSchedule.length) {
-    console.log(`[ORTHOPEDICS] Using server-extracted schedule (${serverSchedule.length} rows)`);
-    const { month: detectedMon, year: detectedYr, monthPad: monPad } = detectPdfMonthYear(text);
-    const FIELD_TO_ROLE = [
-      { field: 'resident',        role: 'Resident On-Call' },
-      { field: 'second_oncall',   role: '2nd On-Call' },
-      { field: 'pediatric_assoc', role: 'Pediatric Consultant On-Call' },
-      { field: 'adult_consultant',role: 'Adult Consultant On-Call' },
-    ];
-    for (const row of serverSchedule) {
-      const dateKey = row.date || '';
-      if (!dateKey) continue;
-      for (const { field, role } of FIELD_TO_ROLE) {
-        const rawName = (row[field] || '').trim();
-        if (!rawName) continue;
-        const resolved = resolveOrthopedicsPhone(rawName, pdfContactMap, rotasContacts);
-        entries.push({
-          specialty: deptKey, date: dateKey, role, name: rawName,
-          phone: resolved?.phone || '',
-          phoneUncertain: !resolved?.phone || !!resolved?.uncertain,
-          shiftType: '24h', startTime: '07:30', endTime: '07:30',
-          parsedFromPdf: true,
-        });
-      }
-    }
-    const deduped = dedupeParsedEntries(entries);
-    deduped._templateDetected = deduped.length >= 20;
-    deduped._templateName = deduped._templateDetected ? `orthopedics-${monPad}-${detectedYr}` : '';
-    deduped._serverExtracted = true;
-    return deduped;
-  }
-
-  // ── FALLBACK: client-side column splitting ──
   // PDF column layout (all roles are 24h — 7:30 AM to 7:30 AM):
   //   Col 0: Resident On Call       (single first name, no Dr prefix)
   //   Col 1: 2nd On Call Assistant  (first name or last name, no Dr prefix)

@@ -96,13 +96,17 @@ SPECIALTY_CONFIGS = {
         'min_headers': 99,  # merged headers — always use fallback
     },
     'spine': {
-        'columns': ['resident_day', 'resident_night', 'fellow_second', 'consultant'],
-        'headers': {},
+        'columns': ['resident_onduty', 'fellow_second', 'consultant'],
+        'headers': {
+            'resident_onduty': re.compile(r'resident|1st\s*on.?duty', re.I),
+            'fellow_second': re.compile(r'fellow|2nd\s*on.?duty|assistant', re.I),
+            'consultant': re.compile(r'spine.*consult|consultant', re.I),
+        },
         'date_pattern': re.compile(r'(\d{1,2})-([A-Za-z]{3})-(\d{2,4})'),
         'date_format': 'dMONyy',
         'day_pattern': re.compile(r'^(Sun|Mon|Tue|Wed|Thu|Fri|Sat)', re.I),
-        'fallback_cols': [3, 4, 5, 6],
-        'min_headers': 99,  # merged headers — always use fallback
+        'fallback_cols': [3, 5, 6],
+        'min_headers': 2,
     },
     'kptx': {
         'columns': ['inpatient', 'first_oncall', 'second_oncall',
