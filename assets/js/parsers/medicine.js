@@ -242,9 +242,42 @@ function parseMedicineOnCallWeekendBlocks(lines=[], contactResult=null, deptKey=
 
 function parseMedicineOnCallPdfEntries(text='', deptKey='medicine_on_call') {
   const contactResult = buildContactMapFromText(text);
+  const entries = [];
+
+  // ── PRIMARY PATH: server-side pdfplumber schedule (accurate column extraction) ──
+  const serverSchedule = parseMedicineOnCallPdfEntries._serverSchedule;
+  if (Array.isArray(serverSchedule) && serverSchedule.length) {
+    console.log(`[MEDICINE_ONCALL] Using server-extracted schedule (${serverSchedule.length} rows)`);
+    const FIELD_TO_ROLE = [
+      { field: 'jw_day',    role: MEDICINE_ON_CALL_ROLE_SEQUENCE[0] },
+      { field: 'jw_night',  role: MEDICINE_ON_CALL_ROLE_SEQUENCE[1] },
+      { field: 'jer_day',   role: MEDICINE_ON_CALL_ROLE_SEQUENCE[2] },
+      { field: 'jer_night', role: MEDICINE_ON_CALL_ROLE_SEQUENCE[3] },
+      { field: 'sr_day',    role: MEDICINE_ON_CALL_ROLE_SEQUENCE[4] },
+      { field: 'sr_night',  role: MEDICINE_ON_CALL_ROLE_SEQUENCE[5] },
+    ];
+    for (const row of serverSchedule) {
+      const dateKey = row.date || '';
+      if (!dateKey) continue;
+      for (const { field, role } of FIELD_TO_ROLE) {
+        const rawName = (row[field] || '').trim();
+        if (rawName) {
+          entries.push(buildMedicineOnCallRow(dateKey, role, rawName, contactResult, deptKey));
+        }
+      }
+    }
+    const deduped = dedupeParsedEntries(entries);
+    deduped._templateDetected = deduped.length >= 60;
+    deduped._templateName = deduped._templateDetected ? 'medicine-on-call-grid' : '';
+    deduped._coreSectionsFound = Array.from(new Set(deduped.map(entry => entry.section).filter(Boolean)));
+    deduped._serverExtracted = true;
+    return deduped;
+  }
+
+  // ── FALLBACK: client-side text parsing (DP token splitting) ──
+  console.log('[MEDICINE_ONCALL] No server schedule — falling back to client-side text parsing');
   const aliasIndex = buildMedicineOnCallAliasIndex(contactResult);
   const lines = String(text || '').split(/\n/).map(line => line.trim()).filter(Boolean);
-  const entries = [];
   // Track filled slots: "dateKey|section|shiftType" → true
   // Prevents duplicate entries when a date row appears twice in the PDF
   // (e.g. table header repeats at a page break).
