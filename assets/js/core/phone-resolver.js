@@ -81,6 +81,18 @@ function resolvePhone(dept, entry) {
   for (const [scName, scPhone] of Object.entries(sc)) {
     if (scPhone && canonicalName(scName) === nameNorm) return { phone: scPhone, uncertain: false };
   }
+  // Server contacts: prefix match with uniqueness
+  const scTokens = nameNorm.split(' ').filter(t => t.length >= 3);
+  if (scTokens.length && Object.keys(sc).length) {
+    const scPrefix = Object.entries(sc).filter(([cn, ph]) => {
+      if (!ph) return false;
+      const cnToks = canonicalName(cn).split(' ').filter(t => t.length >= 3);
+      return scTokens.some(tt => cnToks.some(ct =>
+        (ct.startsWith(tt) || tt.startsWith(ct)) && Math.abs(ct.length - tt.length) <= 2
+      ));
+    });
+    if (scPrefix.length === 1) return { phone: scPrefix[0][1], uncertain: false };
+  }
   const c = dept.contacts || {};
   if (c[entry.name]) return { phone: c[entry.name], uncertain: false };
   let best = null;
@@ -95,6 +107,25 @@ function resolvePhone(dept, entry) {
       );
       if (firstNameMatches.length === 1) {
         return { phone: firstNameMatches[0][1], uncertain: false };
+      }
+    }
+
+    // Prefix + fuzzy match: "Khalifa"→"Khalifah", "Bachar"→"Bashar"
+    // A token matches if: prefix (≤2 char diff) OR levenshtein ≤2 for tokens ≥4 chars
+    const targetTokens = canonicalName(targetName).split(' ').filter(t => t.length >= 3);
+    if (targetTokens.length) {
+      const fuzzyTokenMatch = (tt, ct) => {
+        if ((ct.startsWith(tt) || tt.startsWith(ct)) && Math.abs(ct.length - tt.length) <= 2) return true;
+        if (tt.length >= 4 && ct.length >= 4 && levenshtein(tt, ct) <= 2) return true;
+        return false;
+      };
+      const prefixMatches = Object.entries(c).filter(([cn, ph]) => {
+        if (!ph) return false;
+        const cnTokens = canonicalName(cn).split(' ').filter(t => t.length >= 3);
+        return targetTokens.some(tt => cnTokens.some(ct => fuzzyTokenMatch(tt, ct)));
+      });
+      if (prefixMatches.length === 1) {
+        return { phone: prefixMatches[0][1], uncertain: false };
       }
     }
 
