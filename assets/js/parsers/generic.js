@@ -522,7 +522,7 @@ function resolvePhoneFromContactMap(name='', contactResult) {
     hits.forEach(h => { if (!byPhone.has(h.phone)) byPhone.set(h.phone, h.matchedName); });
     if (byPhone.size === 1) {
       const [[ph, nm]] = byPhone.entries();
-      return { phone: ph, uncertain: true, matchedName: nm };
+      return { phone: ph, uncertain: false, matchedName: nm };
     }
   }
 
@@ -548,7 +548,7 @@ function resolvePhoneFromContactMap(name='', contactResult) {
           return false;
         });
         if (allMatch && typoCount >= 1) {
-          return { phone: av, uncertain: true, matchedName: altMapKeys[ak] || null };
+          return { phone: av, uncertain: false, matchedName: altMapKeys[ak] || null };
         }
       }
     }
