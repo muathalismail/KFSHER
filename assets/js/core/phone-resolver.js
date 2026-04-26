@@ -76,10 +76,18 @@ function scoreNameMatch(target, candidate) {
 function resolvePhone(dept, entry) {
   if (entry.phone) {
     // Entry already has a phone — still resolve the full "Dr. ..." name from contacts
+    // Require at least one significant token overlap to prevent wrong-doctor display
+    // when two contacts share the same phone number
     const c0 = dept.contacts || {};
+    const refTokens = canonicalName(entry.name || '').split(' ').filter(t => t.length >= 3);
     let fullName = null;
     for (const [cn, cp] of Object.entries(c0)) {
-      if (cp === entry.phone && /^Dr\.?\s/i.test(cn) && cn.length > (fullName || '').length) fullName = cn;
+      if (cp !== entry.phone || !/^Dr\.?\s/i.test(cn)) continue;
+      if (refTokens.length) {
+        const cnTokens = canonicalName(cn).split(' ').filter(t => t.length >= 3);
+        if (!refTokens.some(t => cnTokens.some(ct => ct === t || (t.length >= 4 && ct.length >= 4 && levenshtein(t, ct) <= 2)))) continue;
+      }
+      if (cn.length > (fullName || '').length) fullName = cn;
     }
     return { phone: entry.phone, uncertain: !!entry.phoneUncertain, matchedName: fullName };
   }
@@ -102,20 +110,27 @@ function resolvePhone(dept, entry) {
     if (scPrefix.length === 1) return { phone: scPrefix[0][1], uncertain: false, matchedName: scPrefix[0][0] };
   }
   const c = dept.contacts || {};
-  // Helper: find the best full name for a phone number from the contacts dict
-  // Prefers "Dr. ..." entries over short aliases
-  const _fullNameForPhone = (phone) => {
+  // Helper: find the best full "Dr. ..." name for a phone number from contacts.
+  // Requires at least one significant token overlap with refName to prevent
+  // wrong-doctor matches when two contacts share the same phone number.
+  const _fullNameForPhone = (phone, refName) => {
     if (!phone) return null;
+    const refTokens = canonicalName(refName || '').split(' ').filter(t => t.length >= 3);
     let best = null;
     for (const [cn, cp] of Object.entries(c)) {
-      if (cp === phone && /^Dr\.?\s/i.test(cn) && cn.length > (best || '').length) best = cn;
+      if (cp !== phone || !/^Dr\.?\s/i.test(cn)) continue;
+      if (refTokens.length) {
+        const cnTokens = canonicalName(cn).split(' ').filter(t => t.length >= 3);
+        if (!refTokens.some(t => cnTokens.some(ct => ct === t || (t.length >= 4 && ct.length >= 4 && levenshtein(t, ct) <= 2)))) continue;
+      }
+      if (cn.length > (best || '').length) best = cn;
     }
     return best;
   };
-  if (c[entry.name]) return { phone: c[entry.name], uncertain: false, matchedName: _fullNameForPhone(c[entry.name]) };
+  if (c[entry.name]) return { phone: c[entry.name], uncertain: false, matchedName: _fullNameForPhone(c[entry.name], entry.name) };
   let best = null;
   for (const targetName of splitPossibleNames(entry.name)) {
-    if (c[targetName]) return { phone: c[targetName], uncertain: false, matchedName: _fullNameForPhone(c[targetName]) };
+    if (c[targetName]) return { phone: c[targetName], uncertain: false, matchedName: _fullNameForPhone(c[targetName], targetName) };
 
     // First-name unique match: if exactly ONE contact starts with this name → high confidence
     const targetFirst = canonicalName(targetName).split(' ')[0];
@@ -124,7 +139,7 @@ function resolvePhone(dept, entry) {
         ph && canonicalName(cn).split(' ')[0] === targetFirst
       );
       if (firstNameMatches.length === 1) {
-        return { phone: firstNameMatches[0][1], uncertain: false, matchedName: _fullNameForPhone(firstNameMatches[0][1]) || firstNameMatches[0][0] };
+        return { phone: firstNameMatches[0][1], uncertain: false, matchedName: _fullNameForPhone(firstNameMatches[0][1], targetName) || firstNameMatches[0][0] };
       }
     }
 
@@ -143,7 +158,7 @@ function resolvePhone(dept, entry) {
         return targetTokens.some(tt => cnTokens.some(ct => fuzzyTokenMatch(tt, ct)));
       });
       if (prefixMatches.length === 1) {
-        return { phone: prefixMatches[0][1], uncertain: false, matchedName: _fullNameForPhone(prefixMatches[0][1]) || prefixMatches[0][0] };
+        return { phone: prefixMatches[0][1], uncertain: false, matchedName: _fullNameForPhone(prefixMatches[0][1], targetName) || prefixMatches[0][0] };
       }
     }
 
@@ -172,12 +187,12 @@ function resolvePhone(dept, entry) {
         return cnFirst && cnFirst.startsWith(initial);
       });
       if (initialLastMatches.length === 1) {
-        return { phone: initialLastMatches[0][1], uncertain: false, matchedName: _fullNameForPhone(initialLastMatches[0][1]) || initialLastMatches[0][0] };
+        return { phone: initialLastMatches[0][1], uncertain: false, matchedName: _fullNameForPhone(initialLastMatches[0][1], targetName) || initialLastMatches[0][0] };
       }
       // Case 2: Initial doesn't match but last name is UNIQUE across all contacts
       // → likely typo/abbreviation, match with medium confidence (uncertain)
       if (initialLastMatches.length === 0 && allLastNameMatches.length === 1) {
-        return { phone: allLastNameMatches[0][1], uncertain: true, matchedName: _fullNameForPhone(allLastNameMatches[0][1]) || allLastNameMatches[0][0] };
+        return { phone: allLastNameMatches[0][1], uncertain: true, matchedName: _fullNameForPhone(allLastNameMatches[0][1], targetName) || allLastNameMatches[0][0] };
       }
     }
 
@@ -189,7 +204,7 @@ function resolvePhone(dept, entry) {
     }
   }
   if (!best) return null;
-  return { phone: best.phone, uncertain: best.uncertain, matchedName: _fullNameForPhone(best.phone) || best.matchedName };
+  return { phone: best.phone, uncertain: best.uncertain, matchedName: _fullNameForPhone(best.phone, best.matchedName) || best.matchedName };
 }
 
 function parseRoleMeta(role='') {
