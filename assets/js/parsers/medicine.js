@@ -56,6 +56,10 @@ function splitMedicineOnCallRowNames(body='', aliasIndex=null, expectedCount=MED
   // 1. Normalize "Dr.Bushra" → "Dr. Bushra" (PDF sometimes omits the space)
   // 2. Merge standalone "Dr." / "Dr" tokens with the following token
   //    so "Dr." doesn't consume a slot by itself in the DP split.
+  // 3. Merge single-letter initial tokens ("F.", "A.", "S.", "Z.", "M.", "H.")
+  //    with the following token.  PDF.js sometimes inserts a space after the
+  //    dot in "F.Yaqoub" → "F." + "Yaqoub", which breaks the 6-slot DP split
+  //    (7 tokens for 6 slots → tie-breaking picks the wrong grouping).
   const rawTokens = String(body || '').trim()
     .replace(/\bDr\.([A-Za-z])/gi, 'Dr. $1')  // "Dr.Bushra" → "Dr. Bushra"
     .split(/\s+/).filter(Boolean);
@@ -63,6 +67,12 @@ function splitMedicineOnCallRowNames(body='', aliasIndex=null, expectedCount=MED
   for (let i = 0; i < rawTokens.length; i++) {
     if (/^Dr\.?$/i.test(rawTokens[i]) && i + 1 < rawTokens.length && !/^Dr\.?$/i.test(rawTokens[i + 1])) {
       tokens.push(`${rawTokens[i]} ${rawTokens[i + 1]}`);
+      i++; // skip next token — already merged
+    } else if (/^[A-Za-z]\.?$/.test(rawTokens[i]) && i + 1 < rawTokens.length && /^[A-Za-z]{2,}/.test(rawTokens[i + 1])) {
+      // Single-letter initial like "F." or "S" followed by a name token — merge them
+      // so "F." + "Yaqoub" → "F.Yaqoub" (reconstruct the Initial.Name pattern)
+      const initial = rawTokens[i].replace(/\.?$/, '');  // strip trailing dot if present
+      tokens.push(`${initial}.${rawTokens[i + 1]}`);
       i++; // skip next token — already merged
     } else {
       tokens.push(rawTokens[i]);
