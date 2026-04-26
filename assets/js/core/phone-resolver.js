@@ -129,6 +129,40 @@ function resolvePhone(dept, entry) {
       }
     }
 
+    // Initial + last name match: "K.Albuainin"→"Khalifah Albuainin", "M.Elkholy"→"Mohammed A. Elkholy"
+    // Detect patterns like "X.LastName", "X. LastName", "X LastName" where X is a single letter
+    const initialLastMatch = targetName.match(/^([A-Za-z])[\.\s]+([A-Za-z]{3,})$/);
+    if (initialLastMatch) {
+      const initial = initialLastMatch[1].toLowerCase();
+      const lastRaw = canonicalName(initialLastMatch[2]);
+      // Find all contacts whose last name matches (regardless of initial)
+      const lastNameFn = (cnLast) => {
+        if (cnLast === lastRaw) return true;
+        if ((cnLast.startsWith(lastRaw) || lastRaw.startsWith(cnLast)) && Math.abs(cnLast.length - lastRaw.length) <= 2) return true;
+        if (lastRaw.length >= 4 && cnLast.length >= 4 && levenshtein(lastRaw, cnLast) <= 2) return true;
+        return false;
+      };
+      const allLastNameMatches = Object.entries(c).filter(([cn, ph]) => {
+        if (!ph) return false;
+        const cnTokens = canonicalName(cn).split(' ').filter(Boolean);
+        if (cnTokens.length < 2) return false;
+        return lastNameFn(cnTokens[cnTokens.length - 1]);
+      });
+      // Case 1: Initial matches first name → high confidence
+      const initialLastMatches = allLastNameMatches.filter(([cn]) => {
+        const cnFirst = canonicalName(cn).split(' ').filter(Boolean)[0];
+        return cnFirst && cnFirst.startsWith(initial);
+      });
+      if (initialLastMatches.length === 1) {
+        return { phone: initialLastMatches[0][1], uncertain: false };
+      }
+      // Case 2: Initial doesn't match but last name is UNIQUE across all contacts
+      // → likely typo/abbreviation, match with medium confidence (uncertain)
+      if (initialLastMatches.length === 0 && allLastNameMatches.length === 1) {
+        return { phone: allLastNameMatches[0][1], uncertain: true };
+      }
+    }
+
     for (const [contactName, phone] of Object.entries(c)) {
       if (!phone) continue;
       const match = scoreNameMatch(targetName, contactName);
@@ -165,6 +199,9 @@ function isNameUncertain(name='') {
       const prevLong = i > 0 && tokens[i - 1].length >= 3;
       const nextLong = i < tokens.length - 1 && tokens[i + 1].length >= 3;
       if (prevLong && nextLong) return false;
+      // A single initial at position 0 followed by a last name (≥3 chars) is "H. Barbari" pattern.
+      // This is a normal name abbreviation, not ambiguous.
+      if (i === 0 && nextLong && tokens.length === 2) return false;
       return true;
     });
   });
