@@ -112,6 +112,12 @@ function resolveMedicineOnCallName(raw='', contactResult=null) {
   for (const candidate of directCandidates) {
     if (dept.contacts?.[candidate]) {
       if (/^dr\.?/i.test(candidate)) return candidate;
+      // Non-Dr alias matched — reverse-lookup full name by phone
+      const aliasPhone = dept.contacts[candidate];
+      const fullEntry = Object.entries(dept.contacts).find(([cn, cp]) =>
+        cp === aliasPhone && /^Dr\.?\s/i.test(cn)
+      );
+      if (fullEntry) return fullEntry[0];
     }
   }
   const normalizedToken = normalizeText(token.replace(/\./g, ' '));
