@@ -74,7 +74,15 @@ function scoreNameMatch(target, candidate) {
 }
 
 function resolvePhone(dept, entry) {
-  if (entry.phone) return { phone: entry.phone, uncertain: !!entry.phoneUncertain, matchedName: null };
+  if (entry.phone) {
+    // Entry already has a phone — still resolve the full "Dr. ..." name from contacts
+    const c0 = dept.contacts || {};
+    let fullName = null;
+    for (const [cn, cp] of Object.entries(c0)) {
+      if (cp === entry.phone && /^Dr\.?\s/i.test(cn) && cn.length > (fullName || '').length) fullName = cn;
+    }
+    return { phone: entry.phone, uncertain: !!entry.phoneUncertain, matchedName: fullName };
+  }
   // Check server-extracted contacts first (pdfplumber, all specialties)
   const sc = (typeof window !== 'undefined' && window._serverExtractedContacts) || {};
   const nameNorm = canonicalName(entry.name || '');
