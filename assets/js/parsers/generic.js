@@ -283,9 +283,13 @@ function buildContactMapFromText(text='') {
       let raw = m[0].replace(/[\s-]/g,'');
       if (raw.startsWith('966')) raw = '0' + raw.slice(3);
       if (/^5\d{8}$/.test(raw)) raw = '0' + raw;
-      // Use search (not match) so "50506853000" → "0506853000" when a stray digit precedes
-      const found = raw.match(/05\d{8}/);
-      return found ? found[0] : null;
+      // When extension numbers merge with phone (e.g. "056 - 056 902 1663" → "0560569021663"),
+      // scan from end to find the last valid 05XXXXXXXX pattern (the actual phone, not extension).
+      let found = null;
+      for (let i = raw.length - 10; i >= 0; i--) {
+        if (/^05\d{8}$/.test(raw.substring(i, i + 10))) { found = raw.substring(i, i + 10); break; }
+      }
+      return found;
     }).filter(Boolean);
 
     if (!allPhones.length) continue;
@@ -477,7 +481,7 @@ function resolvePhoneFromContactMap(name='', contactResult) {
     if (rw.length === 0) return null;
     if (rw.length === 1) {
       const w = rw[0].toLowerCase();
-      if (!w.startsWith('al') && w.length < 8) return null;
+      if (!w.startsWith('al') && w.length < 5) return null;
     }
   }
 
@@ -503,13 +507,22 @@ function resolvePhoneFromContactMap(name='', contactResult) {
   }
   function editDist1(a, b) { return levenshtein(a,b) <= 1; }
 
-  // Step 2b: single-token edit-distance-1 against bare single-word altMap keys
-  for (const part of nk.split(' ').filter(p => p.length >= 6)) {
+  // Step 2b: single-token edit-distance-1 against altMap keys.
+  // For single-word keys: match directly.
+  // For multi-word keys: match query token against any token in the key.
+  for (const part of nk.split(' ').filter(p => p.length >= 5)) {
+    const hits = [];
     for (const [ak, av] of Object.entries(altMap)) {
-      if (ak.includes(' ')) continue;
-      if (ak.length >= 5 && editDist1(part, ak)) {
-        return { phone: av, uncertain: true, matchedName: altMapKeys[ak] || null };
-      }
+      const akTokens = ak.split(' ').filter(Boolean);
+      const matched = akTokens.some(t => t.length >= 5 && editDist1(part, t));
+      if (matched) hits.push({ phone: av, matchedName: altMapKeys[ak] || null });
+    }
+    // Deduplicate by phone — only resolve if unambiguous
+    const byPhone = new Map();
+    hits.forEach(h => { if (!byPhone.has(h.phone)) byPhone.set(h.phone, h.matchedName); });
+    if (byPhone.size === 1) {
+      const [[ph, nm]] = byPhone.entries();
+      return { phone: ph, uncertain: true, matchedName: nm };
     }
   }
 
