@@ -107,7 +107,7 @@ function splitMedicineOnCallRowNames(body='', aliasIndex=null, expectedCount=MED
   return solve(0, 0)?.groups || [];
 }
 
-function resolveMedicineOnCallName(raw='', contactResult=null) {
+function resolveMedicineOnCallName(raw='', contactResult=null, section='') {
   // Normalize "Dr.Name" → "Dr. Name" early — PDF sometimes omits the space
   const token = String(raw || '').trim().replace(/^[.-]+|[.-]+$/g, '').replace(/^Dr\.([A-Za-z])/i, 'Dr. $1');
   if (!token) return '';
@@ -159,7 +159,17 @@ function resolveMedicineOnCallName(raw='', contactResult=null) {
     if (!score) return;
     // Prefer names already in ROTAS contacts over PDF-extracted-only names when scores tie
     const inRotas = name in (dept.contacts || {});
-    const effectiveScore = score.score + (inRotas ? 1 : 0);
+    let effectiveScore = score.score + (inRotas ? 1 : 0);
+    // Position-based disambiguation: prefer candidates whose resident level matches the column
+    if (section && contactResult?.positionMap) {
+      const posNk = (name || '').toLowerCase().replace(/^dr\.?\s*/, '').replace(/\./g, ' ').replace(/[^a-z ]/g, ' ').replace(/\s+/g, ' ').trim();
+      const pos = contactResult.positionMap[posNk];
+      if (pos) {
+        const isSeniorCol = /senior/i.test(section);
+        const isSeniorRes = pos.level >= 3;
+        if (isSeniorCol === isSeniorRes) effectiveScore += 2;
+      }
+    }
     if (!best || effectiveScore > best.score) best = { name, score: effectiveScore };
   });
   if (best?.name) {
@@ -173,7 +183,7 @@ function resolveMedicineOnCallName(raw='', contactResult=null) {
 }
 
 function buildMedicineOnCallRow(dateKey='', roleMeta={}, rawName='', contactResult=null, deptKey='medicine_on_call') {
-  const name = resolveMedicineOnCallName(rawName, contactResult);
+  const name = resolveMedicineOnCallName(rawName, contactResult, roleMeta.section);
   // Evaluate both sources independently — do NOT short-circuit on uncertain results.
   // "Ali" is 3 chars and gets filtered from nameParts (threshold ≥ 4), so the fuzzy
   // step in resolvePhoneFromContactMap returns uncertain=true even when it finds the

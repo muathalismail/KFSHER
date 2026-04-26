@@ -184,6 +184,7 @@ function buildContactMapFromText(text='') {
   const map = {};           // canonical → phone
   const altMap = {};        // for fuzzy lookup: normalized → phone
   const altMapKeys = {};    // normalized → original name (for display-name expansion)
+  const positionMap = {};   // normalized name → { level, raw } from "Resident N" in contact table
 
   const PHONE_RE = /(?:\+?966[\s-]*)?0?5[\d\s-]{7,16}/g;
   const STOP_WORDS = new Set([
@@ -328,6 +329,14 @@ function buildContactMapFromText(text='') {
         const solo = nameTokens[0].trim();
         if (solo.length >= 4 && !STOP_WORDS.has(solo.toLowerCase())) addEntry(solo, phone);
       }
+      // Detect resident position level from the raw line (e.g. "Resident 3")
+      const posMatch = line.match(/\bResident\s+(\d)\b/i);
+      if (posMatch && nameTokens.length >= 2) {
+        const posNk = normKey(nameTokens.join(' '));
+        if (posNk && !positionMap[posNk]) {
+          positionMap[posNk] = { level: parseInt(posMatch[1], 10), raw: posMatch[0] };
+        }
+      }
     } else {
       // Multiple phones: Urology-style packed line — pair each name chunk with its phone
       // Strategy: split by phone positions, take text between consecutive phones as names
@@ -399,7 +408,7 @@ function buildContactMapFromText(text='') {
     }
   }
 
-  return { map, altMap, altMapKeys };
+  return { map, altMap, altMapKeys, positionMap };
 }
 
 // mergeResolvedContactsIntoDept, hydrateBundledDeptContacts,
