@@ -74,12 +74,12 @@ function scoreNameMatch(target, candidate) {
 }
 
 function resolvePhone(dept, entry) {
-  if (entry.phone) return { phone: entry.phone, uncertain: !!entry.phoneUncertain };
+  if (entry.phone) return { phone: entry.phone, uncertain: !!entry.phoneUncertain, matchedName: null };
   // Check server-extracted contacts first (pdfplumber, all specialties)
   const sc = (typeof window !== 'undefined' && window._serverExtractedContacts) || {};
   const nameNorm = canonicalName(entry.name || '');
   for (const [scName, scPhone] of Object.entries(sc)) {
-    if (scPhone && canonicalName(scName) === nameNorm) return { phone: scPhone, uncertain: false };
+    if (scPhone && canonicalName(scName) === nameNorm) return { phone: scPhone, uncertain: false, matchedName: scName };
   }
   // Server contacts: prefix match with uniqueness
   const scTokens = nameNorm.split(' ').filter(t => t.length >= 3);
@@ -91,13 +91,23 @@ function resolvePhone(dept, entry) {
         (ct.startsWith(tt) || tt.startsWith(ct)) && Math.abs(ct.length - tt.length) <= 2
       ));
     });
-    if (scPrefix.length === 1) return { phone: scPrefix[0][1], uncertain: false };
+    if (scPrefix.length === 1) return { phone: scPrefix[0][1], uncertain: false, matchedName: scPrefix[0][0] };
   }
   const c = dept.contacts || {};
-  if (c[entry.name]) return { phone: c[entry.name], uncertain: false };
+  // Helper: find the best full name for a phone number from the contacts dict
+  // Prefers "Dr. ..." entries over short aliases
+  const _fullNameForPhone = (phone) => {
+    if (!phone) return null;
+    let best = null;
+    for (const [cn, cp] of Object.entries(c)) {
+      if (cp === phone && /^Dr\.?\s/i.test(cn) && cn.length > (best || '').length) best = cn;
+    }
+    return best;
+  };
+  if (c[entry.name]) return { phone: c[entry.name], uncertain: false, matchedName: _fullNameForPhone(c[entry.name]) };
   let best = null;
   for (const targetName of splitPossibleNames(entry.name)) {
-    if (c[targetName]) return { phone: c[targetName], uncertain: false };
+    if (c[targetName]) return { phone: c[targetName], uncertain: false, matchedName: _fullNameForPhone(c[targetName]) };
 
     // First-name unique match: if exactly ONE contact starts with this name → high confidence
     const targetFirst = canonicalName(targetName).split(' ')[0];
@@ -106,7 +116,7 @@ function resolvePhone(dept, entry) {
         ph && canonicalName(cn).split(' ')[0] === targetFirst
       );
       if (firstNameMatches.length === 1) {
-        return { phone: firstNameMatches[0][1], uncertain: false };
+        return { phone: firstNameMatches[0][1], uncertain: false, matchedName: _fullNameForPhone(firstNameMatches[0][1]) || firstNameMatches[0][0] };
       }
     }
 
@@ -125,7 +135,7 @@ function resolvePhone(dept, entry) {
         return targetTokens.some(tt => cnTokens.some(ct => fuzzyTokenMatch(tt, ct)));
       });
       if (prefixMatches.length === 1) {
-        return { phone: prefixMatches[0][1], uncertain: false };
+        return { phone: prefixMatches[0][1], uncertain: false, matchedName: _fullNameForPhone(prefixMatches[0][1]) || prefixMatches[0][0] };
       }
     }
 
@@ -154,12 +164,12 @@ function resolvePhone(dept, entry) {
         return cnFirst && cnFirst.startsWith(initial);
       });
       if (initialLastMatches.length === 1) {
-        return { phone: initialLastMatches[0][1], uncertain: false };
+        return { phone: initialLastMatches[0][1], uncertain: false, matchedName: _fullNameForPhone(initialLastMatches[0][1]) || initialLastMatches[0][0] };
       }
       // Case 2: Initial doesn't match but last name is UNIQUE across all contacts
       // → likely typo/abbreviation, match with medium confidence (uncertain)
       if (initialLastMatches.length === 0 && allLastNameMatches.length === 1) {
-        return { phone: allLastNameMatches[0][1], uncertain: true };
+        return { phone: allLastNameMatches[0][1], uncertain: true, matchedName: _fullNameForPhone(allLastNameMatches[0][1]) || allLastNameMatches[0][0] };
       }
     }
 
@@ -167,11 +177,11 @@ function resolvePhone(dept, entry) {
       if (!phone) continue;
       const match = scoreNameMatch(targetName, contactName);
       if (!match) continue;
-      if (!best || match.score > best.score) best = { ...match, phone };
+      if (!best || match.score > best.score) best = { ...match, phone, matchedName: contactName };
     }
   }
   if (!best) return null;
-  return { phone: best.phone, uncertain: best.uncertain };
+  return { phone: best.phone, uncertain: best.uncertain, matchedName: _fullNameForPhone(best.phone) || best.matchedName };
 }
 
 function parseRoleMeta(role='') {

@@ -178,7 +178,8 @@ async function buildCard(deptKey, dept, entries) {
 
     entries.forEach(e => {
       const ph = resolvePhone(dept, e);
-      const explicitNameReview = typeof e.doctorNameUncertain === 'boolean' ? e.doctorNameUncertain : isNameUncertain(e.name);
+      const displayName = (ph && !ph.uncertain && ph.matchedName) ? ph.matchedName : e.name;
+      const explicitNameReview = typeof e.doctorNameUncertain === 'boolean' ? e.doctorNameUncertain : isNameUncertain(displayName);
       const nameReview = explicitNameReview && !(deptKey === 'radiology_duty' && e.parsedFromPdf);
       const phone = ph ? cleanPhone(ph.phone) : '';
       const phoneText = ph ? `${ph.phone}${ph.uncertain ? ' ?' : ''}` : '';
@@ -207,7 +208,7 @@ async function buildCard(deptKey, dept, entries) {
       rowsHtml += `
         <div class="${rowClass}" style="${rowStyle}">
           <div class="dinfo">
-            <div class="ddrname">${e.name}${nameReview ? ' ?' : ''}${confMark}</div>
+            <div class="ddrname">${displayName}${nameReview ? ' ?' : ''}${confMark}</div>
             <div class="drrole">${e.role}</div>
             <div class="dsection">${section}</div>
             <div class="dshift">${shiftTime}</div>
