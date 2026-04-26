@@ -1336,6 +1336,8 @@ async function extractPdfText(file) {
         const totalWidth = currentLineItems.reduce((s, it) => s + (it.width || 0), 0);
         const avgCharW = totalWidth > 0 ? totalWidth / totalChars : 6;
         // Build the line, inserting double-space where gap > 1.5 * avgCharW
+        // ZONE SPLIT: if gap > 100px, treat as schedule/contact table boundary
+        // and emit two separate lines instead of merging them
         let line = '';
         for (let j = 0; j < currentLineItems.length; j++) {
           const it = currentLineItems[j];
@@ -1345,8 +1347,13 @@ async function extractPdfText(file) {
             const prev = currentLineItems[j - 1];
             const prevEnd = prev.x + (prev.width || prev.str.length * avgCharW);
             const gap = it.x - prevEnd;
-            // Large gap → column separator (double space); normal gap → single space
-            line += (gap > avgCharW * 1.8 ? '  ' : ' ') + it.str;
+            if (gap > 100) {
+              // Large zone gap — emit schedule line, start contact line separately
+              lineChunks.push(line.trimEnd());
+              line = it.str;
+            } else {
+              line += (gap > avgCharW * 1.8 ? '  ' : ' ') + it.str;
+            }
           }
         }
         lineChunks.push(line.trimEnd());
