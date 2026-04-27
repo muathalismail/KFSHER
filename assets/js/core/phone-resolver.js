@@ -117,7 +117,9 @@ function _classifyTokenMatch(tTokens, cTokens) {
         continue;
       }
       // Rules 3-4: levenshtein distance
-      if (tt.length >= 4 && ct.length >= 4) {
+      // Lev-1: min 3 chars (covers Al-stripped names like "ali" vs "aly")
+      // Lev-2: min 5 chars (stricter to avoid false positives on short tokens)
+      if (tt.length >= 3 && ct.length >= 3) {
         const dist = levenshtein(tt, ct);
         if (dist === 1 && (!bestForToken || _RULE_RANK[bestForToken] > _RULE_RANK['levenshtein-1'])) {
           bestForToken = 'levenshtein-1';
@@ -142,7 +144,7 @@ function resolvePhone(dept, entry) {
       if (cp !== entry.phone || !/^Dr\.?\s/i.test(cn)) continue;
       if (refTokens.length) {
         const cnTokens = canonicalName(cn).split(' ').filter(t => t.length >= 3);
-        if (!refTokens.some(t => cnTokens.some(ct => ct === t || (t.length >= 4 && ct.length >= 4 && levenshtein(t, ct) <= 2)))) continue;
+        if (!refTokens.some(t => cnTokens.some(ct => ct === t || (t.length >= 3 && ct.length >= 3 && levenshtein(t, ct) <= 2)))) continue;
       }
       if (cn.length > (fullName || '').length) fullName = cn;
     }
@@ -183,7 +185,7 @@ function resolvePhone(dept, entry) {
       if (cp !== phone || !/^Dr\.?\s/i.test(cn)) continue;
       if (refTokens.length) {
         const cnTokens = canonicalName(cn).split(' ').filter(t => t.length >= 3);
-        if (!refTokens.some(t => cnTokens.some(ct => ct === t || (t.length >= 4 && ct.length >= 4 && levenshtein(t, ct) <= 2)))) continue;
+        if (!refTokens.some(t => cnTokens.some(ct => ct === t || (t.length >= 3 && ct.length >= 3 && levenshtein(t, ct) <= 2)))) continue;
       }
       if (cn.length > (best || '').length) best = cn;
     }
@@ -241,6 +243,36 @@ function resolvePhone(dept, entry) {
       if (matches.size === 1) {
         const [[ph, cn]] = [...matches.entries()];
         return { phone: ph, uncertain, matchedName: _fullNameForPhone(ph, targetName) || cn, matchRule: rule };
+      }
+    }
+
+    // ── Rule 4.5: Firstname + last-name initial ("Mohammed.K", "Sara.A") ──
+    // When rules 1-4 are ambiguous (2+ matches), a single-letter token
+    // can disambiguate by matching the start of a contact's last name
+    // (after Al/El stripping via canonicalName).
+    const lastNameInitial = tTokens.find(t => t.length === 1);
+    const sigTokens = tTokens.filter(t => t.length >= 3);
+    if (lastNameInitial && sigTokens.length >= 1) {
+      // Find the best rule that had ambiguous (2+) results
+      for (const [rule, uncertain] of RULE_ORDER) {
+        const matches = ruleMatches[rule];
+        if (matches.size < 2) continue;
+        // Filter: keep only contacts whose (Al/El-stripped) last name starts with the initial
+        const filtered = new Map();
+        for (const [ph] of matches) {
+          for (const [cn2, ph2] of Object.entries(c)) {
+            if (ph2 !== ph) continue;
+            const cTokens = canonicalName(cn2).split(' ').filter(Boolean);
+            if (cTokens.length < 2) continue;
+            if (cTokens[cTokens.length - 1].startsWith(lastNameInitial)) {
+              if (!filtered.has(ph)) filtered.set(ph, cn2);
+            }
+          }
+        }
+        if (filtered.size === 1) {
+          const [[ph, cn]] = [...filtered.entries()];
+          return { phone: ph, uncertain, matchedName: _fullNameForPhone(ph, targetName) || cn, matchRule: rule };
+        }
       }
     }
 
