@@ -75,7 +75,14 @@ function tokenizeNeurosurgeryRow(body='') {
   // then clean up each column value
   const source = String(body || '').replace(/\b\d{3,}.*$/, '').trim();
   const columns = source.split(/\s{2,}/).map(s => s.trim()).filter(Boolean);
-  return columns.map(col => normalizeNeurosurgeryName(col));
+  // Remove trailing tokens from the contact table / header area that leak in:
+  // "Neurosurgery Department", "Nerosurgery Consultants", "Residents", phone numbers, IDs
+  const cleaned = columns.filter(col =>
+    !/^(Neurosurgery|Nerosurgery|Neurosciences|Department|Consultants?|Residents?|Assistant|Staff|Contact|Spine|Surgery)\b/i.test(col)
+    && !/^\d{5,}/.test(col)           // ID numbers
+    && !/^0\d{9}/.test(col)           // phone numbers
+  );
+  return cleaned.map(col => normalizeNeurosurgeryName(col));
 }
 
 /**
