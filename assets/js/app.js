@@ -2000,6 +2000,55 @@ async function parseUploadedPdf(file, deptKey) {
     } catch (err) {
       console.warn('[ENT] Server schedule extraction failed, using client-side:', err.message);
     }
+  } else if (deptKey === 'pediatrics') {
+    // Use server-side pdfplumber table extraction + Claude API for name resolution
+    try {
+      const buffer = await file.arrayBuffer();
+      const b64 = btoa(new Uint8Array(buffer).reduce((s, b) => s + String.fromCharCode(b), ''));
+      const resp = await fetch('/api/extract-table', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pdf_base64: b64, specialty: 'pediatrics' }),
+      });
+      if (resp.ok) {
+        const result = await resp.json();
+        let rows = (result.rows || []).filter(r => r.first_oncall || r.second_oncall || r.hospitalist_er || r.hospitalist_after);
+        if (rows.length) {
+          console.log(`[PEDIATRICS] Server extracted ${rows.length} schedule rows`);
+          // Use Claude API to resolve abbreviated names against the contact list
+          const contacts = await serverContactsPromise.catch(() => null);
+          if (contacts && Object.keys(contacts).length) {
+            try {
+              const llmResp = await fetch('/api/llm-parse-pediatrics', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ schedule_rows: rows, contacts }),
+              });
+              if (llmResp.ok) {
+                const resolved = await llmResp.json();
+                if (Array.isArray(resolved) && resolved.length) {
+                  rows = resolved.map(r => ({
+                    date: r.date || '',
+                    first_oncall: r.first_oncall || '',
+                    second_oncall: r.second_oncall || '',
+                    third_oncall: r.third_oncall || '',
+                    hospitalist_er: r.hospitalist_er || '',
+                    hospitalist_ward: r.hospitalist_ward || '',
+                    hospitalist_after: r.hospitalist_after || '',
+                  }));
+                  console.log(`[PEDIATRICS] LLM resolved ${resolved.length} rows with full names`);
+                }
+              }
+            } catch (llmErr) {
+              console.warn('[PEDIATRICS] LLM name resolution failed, using pdfplumber names:', llmErr.message);
+            }
+          }
+          parsePediatricsPdfEntries._serverSchedule = rows;
+        }
+      }
+    } catch (err) {
+      console.warn('[PEDIATRICS] Server schedule extraction failed, using client-side:', err.message);
+    }
   } else if (deptKey === 'orthopedics' || deptKey === 'spine' || deptKey === 'neurosurgery') {
     try {
       const buffer = await file.arrayBuffer();
@@ -2140,6 +2189,9 @@ async function parseUploadedPdf(file, deptKey) {
   }
   if (deptKey === 'neurosurgery' && typeof parseNeurosurgeryPdfEntries !== 'undefined') {
     delete parseNeurosurgeryPdfEntries._serverSchedule;
+  }
+  if (deptKey === 'pediatrics' && typeof parsePediatricsPdfEntries !== 'undefined') {
+    delete parsePediatricsPdfEntries._serverSchedule;
   }
 
   const parseDebug = {

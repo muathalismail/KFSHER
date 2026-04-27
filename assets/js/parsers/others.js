@@ -812,6 +812,48 @@ function parsePediatricsPdfEntries(text='', deptKey='pediatrics') {
   // Build the phone map from this PDF's own contact table — done once per upload.
   const pdfContactMap = buildPediatricsPdfContactMap(text);
 
+  // ── PRIMARY PATH: server-side pdfplumber + LLM schedule ──
+  const serverSchedule = parsePediatricsPdfEntries._serverSchedule;
+  if (Array.isArray(serverSchedule) && serverSchedule.length) {
+    console.log(`[PEDIATRICS] Using server-extracted schedule (${serverSchedule.length} rows)`);
+    const FIELD_TO_ROLE = [
+      { field: 'first_oncall',     role: PEDIATRICS_ROLES[0] },
+      { field: 'second_oncall',    role: PEDIATRICS_ROLES[1] },
+      { field: 'third_oncall',     role: PEDIATRICS_ROLES[2] },
+      { field: 'hospitalist_er',   role: PEDIATRICS_ROLES[3] },
+      { field: 'hospitalist_ward', role: PEDIATRICS_ROLES[4] },
+      { field: 'hospitalist_after',role: PEDIATRICS_ROLES[5] },
+    ];
+    for (const row of serverSchedule) {
+      const dateKey = row.date || '';
+      if (!dateKey) continue;
+      for (const { field, role } of FIELD_TO_ROLE) {
+        const rawName = (row[field] || '').trim();
+        if (!rawName) continue;
+        const resolved = resolvePediatricsPhone(rawName, pdfContactMap, rotasContacts)
+          || { phone: '', uncertain: true };
+        entries.push({
+          specialty: deptKey,
+          date: dateKey,
+          role: role.role,
+          name: (resolved && resolved.canonicalName) || rawName,
+          phone: resolved.phone || '',
+          phoneUncertain: !resolved.phone || !!resolved.uncertain,
+          startTime: role.startTime,
+          endTime: role.endTime,
+          shiftType: role.shiftType,
+          parsedFromPdf: true,
+        });
+      }
+    }
+    const deduped = dedupeParsedEntries(entries);
+    deduped._templateDetected = deduped.length >= 20;
+    deduped._templateName = deduped._templateDetected ? 'pediatrics-server' : '';
+    deduped._serverExtracted = true;
+    return deduped;
+  }
+
+  // ── FALLBACK: client-side text parsing ──
   // Actual PDF format: "Wed 1/4/2026  col1  col2  ..."
   // Short day abbreviations; date as day/month/year with no leading zeros (e.g. 1/4/2026)
   // Detect month/year from PDF — supports any month, not just April 2026
