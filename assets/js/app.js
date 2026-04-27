@@ -2082,10 +2082,36 @@ async function parseUploadedPdf(file, deptKey) {
         body: JSON.stringify({ pdf_base64: b64 }),
       });
       if (resp.ok) {
-        const rows = await resp.json();
+        let rows = await resp.json();
         if (Array.isArray(rows) && rows.length) {
           console.log(`[RADIOLOGY_ONCALL] Server extracted ${rows.length} schedule rows`);
-          // Store server schedule for the parser to use
+          // Use Claude API to resolve abbreviated names against the contact list
+          const contacts = await serverContactsPromise.catch(() => null);
+          if (contacts && Object.keys(contacts).length) {
+            try {
+              const llmResp = await fetch('/api/llm-parse-radiology-oncall', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ schedule_rows: rows, contacts }),
+              });
+              if (llmResp.ok) {
+                const resolved = await llmResp.json();
+                if (Array.isArray(resolved) && resolved.length) {
+                  rows = resolved.map(r => ({
+                    date: r.date || '',
+                    day: r.day || '',
+                    first: r.first || '',
+                    second: r.second || '',
+                    third: r.third || '',
+                    shift: r.shift || '',
+                  }));
+                  console.log(`[RADIOLOGY_ONCALL] LLM resolved ${resolved.length} rows with full names`);
+                }
+              }
+            } catch (llmErr) {
+              console.warn('[RADIOLOGY_ONCALL] LLM name resolution failed, using pdfplumber names:', llmErr.message);
+            }
+          }
           parseRadiologyOnCallPdfEntries._serverSchedule = rows;
         }
       }
