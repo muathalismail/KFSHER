@@ -34,6 +34,12 @@ Columns: Date | Shift | 1st On-Call Resident | 2nd On-Call Resident | 3rd On-Cal
 - Weekends have two rows per date: "am" (07:30-19:30) and "pm" (19:30-07:30)
 - 3rd On-Call may be empty on some dates
 
+Role-to-position mapping (CRITICAL for disambiguation):
+- 1st On-Call and 2nd On-Call are ALWAYS Residents — never Fellows or Consultants
+- 3rd On-Call is a Fellow or Consultant
+- When multiple contacts share a similar name (e.g. "Fatimah Alsaad" appears as both a Fellow and a Resident), pick the Resident for 1st/2nd On-Call, and the Fellow for 3rd On-Call
+- Contact list labels like "(F1 - Breast)" mean Fellow; "(ext)" means external/resident
+
 Data:
 {schedule_lines}
 
@@ -58,6 +64,7 @@ Match each name in the schedule to the correct full name from the contact list.
 ### Additional rules:
 - If a cell is empty, return null for that field.
 - Do NOT add "Dr." prefix — imaging contacts use plain names without "Dr." prefix.
+- Strip "(F1 - ...)", "(ext)", "Dr.", and role labels from output names — output clean names only.
 - If you cannot confidently match a name, return the original text AND set "unresolved": true on that row.
 - NEVER guess — unresolved is safer than wrong.
 - Preserve the "shift" field exactly as given (am/pm or empty).
@@ -77,16 +84,10 @@ def resolve_names_with_llm(schedule_rows, contacts):
     if not api_key:
         return None  # no API key -> caller falls back to client-side
 
-    # Clean contact names: strip "Resident", "Consultant", trailing dashes
-    cleaned_contacts = {}
-    for name, phone in contacts.items():
-        cleaned = _clean_contact_name(name)
-        if cleaned and phone:
-            cleaned_contacts[cleaned] = phone
-
-    # Format contacts for the prompt (shared across all batches)
+    # Format contacts for the prompt using ORIGINAL names (with Fellow/Resident labels
+    # visible for disambiguation), but instruct LLM to output clean names.
     contact_lines = '\n'.join(
-        f'- {name}: {phone}' for name, phone in cleaned_contacts.items()
+        f'- {name}: {phone}' for name, phone in contacts.items() if phone
     ) or '(no contacts extracted)'
 
     client = anthropic.Anthropic(api_key=api_key)
