@@ -1837,36 +1837,46 @@ async function hydrateBundledPicuSchedule() {
 // ── DAY-SEQUENCE PARSER ───────────────────────────────────────
 
 async function parseUploadedPdf(file, deptKey) {
+  // ── Start server-side extraction IN PARALLEL with local text extraction ──
+  // The server call only needs the raw file bytes, not the parsed text,
+  // so we can overlap the two operations to save 200-800ms.
+  const serverContactsPromise = (async () => {
+    try {
+      const buffer = await file.arrayBuffer();
+      const b64 = btoa(new Uint8Array(buffer).reduce((s, b) => s + String.fromCharCode(b), ''));
+      const resp = await fetch('/api/extract-contacts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pdf_base64: b64 }),
+      });
+      if (resp.ok) {
+        const serverContacts = await resp.json();
+        if (serverContacts && !serverContacts.error) return serverContacts;
+      }
+    } catch (err) {
+      console.warn('[SERVER] Contact extraction failed, using client-side:', err.message);
+    }
+    return null;
+  })();
+
   // Liver rota: use column-aware extraction to prevent empty-cell drift
   let liverColumnar = null;
   if (deptKey === 'liver') {
     try { liverColumnar = await extractLiverColumnarText(file); } catch (_) {}
   }
   const text = (liverColumnar && liverColumnar.columnar) ? liverColumnar.text : await extractPdfText(file);
+
+  // ── Wait for server contacts before parsing (parser may use them) ──
+  const serverContacts = await serverContactsPromise;
+  if (serverContacts) {
+    window._serverExtractedContacts = serverContacts;
+    if (typeof parseRadiologyOnCallPdfEntries !== 'undefined') parseRadiologyOnCallPdfEntries._serverContacts = serverContacts;
+    console.log(`[SERVER] Extracted ${Object.keys(serverContacts).length} contacts for ${deptKey}`);
+  }
+
   let parsed;
   let parserMode = 'generic';
   let parserMeta = { templateDetected: false };
-
-  // Server-side phone extraction via pdfplumber — applies to ALL specialties
-  try {
-    const buffer = await file.arrayBuffer();
-    const b64 = btoa(new Uint8Array(buffer).reduce((s, b) => s + String.fromCharCode(b), ''));
-    const resp = await fetch('/api/extract-contacts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pdf_base64: b64 }),
-    });
-    if (resp.ok) {
-      const serverContacts = await resp.json();
-      if (serverContacts && !serverContacts.error) {
-        window._serverExtractedContacts = serverContacts;
-        if (typeof parseRadiologyOnCallPdfEntries !== 'undefined') parseRadiologyOnCallPdfEntries._serverContacts = serverContacts;
-        console.log(`[SERVER] Extracted ${Object.keys(serverContacts).length} contacts for ${deptKey}`);
-      }
-    }
-  } catch (err) {
-    console.warn('[SERVER] Contact extraction failed, using client-side:', err.message);
-  }
 
   // Use registry for parser dispatch
   const strategy = getParserForDept(deptKey, file.name);
@@ -2864,8 +2874,8 @@ document.addEventListener('DOMContentLoaded', () => {
     await refreshPdfListAsync();
     renderTags();
     renderWelcomeGrid();
-    await Auditor.runRegressionSuite();
-    Auditor.renderReviewPanel();
+    // Run regression suite in background — don't block the upload response
+    Auditor.runRegressionSuite().then(() => Auditor.renderReviewPanel()).catch(() => {});
     status.innerHTML = debugLines.length
       ? debugLines.map(item => {
           const okClass = item.searchable ? 'ok' : 'fail';
