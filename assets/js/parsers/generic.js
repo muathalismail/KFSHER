@@ -229,6 +229,8 @@ function buildContactMapFromText(text='') {
       while (pts.length > 1 && STOP_WORDS.has(pts[pts.length - 1].toLowerCase())) pts.pop();
       name = pts.join(' ');
     }
+    // Collapse duplicate "Dr." honorifics: "Dr. Dr.Sara" → "Dr. Sara"
+    name = name.replace(/^(Dr\.?\s+)Dr\.?\s*/i, '$1').replace(/\s+/g, ' ').trim();
 
     // Skip entries that are purely role labels
     const lower = name.toLowerCase().replace(/^dr\.?\s*/,'');
@@ -310,7 +312,10 @@ function buildContactMapFromText(text='') {
           if (nameTokens.length >= 2) break;
           continue;
         }
-        if (tok.length >= 2) nameTokens.push(tok);
+        // Strip embedded "Dr." prefix from tokens like "Dr.Sara" → "Sara"
+        // (PDF lines sometimes have "Dr." line-prefix AND "Dr.Name" attached together)
+        const nameTok = tok.replace(/^Dr\.?\s*/i, '').trim() || tok;
+        if (nameTok.length >= 2) nameTokens.push(nameTok);
       }
 
       if (nameTokens.length >= 2) {
@@ -377,7 +382,9 @@ function buildContactMapFromText(text='') {
         if (nameTokens.length >= 2) break;
         continue;
       }
-      if (tok.length >= 2) nameTokens.push(tok);
+      // Strip embedded "Dr." prefix from tokens like "Dr.Sara" → "Sara"
+      const nameTok = tok.replace(/^Dr\.?\s*/i, '').trim() || tok;
+      if (nameTok.length >= 2) nameTokens.push(nameTok);
     }
     if (nameTokens.length >= 1) {
       let raw = phoneOnlyMatch[1].replace(/[\s-]/g, '');
