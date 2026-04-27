@@ -1403,7 +1403,8 @@ neurology:{
     'Hattan':'0595770273','Hawra':'0507776500','Rakan':'0558979555',
     'Rawan':'0555851567','Sara':'0566585870','Wejdan':'0599390233',
     'Yara':'0555850945','Najod':'0532301664','Najoud':'0532301664',
-    'Eman':'0541426713','Mohammed M':'0502192065','Mohammed AW':'0505144847',
+    'Eman AlAli':'0541426713','Eman Nassim':'0535593373','Eman Ali':'0535593373',
+    'Mohammed M':'0502192065','Mohammed AW':'0505144847',
   },
   schedule:{
     // ── April 2026 — ER / Ward Consultation (Page 1 Day + Page 2 Night/Weekend) ──

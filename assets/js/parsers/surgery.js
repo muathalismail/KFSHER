@@ -189,6 +189,7 @@ const NEUROLOGY_ALIAS_HINTS = {
   'Dr. Talal':'Dr. Talal Al-Harbi',
   'Dr. Saadia':'Dr. Saadia Afzal',
   'Dr. Eman':'Dr. Eman Nassim Ali',
+  'Eman':'Dr. Eman Nassim Ali',
   'Dr. Bader':'Dr. Bader Alenzi',
   'Dr. Roaa':'Dr. Roaa Khallaf',
   'Dr. Khaled':'Dr. Khalid Al Rasheed',

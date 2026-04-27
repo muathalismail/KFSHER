@@ -415,7 +415,11 @@ function resolvePhoneFromContactMap(name='', contactResult) {
   //   "Dr.Bikheet"  → expand → "Dr Bikheet" → strip Dr → "Bikheet" → 1 word, 7 chars → block
   {
     const drStripped = name.replace(/\./g, ' ').trim().replace(/^Dr\s*/i, '').trim();
-    const rw = drStripped.split(/\s+/).filter(w => w.length >= 2);
+    const allWords = drStripped.split(/\s+/).filter(Boolean);
+    // Block "Initial + Lastname" patterns like "A Aldhakeel", "S Alaboud" —
+    // these have a single letter that gets falsely fuzzy-matched to wrong contacts.
+    if (allWords.length >= 2 && allWords[0].length === 1) return null;
+    const rw = allWords.filter(w => w.length >= 2);
     if (rw.length === 0) return null;
     if (rw.length === 1) {
       const w = rw[0].toLowerCase();
