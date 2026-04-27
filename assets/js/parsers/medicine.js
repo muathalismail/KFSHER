@@ -133,8 +133,6 @@ function resolveMedicineOnCallName(raw='', contactResult=null) {
 
 function buildMedicineOnCallRow(dateKey='', roleMeta={}, rawName='', contactResult=null, deptKey='medicine_on_call') {
   const name = resolveMedicineOnCallName(rawName, contactResult);
-  // DIAGNOSTIC — remove after confirming fix
-  if (typeof console !== 'undefined') console.log('[mcRow]', dateKey, roleMeta.role, '| raw:', JSON.stringify(rawName), '| name:', JSON.stringify(name));
   // Evaluate both sources independently — do NOT short-circuit on uncertain results.
   // "Ali" is 3 chars and gets filtered from nameParts (threshold ≥ 4), so the fuzzy
   // step in resolvePhoneFromContactMap returns uncertain=true even when it finds the
@@ -158,6 +156,8 @@ function buildMedicineOnCallRow(dateKey='', roleMeta={}, rawName='', contactResu
   const displayName = (_matchedRealTokens.length >= 1 && _bareMatched.length > name.replace(/^Dr\.?\s*/i,'').trim().length)
     ? cleanMedicineOnCallResolvedName(_rawMatched)
     : name;
+  // DIAGNOSTIC — remove after confirming fix
+  if (typeof console !== 'undefined') console.log('[mcRow]', dateKey, roleMeta.role, '| raw:', JSON.stringify(rawName), '| name:', JSON.stringify(name), '| matchedName:', JSON.stringify(_rawMatched), '| display:', JSON.stringify(displayName));
   return {
     specialty: deptKey,
     date: dateKey,
