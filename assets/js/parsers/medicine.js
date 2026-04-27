@@ -198,6 +198,10 @@ function parseMedicineOnCallPdfEntries(text='', deptKey='medicine_on_call') {
   const aliasIndex = buildMedicineOnCallAliasIndex(contactResult);
   const lines = String(text || '').split(/\n/).map(line => line.trim()).filter(Boolean);
   const entries = [];
+  // Track filled slots: "dateKey|section|shiftType" → true
+  // Prevents duplicate entries when a date row appears twice in the PDF
+  // (e.g. table header repeats at a page break).
+  const filledSlots = new Set();
   const dayRowRe = /^(Sun|Mon|Tue|Wed|Wen|Thu|Fri|Sat)\s+(\d{1,2})\/(\d{1,2})\s+(.+)$/i;
 
   lines.forEach(line => {
@@ -205,10 +209,17 @@ function parseMedicineOnCallPdfEntries(text='', deptKey='medicine_on_call') {
     if (!match) return;
     if (/Day\s*\/\s*Date/i.test(line) || /Junior\s+Ward/i.test(line)) return;
     const dateKey = `${String(parseInt(match[2], 10)).padStart(2, '0')}/${String(parseInt(match[3], 10)).padStart(2, '0')}`;
+    // Skip this line entirely if the first slot for this date is already filled —
+    // it's a repeated header row (page break) not a new date.
+    const firstRole = MEDICINE_ON_CALL_ROLE_SEQUENCE[0];
+    const firstSlot = `${dateKey}|${firstRole.section}|${firstRole.shiftType}`;
+    if (filledSlots.has(firstSlot)) return;
     const groups = splitMedicineOnCallRowNames(match[4], aliasIndex, MEDICINE_ON_CALL_ROLE_SEQUENCE.length);
     if (groups.length !== MEDICINE_ON_CALL_ROLE_SEQUENCE.length) return;
     groups.forEach((rawName, index) => {
-      entries.push(buildMedicineOnCallRow(dateKey, MEDICINE_ON_CALL_ROLE_SEQUENCE[index], rawName, contactResult, deptKey));
+      const roleMeta = MEDICINE_ON_CALL_ROLE_SEQUENCE[index];
+      filledSlots.add(`${dateKey}|${roleMeta.section}|${roleMeta.shiftType}`);
+      entries.push(buildMedicineOnCallRow(dateKey, roleMeta, rawName, contactResult, deptKey));
     });
   });
 
