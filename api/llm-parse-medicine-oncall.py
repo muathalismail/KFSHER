@@ -34,9 +34,10 @@ Columns: Date | JW Day | JW Night | JER Day | JER Night | Sr Day | Sr Night
 - JER = Junior ER (same shift times)
 - Sr = Senior ER (same shift times)
 
-Seniority mapping:
+Seniority mapping (use the Resident level shown in the contact list to disambiguate):
 - Senior columns (sr_day, sr_night) are staffed by Resident 3 or Resident 4 level doctors
 - Junior columns (jer_day, jer_night, jw_day, jw_night) are staffed by Resident 1 or Resident 2 level doctors
+- Example: "Lama" in sr_night → must be a Resident 3 (Lama Almubarak), NOT Resident 1 (Lama Alkunaizi)
 
 Data:
 {schedule_lines}
@@ -61,7 +62,7 @@ Match each abbreviated name in the schedule to the correct full name from the co
 
 ### Additional rules:
 - If a cell is empty, return null for that field.
-- Always include "Dr." prefix in the output names.
+- Always include "Dr." prefix in the output names. Strip "Resident", "Resident 1/2/3/4", and trailing dashes from the output — output clean names only (e.g. "Dr. Lama Almubarak" not "Dr. Lama Almubarak Resident 3").
 - If you cannot confidently match a name, return the original text with "Dr." prefix AND set "unresolved": true on that row.
 - NEVER match by last name alone when the schedule provides a clear first name.
 
@@ -80,16 +81,10 @@ def resolve_names_with_llm(schedule_rows, contacts):
     if not api_key:
         return None  # no API key -> caller falls back to client-side
 
-    # Clean contact names: strip "Resident", "Resident -", trailing dashes
-    cleaned_contacts = {}
-    for name, phone in contacts.items():
-        cleaned = _clean_contact_name(name)
-        if cleaned and phone:
-            cleaned_contacts[cleaned] = phone
-
-    # Format contacts for the prompt (shared across all batches)
+    # Format contacts for the prompt using ORIGINAL names (with Resident level visible
+    # for disambiguation), but clean the output names for display.
     contact_lines = '\n'.join(
-        f'- {name}: {phone}' for name, phone in cleaned_contacts.items()
+        f'- {name}: {phone}' for name, phone in contacts.items() if phone
     ) or '(no contacts extracted)'
 
     client = anthropic.Anthropic(api_key=api_key)
