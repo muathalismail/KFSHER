@@ -109,8 +109,14 @@ function resolveMedicineOnCallName(raw='', contactResult=null) {
     const firstMatch = firstBit.length === 1
       ? !!candidateTokens[0]?.startsWith(firstBit)
       : candidateTokens.some(bit => bit === firstBit || bit.startsWith(firstBit));
+    // lastMatch: exact/prefix OR Levenshtein ≤ 2 for tokens ≥ 5 chars.
+    // Handles transliteration variants like "aldhakeel" ≈ "aldhakhel" (dist 1).
     const lastMatch = lastBit.length >= 3
-      ? candidateTokens.some(bit => bit === lastBit || bit.startsWith(lastBit))
+      ? candidateTokens.some(bit =>
+          bit === lastBit ||
+          bit.startsWith(lastBit) ||
+          (lastBit.length >= 5 && bit.length >= 5 && levenshtein(lastBit, bit) <= 2)
+        )
       : true;
     if (!firstMatch || !lastMatch) return;
     const score = scoreNameMatch(token, name) || scoreNameMatch(`Dr. ${token}`, name);

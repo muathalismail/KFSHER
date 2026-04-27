@@ -236,6 +236,18 @@ function buildContactMapFromText(text='') {
     // Store full name
     if (!map[name]) map[name] = phone;
 
+    // Store camelCase-split variant to handle PDF rendering artifacts where
+    // spaces between name parts are missing: "AnwrAldhakhel" → "Anwr Aldhakhel".
+    // This allows "aldhakeel" to match "aldhakhel" as a separate token.
+    const camelSplit = name.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/\s+/g, ' ').trim();
+    if (camelSplit !== name) {
+      const nkSplit = normKey(camelSplit);
+      if (!altMap[nkSplit]) { altMap[nkSplit] = phone; altMapKeys[nkSplit] = camelSplit; }
+      if (!map[camelSplit]) map[camelSplit] = phone;
+      const bareSplit = camelSplit.replace(/^Dr\.?\s*/i, '').trim();
+      if (bareSplit !== camelSplit && !map[bareSplit]) map[bareSplit] = phone;
+    }
+
     // Store without Dr. prefix
     const bare = name.replace(/^Dr\.?\s*/i, '').trim();
     if (bare !== name && !map[bare]) map[bare] = phone;
