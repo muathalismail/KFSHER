@@ -232,6 +232,8 @@ function buildContactMapFromText(text='') {
     }
     // Collapse duplicate "Dr." honorifics: "Dr. Dr.Sara" → "Dr. Sara"
     name = name.replace(/^(Dr\.?\s+)Dr\.?\s*/i, '$1').replace(/\s+/g, ' ').trim();
+    // Normalize "Dr.Name" → "Dr. Name" (PDF sometimes omits space after Dr.)
+    name = name.replace(/\bDr\.([A-Za-z])/gi, 'Dr. $1');
 
     // Skip entries that are purely role labels
     const lower = name.toLowerCase().replace(/^dr\.?\s*/,'');
