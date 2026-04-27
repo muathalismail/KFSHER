@@ -623,7 +623,7 @@ radiology_oncall:{
     'Ibtihal AlSaad':'0560549044','R. Wosaibi':'0531155044',
     'Zainab Al Nemer':'0539006016','Rahaf Al Baqawi':'0536697741',
     'Mariam Al Maideni':'0506822633','Meriam Almaideni':'0506822633',
-    'Fatimah Al Saeed':'','Hamza Al Dawsari':'0503880120',
+    'Fatimah Al Saeed':'0548673710','Hamza Al Dawsari':'0503880120',
     'Ahmed Al Rashed':'0567672955','Danah Bokhari':'0550244689',
     'Alhassan Al Dundar':'0558241422','Sarah Al Aboud':'0560938404',
     'F. AlKhabaz':'0545010765','M. Kalalah':'0500015528','S. Arifi':'0557373761',
