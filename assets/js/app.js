@@ -1891,14 +1891,29 @@ async function parseUploadedPdf(file, deptKey) {
     parserMode,
   };
 
+  let normalizedEntries = normalizeParsedEntries(splitMultiDoctorEntries(
+    Array.isArray(parsed) ? parsed : (parsed || []),
+    deptKey
+  ));
+  // For medicine_on_call, splitMultiDoctorEntries/normalizeParsedEntries can create
+  // duplicate entries per (date, section, shiftType) slot when a name contains "/"
+  // or comma (e.g. the parser assigned "Name1/Name2" to a slot and the post-process
+  // split it into two). Keep only the first entry per slot — the parser already
+  // assigned names correctly.
+  if (deptKey === 'medicine_on_call') {
+    const slotsSeen = new Set();
+    normalizedEntries = normalizedEntries.filter(entry => {
+      const slot = `${entry.date}|${entry.section}|${entry.shiftType}`;
+      if (slotsSeen.has(slot)) return false;
+      slotsSeen.add(slot);
+      return true;
+    });
+  }
   return {
     rawText: text,
     textSample: text.slice(0, 4000),
     debug: parseDebug,
-    entries: normalizeParsedEntries(splitMultiDoctorEntries(
-      Array.isArray(parsed) ? parsed : (parsed || []),
-      deptKey
-    )),
+    entries: normalizedEntries,
   };
 }
 
