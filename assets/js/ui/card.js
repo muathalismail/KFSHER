@@ -232,7 +232,7 @@ async function buildCard(deptKey, dept, entries) {
     <div class="dhead">
       <div class="dname"><div class="dicon" data-exact-specialty="${deptKey}" title="Show only this specialty">${dept.icon}</div>${dept.label}</div>
       <div class="hactions">
-        <span class="dbadge">On-Call Now</span>${pdfBtns}
+        <span class="dbadge">${isSpecialtyActiveNow(deptKey, now) ? 'On-Call Now' : 'Upcoming'}</span>${pdfBtns}
       </div>
     </div>
     <div class="dgrid">${rowsHtml}${traceHtml}</div>`;

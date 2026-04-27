@@ -25,7 +25,9 @@ def _clean_name(raw):
     name = re.sub(r'\b\d+\b', ' ', raw)
     name = re.sub(r'\([^)]*\)', '', name)
     name = re.sub(r'\b(ext\.?|on training|pager|mobile|phone)\b', '', name, flags=re.I)
-    name = re.sub(r'^Dr\.?\s*', '', name)
+    name = re.sub(r'^\s*Dr\.?\s*', '', name)  # handle leading whitespace from digit removal
+    # Strip trailing role labels (Resident, Consultant, etc.) and everything after
+    name = re.sub(r'\s*\b(Resident|Consultant|Fellow|Associate|Physician|Specialist)\b.*$', '', name, flags=re.I)
     name = re.sub(r'\s+', ' ', name).strip()
     return name
 
