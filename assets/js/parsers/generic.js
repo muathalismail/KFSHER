@@ -223,6 +223,13 @@ function buildContactMapFromText(text='') {
       .replace(/([A-Za-z])\s{1,2}([a-z]{1,4})(?=\s|$)/g, '$1$2') // "Al  h azmi" → "Alhazmi"
       .replace(/\s+/g,' ').trim();
     
+    // Belt-and-suspenders: strip any trailing role labels (e.g. "Dr. Ahmed Resident" → "Dr. Ahmed")
+    {
+      const pts = name.split(' ');
+      while (pts.length > 1 && STOP_WORDS.has(pts[pts.length - 1].toLowerCase())) pts.pop();
+      name = pts.join(' ');
+    }
+
     // Skip entries that are purely role labels
     const lower = name.toLowerCase().replace(/^dr\.?\s*/,'');
     if (lower.split(' ').every(w => STOP_WORDS.has(w))) return;
@@ -295,14 +302,15 @@ function buildContactMapFromText(text='') {
       // Remove stop words but keep the name structure
       const tokens = cleaned.split(' ');
       const nameTokens = [];
-      let hitDr = false;
       for (const tok of tokens) {
         const tl = tok.toLowerCase().replace(/^dr\.?$/, 'dr');
-        if (tl === 'dr') { hitDr = true; nameTokens.push(tok); continue; }
-        if (STOP_WORDS.has(tl) && !hitDr) continue;
+        if (tl === 'dr') { nameTokens.push(tok); continue; }
+        // Stop at first role label once we have a name — do NOT include it
+        if (STOP_WORDS.has(tl)) {
+          if (nameTokens.length >= 2) break;
+          continue;
+        }
         if (tok.length >= 2) nameTokens.push(tok);
-        // Stop at first stop word AFTER we have a name (avoids pulling in job title)
-        if (STOP_WORDS.has(tl) && nameTokens.length >= 2) break;
       }
 
       if (nameTokens.length >= 2) {
@@ -361,13 +369,15 @@ function buildContactMapFromText(text='') {
       .replace(/\s+/g, ' ').trim();
     const toks = cleaned.split(' ');
     const nameTokens = [];
-    let hitDr = false;
     for (const tok of toks) {
       const tl = tok.toLowerCase().replace(/^dr\.?$/, 'dr');
-      if (tl === 'dr') { hitDr = true; nameTokens.push(tok); continue; }
-      if (STOP_WORDS.has(tl) && !hitDr) continue;
+      if (tl === 'dr') { nameTokens.push(tok); continue; }
+      // Stop at first role label once we have a name — do NOT include it
+      if (STOP_WORDS.has(tl)) {
+        if (nameTokens.length >= 2) break;
+        continue;
+      }
       if (tok.length >= 2) nameTokens.push(tok);
-      if (STOP_WORDS.has(tl) && nameTokens.length >= 2) break;
     }
     if (nameTokens.length >= 1) {
       let raw = phoneOnlyMatch[1].replace(/[\s-]/g, '');

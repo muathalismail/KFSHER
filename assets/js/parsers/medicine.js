@@ -145,9 +145,17 @@ function buildMedicineOnCallRow(dateKey='', roleMeta={}, rawName='', contactResu
                  || (rotasPhone  && !rotasPhone.uncertain  ? rotasPhone  : null)
                  || pdfPhone || rotasPhone
                  || { phone:'', uncertain:true };
-  // If phone resolution found the full name (e.g. "Dr. Sara Alaboud" for "S.Alaboud"),
-  // use it instead of the abbreviated rota name — show full names on the card.
-  const displayName = phoneMeta.matchedName || name;
+  // If phone resolution found a fuller name (e.g. "Dr. Sara Alaboud" for "S.Alaboud"),
+  // use it — but only if it is a real expanded name (not just "Dr.", a role label, or garbage).
+  // A valid matchedName must have ≥1 real name token (≥3 chars, not a role word) after stripping "Dr.".
+  const _rawMatched = phoneMeta.matchedName;
+  const _bareMatched = _rawMatched ? cleanMedicineOnCallResolvedName(_rawMatched).replace(/^Dr\.?\s*/i, '').trim() : '';
+  const _matchedRealTokens = _bareMatched
+    ? _bareMatched.split(/\s+/).filter(t => t.length >= 3 && !/^(resident|consultant|associate|fellow|senior|junior|physician|specialist)$/i.test(t))
+    : [];
+  const displayName = (_matchedRealTokens.length >= 1 && _bareMatched.length > name.replace(/^Dr\.?\s*/i,'').trim().length)
+    ? cleanMedicineOnCallResolvedName(_rawMatched)
+    : name;
   return {
     specialty: deptKey,
     date: dateKey,
