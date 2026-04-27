@@ -1923,9 +1923,38 @@ async function parseUploadedPdf(file, deptKey) {
         body: JSON.stringify({ pdf_base64: b64 }),
       });
       if (resp.ok) {
-        const rows = await resp.json();
+        let rows = await resp.json();
         if (Array.isArray(rows) && rows.length) {
           console.log(`[MEDICINE_ONCALL] Server extracted ${rows.length} schedule rows`);
+          // Use Claude API to resolve abbreviated names against the contact list
+          const contacts = await serverContactsPromise.catch(() => null);
+          if (contacts && Object.keys(contacts).length) {
+            try {
+              const llmResp = await fetch('/api/llm-parse-medicine-oncall', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ schedule_rows: rows, contacts }),
+              });
+              if (llmResp.ok) {
+                const resolved = await llmResp.json();
+                if (Array.isArray(resolved) && resolved.length) {
+                  rows = resolved.map(r => ({
+                    date: r.date || '',
+                    day: r.day || '',
+                    jw_day: r.jw_day || '',
+                    jw_night: r.jw_night || '',
+                    jer_day: r.jer_day || '',
+                    jer_night: r.jer_night || '',
+                    sr_day: r.sr_day || '',
+                    sr_night: r.sr_night || '',
+                  }));
+                  console.log(`[MEDICINE_ONCALL] LLM resolved ${resolved.length} rows with full names`);
+                }
+              }
+            } catch (llmErr) {
+              console.warn('[MEDICINE_ONCALL] LLM name resolution failed, using pdfplumber names:', llmErr.message);
+            }
+          }
           parseMedicineOnCallPdfEntries._serverSchedule = rows;
         }
       }
