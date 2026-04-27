@@ -145,11 +145,14 @@ function buildMedicineOnCallRow(dateKey='', roleMeta={}, rawName='', contactResu
                  || (rotasPhone  && !rotasPhone.uncertain  ? rotasPhone  : null)
                  || pdfPhone || rotasPhone
                  || { phone:'', uncertain:true };
+  // If phone resolution found the full name (e.g. "Dr. Sara Alaboud" for "S.Alaboud"),
+  // use it instead of the abbreviated rota name — show full names on the card.
+  const displayName = phoneMeta.matchedName || name;
   return {
     specialty: deptKey,
     date: dateKey,
     role: roleMeta.role,
-    name,
+    name: displayName,
     phone: phoneMeta.phone || '',
     phoneUncertain: !phoneMeta.phone || !!phoneMeta.uncertain,
     section: roleMeta.section,

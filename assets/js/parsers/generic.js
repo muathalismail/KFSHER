@@ -428,9 +428,34 @@ function resolvePhoneFromContactMap(name='', contactResult) {
   {
     const drStripped = name.replace(/\./g, ' ').trim().replace(/^Dr\s*/i, '').trim();
     const allWords = drStripped.split(/\s+/).filter(Boolean);
-    // Block "Initial + Lastname" patterns like "A Aldhakeel", "S Alaboud" —
-    // these have a single letter that gets falsely fuzzy-matched to wrong contacts.
-    if (allWords.length >= 2 && allWords[0].length === 1) return null;
+    // "Initial + Lastname" patterns like "S Alaboud", "A Aldhakeel":
+    // Instead of hard-blocking, try to resolve via initial + last-name match.
+    // Only succeeds if exactly ONE contact matches (safe, no ambiguity).
+    if (allWords.length >= 2 && allWords[0].length === 1) {
+      const initial = allWords[0].toLowerCase();
+      const lastName = allWords[allWords.length - 1].toLowerCase();
+      const hits = [];
+      for (const [ak, av] of Object.entries(altMap)) {
+        const akParts = ak.split(' ').filter(Boolean);
+        if (akParts.length < 2) continue;
+        const akLast = akParts[akParts.length - 1];
+        // Last name must match exactly or within Levenshtein-2 (for transliteration variants)
+        const lastMatch = akLast === lastName
+          || (akLast.length >= 4 && lastName.length >= 4 && levenshtein(akLast, lastName) <= 2);
+        if (!lastMatch) continue;
+        // First name initial must match
+        if (!akParts[0].startsWith(initial)) continue;
+        hits.push({ phone: av, matchedName: altMapKeys[ak] || null });
+      }
+      // Deduplicate by phone — only resolve if unambiguous
+      const byPhone = new Map();
+      hits.forEach(h => { if (!byPhone.has(h.phone)) byPhone.set(h.phone, h.matchedName); });
+      if (byPhone.size === 1) {
+        const [[ph, nm]] = byPhone.entries();
+        return { phone: ph, uncertain: false, matchedName: nm };
+      }
+      return null; // ambiguous or not found
+    }
     const rw = allWords.filter(w => w.length >= 2);
     if (rw.length === 0) return null;
     if (rw.length === 1) {
