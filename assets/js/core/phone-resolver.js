@@ -170,9 +170,10 @@ function resolvePhone(dept, entry) {
     const scPrefix = Object.entries(sc).filter(([cn, ph]) => {
       if (!ph) return false;
       const cnToks = canonicalName(cn).split(' ').filter(t => t.length >= 3);
-      return scSigTokens.some(tt => cnToks.some(ct =>
+      const _matcher = tt => cnToks.some(ct =>
         (ct.startsWith(tt) || tt.startsWith(ct)) && Math.abs(ct.length - tt.length) <= 2
-      ));
+      );
+      return scSigTokens.length >= 2 ? scSigTokens.every(_matcher) : scSigTokens.some(_matcher);
     });
     const _scDisplayName = (scName) => /^Dr\.?\s/i.test(scName) ? scName : `Dr. ${scName}`;
     if (scPrefix.length === 1) {
