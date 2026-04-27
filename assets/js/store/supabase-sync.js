@@ -115,10 +115,15 @@ async function pullFromSupabase() {
 
     console.log(`[SUPABASE SYNC] Found ${records.length} cloud record(s)`);
 
+    // Records are sorted by created_at DESC — first record per specialty is the newest.
+    // Only use the NEWEST record per specialty, skip older duplicates.
+    const seenSpecialties = new Set();
     let merged = 0;
     for (const cloudRecord of records) {
       const deptKey = cloudRecord.specialty;
       if (!deptKey || !cloudRecord.data) continue;
+      if (seenSpecialties.has(deptKey)) continue; // skip older duplicates
+      seenSpecialties.add(deptKey);
 
       const local = await getPdfRecord(deptKey).catch(() => null);
       const localTime = local?.uploadedAt || 0;
@@ -135,7 +140,6 @@ async function pullFromSupabase() {
         await savePdfRecord(record).catch(err => {
           console.warn('[SUPABASE SYNC] Local save failed:', deptKey, err);
         });
-        // Also cache in memory so it's immediately available
         if (typeof cacheUploadedRecord === 'function') {
           cacheUploadedRecord(record);
         }
