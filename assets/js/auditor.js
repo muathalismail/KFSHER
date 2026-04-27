@@ -1014,6 +1014,9 @@ Othman Alessa 568916700`,
     const manifest = await loadRealPdfFixtureManifest();
     const snapshots = manifest && Array.isArray(manifest.snapshots) ? manifest.snapshots : [];
     const results = [];
+    // Skip LLM API calls during fixture tests to avoid unnecessary API costs
+    window._skipLlmCalls = true;
+    try {
     for (const path of snapshots) {
       const fixture = await loadRealPdfFixture(path);
       if (!fixture.sourcePdf || !fixture.specialty) continue;
@@ -1072,6 +1075,9 @@ Othman Alessa 568916700`,
       });
     }
     return results;
+    } finally {
+      window._skipLlmCalls = false;
+    }
   }
 
   async function _uploadThroughRuntimeHandler(sourcePdf='') {

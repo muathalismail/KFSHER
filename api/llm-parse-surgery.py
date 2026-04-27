@@ -53,7 +53,7 @@ Use null for empty cells. No explanation, just the JSON array."""
     client = anthropic.Anthropic(api_key=api_key)
     message = client.messages.create(
         model='claude-haiku-4-5-20251001',
-        max_tokens=4096,
+        max_tokens=1024,
         messages=[{'role': 'user', 'content': prompt}],
     )
 

@@ -1928,7 +1928,7 @@ async function parseUploadedPdf(file, deptKey) {
           console.log(`[MEDICINE_ONCALL] Server extracted ${rows.length} schedule rows`);
           // Use Claude API to resolve abbreviated names against the contact list
           const contacts = await serverContactsPromise.catch(() => null);
-          if (contacts && Object.keys(contacts).length) {
+          if (contacts && Object.keys(contacts).length && !window._skipLlmCalls) {
             try {
               const llmResp = await fetch('/api/llm-parse-medicine-oncall', {
                 method: 'POST',
@@ -2017,7 +2017,7 @@ async function parseUploadedPdf(file, deptKey) {
           console.log(`[PEDIATRICS] Server extracted ${rows.length} schedule rows`);
           // Use Claude API to resolve abbreviated names against the contact list
           const contacts = await serverContactsPromise.catch(() => null);
-          if (contacts && Object.keys(contacts).length) {
+          if (contacts && Object.keys(contacts).length && !window._skipLlmCalls) {
             try {
               const llmResp = await fetch('/api/llm-parse-pediatrics', {
                 method: 'POST',
@@ -2087,7 +2087,7 @@ async function parseUploadedPdf(file, deptKey) {
           console.log(`[RADIOLOGY_ONCALL] Server extracted ${rows.length} schedule rows`);
           // Use Claude API to resolve abbreviated names against the contact list
           const contacts = await serverContactsPromise.catch(() => null);
-          if (contacts && Object.keys(contacts).length) {
+          if (contacts && Object.keys(contacts).length && !window._skipLlmCalls) {
             try {
               const llmResp = await fetch('/api/llm-parse-radiology-oncall', {
                 method: 'POST',
@@ -2134,7 +2134,7 @@ async function parseUploadedPdf(file, deptKey) {
           console.log(`[SURGERY] Server extracted ${rows.length} schedule rows`);
           // Wait for contacts, then use Claude API to resolve abbreviated names
           const contacts = await serverContactsPromise.catch(() => null);
-          if (contacts && Object.keys(contacts).length) {
+          if (contacts && Object.keys(contacts).length && !window._skipLlmCalls) {
             try {
               const llmResp = await fetch('/api/llm-parse-surgery', {
                 method: 'POST',
