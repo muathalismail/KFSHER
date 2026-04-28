@@ -219,7 +219,7 @@ nephrology:{
     'Dr. Najeeb Al Musaied':'0532457998','Dr. Tofol Al Nashmi':'0540394484',
     'Dr. Sumayah Alaskandarani':'0506222568','Dr. Fahad Al Otaibi':'0505542777',
     'Dr. Abdulnaser Al Abadi':'0503273583','Dr. Khalid B. Akkri':'0599932293',
-    'Dr. Maher Al Demerdash':'0548063792','Dr. Ibtihal Elsheik':'0509161253',
+    'Dr. Maher Al Demerdash':'0548063792','Dr. Ibtihal Elsheik':'0509261253',
     'Hussein':'0598512353','Abdullah':'0554291442','Zahra':'0532592591',
   },
   schedule:{
@@ -262,9 +262,10 @@ kptx:{
   contacts:{
     'Dr. Abdulnaser Al Abadi':'0503273583','Dr. Khalid B. Akkari':'0599932293','Dr. Khalid Akkari':'0599932293',
     'Dr. Maher Aldemerdash':'0548063792','Dr. Zahra Noor':'0532592591',
-    'Dr. Ibtihal Elsheik':'0509161253','Dr. Najeeb Al Musaied':'0532457998','Najeeb':'0532457998',
+    'Dr. Ibtihal Elsheik':'0509261253','Dr. Ebtihal Elsheik':'0509261253','Dr. Ibtihal El Sheik':'0509261253','Dr. Ibtihal Elsheikh':'0509261253','Dr. Ebtihal El Sheikh':'0509261253',
+    'Dr. Najeeb Al Musaied':'0532457998','Najeeb':'0532457998',
     'Baher':'0508945907',
-    'Ali':'0550789096','Abdullah':'0554291442','Ibtihal':'0509161253','Zahra':'0532592591',
+    'Ali':'0550789096','Abdullah':'0554291442','Ibtihal':'0509261253','Ebtihal':'0509261253','Zahra':'0532592591',
   },
   schedule:{
     '01/04':[{role:'Day Coverage',name:'Ali / Abdullah'},{role:'After-Hours 1st On-Call',name:'Abdullah'},{role:'Consultant On-Call 24h',name:'Dr. Abdulnaser Al Abadi'}],
