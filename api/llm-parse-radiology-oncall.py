@@ -49,8 +49,10 @@ Match each name in the schedule to the correct full name from the contact list.
 ### Matching rules (apply in this priority order):
 
 1. **Full name already present** (e.g. "Mona Awaji", "Bayan Al Kaby"):
-   - Match as a COMPLETE name — find the contact whose full name matches.
-   - Spelling variants are common: "AlKhabbaz" = "Alkhabaz", "Kalalah" = "Kalalah".
+   - Match as a COMPLETE name — find the contact whose full name matches BOTH first AND last name.
+   - Spelling variants are common: "AlKhabbaz" = "Alkhabaz", "Khalid" = "Khaled", "Kalalah" = "Kalalah".
+   - CRITICAL: "Khalid Al Zahrani" matches "Khaled Al Zahrani" (same person, spelling variant). Do NOT match "Khalid Balawi" — the last names are completely different.
+   - When the schedule has a full "Firstname Lastname", ALWAYS match by LAST NAME first, then confirm the first name. Never match by first name alone when a last name is provided.
 
 2. **Initial.Lastname** (e.g. "F.AlKhabaz", "M.Kalalah"):
    - Match by last name, confirm the initial matches the first letter of the contact's first name.

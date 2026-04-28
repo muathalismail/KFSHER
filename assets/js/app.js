@@ -2108,14 +2108,35 @@ async function parseUploadedPdf(file, deptKey) {
               if (llmResp.ok) {
                 const resolved = await llmResp.json();
                 if (Array.isArray(resolved) && resolved.length) {
-                  rows = resolved.map(r => ({
-                    date: r.date || '',
-                    day: r.day || '',
-                    first: r.first || '',
-                    second: r.second || '',
-                    third: r.third || '',
-                    shift: r.shift || '',
-                  }));
+                  // Validate LLM names: if pdfplumber had a full name (2+ words)
+                  // and LLM returned a different last name, keep pdfplumber's version
+                  const origByDate = {};
+                  rows.forEach(r => { origByDate[r.date + (r.shift||'')] = r; });
+                  rows = resolved.map(r => {
+                    const orig = origByDate[r.date + (r.shift||'')] || {};
+                    const validate = (field) => {
+                      const llmName = (r[field] || '').replace(/^Dr\.?\s*/i, '').trim();
+                      const origName = (orig[field] || '').trim();
+                      if (!llmName || !origName) return r[field] || '';
+                      const origWords = origName.split(/\s+/);
+                      const llmWords = llmName.split(/\s+/);
+                      // If original has 2+ words (full name) and LLM changed the last name entirely, reject
+                      if (origWords.length >= 2 && llmWords.length >= 2) {
+                        const origLast = origWords[origWords.length - 1].toLowerCase().replace(/^al/i, '');
+                        const llmLast = llmWords[llmWords.length - 1].toLowerCase().replace(/^al/i, '');
+                        if (origLast.length >= 3 && llmLast.length >= 3 && origLast !== llmLast
+                            && !origLast.startsWith(llmLast) && !llmLast.startsWith(origLast)) {
+                          console.warn(`[RADIOLOGY_ONCALL] LLM changed last name: ${origName} → ${llmName}, keeping original`);
+                          return origName;
+                        }
+                      }
+                      return r[field] || '';
+                    };
+                    return {
+                      date: r.date || '', day: r.day || '', shift: r.shift || '',
+                      first: validate('first'), second: validate('second'), third: validate('third'),
+                    };
+                  });
                   console.log(`[RADIOLOGY_ONCALL] LLM resolved ${resolved.length} rows with full names`);
                 }
               }
