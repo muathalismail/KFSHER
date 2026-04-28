@@ -883,6 +883,11 @@ function uploadedEntriesForDept(deptKey, schedKey, now, qLow='') {
   if (deptKey === 'medicine_on_call' && isLegacyMedicineOnCallRecord(record)) return null;
   if (deptKey === 'hospitalist' && isLegacyHospitalistRecord(record)) return null;
   if (deptKey === 'picu' && isLegacyPicuRecord(record)) return null;
+  // Reject stale radiology_oncall uploads where LLM assigned wrong person to 1st/2nd On-Call
+  if (deptKey === 'radiology_oncall' && Array.isArray(record.entries)) {
+    const hasBadName = record.entries.some(e => /^(1st|2nd)\s+On-Call/i.test(e.role||'') && /balawi/i.test(e.name||''));
+    if (hasBadName) return null;
+  }
   if (record.normalized?.roles?.length) {
     return resolveDisplayEntriesFromNormalizedPayload(deptKey, record.normalized, schedKey, now, qLow);
   }
