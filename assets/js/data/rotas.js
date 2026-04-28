@@ -616,7 +616,7 @@ radiology_oncall:{
     'Bayan Al Kaby':'0535345529','Abdullah Al Mujaljal':'0595636067',
     'Mohammed Al Ibrahim':'0508063629','Watin Hashash':'0536600226',
     'Adi Al Obud':'0563402011','Mohammed Al Saffar':'0540655113',
-    'Khaled Al Zahrani':'0501808354','Sokaina Al Khuder':'0562058856',
+    'Khaled Al Zahrani':'0501808354','Khalid Al Zahrani':'0501808354','Sokaina Al Khuder':'0562058856',
     'Manar Al Naji':'0532007232','Abdulrahman Alshammari':'0558718972',
     'Alhanoof Al Khunaifer':'0549747372','Alhanouf Al Khunaifer':'0549747372',
     'Fatimah AlKhabbaz':'0545010765','Fatimah Buqais':'0596141763',
