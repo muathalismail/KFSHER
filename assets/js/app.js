@@ -876,6 +876,9 @@ function resolveDisplayEntriesFromNormalizedPayload(deptKey, normalizedPayload, 
 
 function uploadedEntriesForDept(deptKey, schedKey, now, qLow='') {
   if (deptKey === 'radiology_duty') return null;
+  // Temporarily force radiology_oncall to use ROTAS built-in (correct data)
+  // until stale uploaded record with wrong names is cleared
+  if (deptKey === 'radiology_oncall') return null;
   const record = uploadedRecordForDept(deptKey);
   if (!record || !record.parsedActive || !Array.isArray(record.entries)) return null;
   // Sprint 0: skip stale records from a prior month
@@ -883,14 +886,6 @@ function uploadedEntriesForDept(deptKey, schedKey, now, qLow='') {
   if (deptKey === 'medicine_on_call' && isLegacyMedicineOnCallRecord(record)) return null;
   if (deptKey === 'hospitalist' && isLegacyHospitalistRecord(record)) return null;
   if (deptKey === 'picu' && isLegacyPicuRecord(record)) return null;
-  // Reject stale radiology_oncall uploads where LLM assigned wrong person to 1st/2nd On-Call
-  if (deptKey === 'radiology_oncall') {
-    const _bad = /balawi/i;
-    const _onCallRole = /^(1st|2nd)\s+On-Call/i;
-    const inEntries = (record.entries || []).some(e => _onCallRole.test(e.role||'') && _bad.test(e.name||''));
-    const inRoles = (record.normalized?.roles || []).some(r => _onCallRole.test(r.roleType||'') && _bad.test(r.doctorName||''));
-    if (inEntries || inRoles) return null;
-  }
   if (record.normalized?.roles?.length) {
     return resolveDisplayEntriesFromNormalizedPayload(deptKey, record.normalized, schedKey, now, qLow);
   }
