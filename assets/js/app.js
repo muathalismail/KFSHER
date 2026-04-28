@@ -1917,6 +1917,12 @@ async function parseUploadedPdf(file, deptKey) {
     try {
       const buffer = await file.arrayBuffer();
       const b64 = btoa(new Uint8Array(buffer).reduce((s, b) => s + String.fromCharCode(b), ''));
+      // Compute SHA-256 hash for cache key
+      let pdfHash = '';
+      try {
+        const hashBuf = await crypto.subtle.digest('SHA-256', buffer);
+        pdfHash = Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2, '0')).join('');
+      } catch (_) { /* hash failure → skip cache, call Claude */ }
       const resp = await fetch('/api/extract-medicine-oncall', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1933,10 +1939,11 @@ async function parseUploadedPdf(file, deptKey) {
               const llmResp = await fetch('/api/llm-parse-medicine-oncall', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ schedule_rows: rows, contacts }),
+                body: JSON.stringify({ schedule_rows: rows, contacts, pdf_hash: pdfHash }),
               });
               if (llmResp.ok) {
-                const resolved = await llmResp.json();
+                const llmData = await llmResp.json();
+                const resolved = llmData.rows || llmData;
                 if (Array.isArray(resolved) && resolved.length) {
                   rows = resolved.map(r => ({
                     date: r.date || '',
@@ -1948,7 +1955,10 @@ async function parseUploadedPdf(file, deptKey) {
                     sr_day: r.sr_day || '',
                     sr_night: r.sr_night || '',
                   }));
-                  console.log(`[MEDICINE_ONCALL] LLM resolved ${resolved.length} rows with full names`);
+                  const src = llmData._fromCache ? '🔵 cached' : '🟢 claude';
+                  console.log(`[MEDICINE_ONCALL] LLM resolved ${resolved.length} rows [${src}]`);
+                  // Store cache status for UI badge
+                  parseMedicineOnCallPdfEntries._lastCacheStatus = llmData._fromCache ? 'hit' : 'miss';
                 }
               }
             } catch (llmErr) {
@@ -1956,6 +1966,7 @@ async function parseUploadedPdf(file, deptKey) {
             }
           }
           parseMedicineOnCallPdfEntries._serverSchedule = rows;
+          parseMedicineOnCallPdfEntries._lastPdfHash = pdfHash;
         }
       }
     } catch (err) {
@@ -3307,6 +3318,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
       debug.saved = true;
       debug.searchable = !!ROTAS[deptKey] && !!uploadedRecordForDept(deptKey) && uploadedRecordForDept(deptKey).parsedActive;
+      // Cache status badge for medicine_on_call
+      if (deptKey === 'medicine_on_call' && typeof parseMedicineOnCallPdfEntries !== 'undefined') {
+        debug.cacheStatus = parseMedicineOnCallPdfEntries._lastCacheStatus || '';
+      }
       debugLines.push(debug);
       accepted.push(`${file.name} → ${deptKey}${uncertain ? '?' : ''} (${source}; ${entries.length} doctor rows${review.parsing ? '; parsing failed' : publishToLive ? '; active' : '; review only'})`);
       if (needsReview || review.parsing) reviewNotes.push(`${deptKey}: ${review.parsing ? 'Parsing failed - review needed' : '? needs review'}`);
@@ -3336,7 +3351,8 @@ document.addEventListener('DOMContentLoaded', () => {
           const templateInfo = item.specialty.startsWith('radiology_duty')
             ? `<div class="upload-debug ${okClass}">template=${item.templateDetected?'yes':'no'} · core-sections=${escapeHtml((item.coreSectionsFound || []).join(', ') || 'none')}</div>`
             : '';
-          return `<div class="upload-debug ${okClass}">${escapeHtml(item.file)}: received=yes · text=${item.textChars?'yes':'no'} (${item.textChars}) · specialty=${escapeHtml(item.specialty)} · doctors=${item.rows}${conf}${trust} · saved=${item.saved?'yes':'no'} · searchable=${item.searchable?'yes':'no'} · ${escapeHtml(item.status)}</div>${templateInfo}${previewHtml}${riskHtml}${reasonCodeHtml}${issueHtml}${item.sectionDebug || ''}`;
+          const cacheBadge = item.cacheStatus === 'hit' ? ' · <span style="color:#7ee8fa">🔵 نتيجة محفوظة</span>' : item.cacheStatus === 'miss' ? ' · <span style="color:#5eeb8a">🟢 تم التحقق الآن</span>' : '';
+          return `<div class="upload-debug ${okClass}">${escapeHtml(item.file)}: received=yes · text=${item.textChars?'yes':'no'} (${item.textChars}) · specialty=${escapeHtml(item.specialty)} · doctors=${item.rows}${conf}${trust} · saved=${item.saved?'yes':'no'} · searchable=${item.searchable?'yes':'no'} · ${escapeHtml(item.status)}${cacheBadge}</div>${templateInfo}${previewHtml}${riskHtml}${reasonCodeHtml}${issueHtml}${item.sectionDebug || ''}`;
         }).join('')
       : (accepted.length ? `Active PDFs updated: ${accepted.length}` : '');
     if (reviewNotes.length) status.innerHTML += `<div class="upload-debug fail">⚠️ Review: ${escapeHtml(reviewNotes.join(' · '))}</div>`;

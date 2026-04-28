@@ -6,7 +6,80 @@ Receives: pdfplumber-extracted schedule rows + contact list (full names + phones
 Returns: schedule rows with abbreviated names replaced by full names
 """
 from http.server import BaseHTTPRequestHandler
-import json, os, re
+import json, os, re, hashlib, time, urllib.request, urllib.error
+
+
+# ── Cache helpers (server-side only — writes use SUPABASE_SERVICE_KEY) ──
+
+CACHE_VERSION = 'v1.0'
+CACHE_TTL_DAYS = 30
+CACHE_SPECIALTY = 'medicine_on_call'
+
+
+def _cache_enabled():
+    return os.environ.get('VERIFICATION_CACHE_ENABLED', '').lower() == 'true'
+
+
+def _supabase_headers(key):
+    return {'apikey': key, 'Authorization': f'Bearer {key}', 'Content-Type': 'application/json'}
+
+
+def cache_lookup(file_hash):
+    """Look up cached result by file hash. Returns parsed result or None."""
+    if not file_hash or not _cache_enabled():
+        return None
+    url = os.environ.get('SUPABASE_URL', '')
+    key = os.environ.get('SUPABASE_PUBLISHABLE_KEY', '') or os.environ.get('SUPABASE_SERVICE_KEY', '')
+    if not url or not key:
+        return None
+    try:
+        from datetime import datetime
+        now = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S+00:00')
+        endpoint = (f'{url}/rest/v1/verification_cache?select=result'
+                    f'&file_hash=eq.{file_hash}'
+                    f'&specialty=eq.{CACHE_SPECIALTY}'
+                    f'&cache_version=eq.{CACHE_VERSION}'
+                    f'&expires_at=gt.{now}'
+                    f'&limit=1')
+        req = urllib.request.Request(endpoint, headers=_supabase_headers(key))
+        with urllib.request.urlopen(req, timeout=2) as resp:
+            rows = json.loads(resp.read())
+            if rows and len(rows) > 0:
+                print(f'[CACHE] HIT medicine_on_call {file_hash[:12]}...')
+                return rows[0]['result']
+    except Exception as e:
+        print(f'[CACHE] lookup error: {e}')
+    return None
+
+
+def cache_save(file_hash, result):
+    """Save result to cache. Fire-and-forget — errors are logged, never raised."""
+    if not file_hash or not _cache_enabled():
+        return
+    url = os.environ.get('SUPABASE_URL', '')
+    key = os.environ.get('SUPABASE_SERVICE_KEY', '')
+    if not url or not key:
+        return
+    try:
+        from datetime import datetime, timedelta
+        expires = (datetime.utcnow() + timedelta(days=CACHE_TTL_DAYS)).strftime('%Y-%m-%dT%H:%M:%S+00:00')
+        body = json.dumps({
+            'file_hash': file_hash,
+            'specialty': CACHE_SPECIALTY,
+            'cache_version': CACHE_VERSION,
+            'result': result,
+            'expires_at': expires,
+        }).encode()
+        req = urllib.request.Request(
+            f'{url}/rest/v1/verification_cache',
+            data=body,
+            headers={**_supabase_headers(key), 'Prefer': 'resolution=merge-duplicates,return=minimal'},
+            method='POST',
+        )
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            print(f'[CACHE] SAVED medicine_on_call {file_hash[:12]}...')
+    except Exception as e:
+        print(f'[CACHE] save error: {e}')
 
 
 def _clean_contact_name(name):
@@ -127,6 +200,8 @@ class handler(BaseHTTPRequestHandler):
             body = json.loads(self.rfile.read(length))
             schedule_rows = body.get('schedule_rows', [])
             contacts = body.get('contacts', {})
+            file_hash = body.get('pdf_hash', '')
+            force = body.get('force', False)
 
             if not schedule_rows:
                 self.send_response(400)
@@ -135,6 +210,17 @@ class handler(BaseHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(json.dumps({'error': 'No schedule rows'}).encode())
                 return
+
+            # ── Cache lookup (skip if force=true) ──
+            if file_hash and not force:
+                cached = cache_lookup(file_hash)
+                if cached is not None:
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'application/json')
+                    self.send_header('Access-Control-Allow-Origin', '*')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({'rows': cached, '_fromCache': True}).encode())
+                    return
 
             result = resolve_names_with_llm(schedule_rows, contacts)
 
@@ -146,11 +232,15 @@ class handler(BaseHTTPRequestHandler):
                 self.wfile.write(json.dumps({'error': 'No API key configured'}).encode())
                 return
 
+            # ── Cache save (fire-and-forget) ──
+            if file_hash:
+                cache_save(file_hash, result)
+
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
             self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
-            self.wfile.write(json.dumps(result).encode())
+            self.wfile.write(json.dumps({'rows': result, '_fromCache': False}).encode())
         except Exception as e:
             self.send_response(500)
             self.send_header('Content-Type', 'application/json')
