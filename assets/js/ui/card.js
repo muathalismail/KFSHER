@@ -235,6 +235,7 @@ async function buildCard(deptKey, dept, entries) {
         <span class="dbadge">${isSpecialtyActiveNow(deptKey, now) ? 'On-Call Now' : 'Upcoming'}</span>${pdfBtns}
       </div>
     </div>
+    <div class="beta-warning-banner">⚠️ This is Beta Version - PLEASE double check using the rota below before calling.</div>
     <div class="dgrid">${rowsHtml}${traceHtml}</div>`;
   return card;
 }
