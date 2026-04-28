@@ -13,10 +13,9 @@ CREATE TABLE IF NOT EXISTS verification_cache (
   CONSTRAINT unique_cache_entry UNIQUE(file_hash, specialty, cache_version)
 );
 
--- Fast lookup by hash + specialty + version, only non-expired rows
+-- Fast lookup by hash + specialty + version
 CREATE INDEX IF NOT EXISTS idx_cache_lookup
-ON verification_cache(file_hash, specialty, cache_version)
-WHERE expires_at > now();
+ON verification_cache(file_hash, specialty, cache_version);
 
 -- For cleanup jobs: find expired rows
 CREATE INDEX IF NOT EXISTS idx_cache_expiry
