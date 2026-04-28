@@ -261,7 +261,7 @@ kptx:{
   keywords:['kidney transplant','kptx','زراعة كلى'],
   contacts:{
     'Dr. Abdulnaser Al Abadi':'0503273583','Dr. Khalid B. Akkari':'0599932293','Dr. Khalid Akkari':'0599932293',
-    'Dr. Maher Aldemerdash':'0548063792','Dr. Zahra Noor':'0532592591',
+    'Dr. Maher Aldemerdash':'0548063792','Dr. Fahad Al Otaibi':'0505542777','Dr. Zahra Noor':'0532592591',
     'Dr. Ibtihal Elsheik':'0509261253','Dr. Ebtihal Elsheik':'0509261253','Dr. Ibtihal El Sheik':'0509261253','Dr. Ibtihal Elsheikh':'0509261253','Dr. Ebtihal El Sheikh':'0509261253',
     'Dr. Najeeb Al Musaied':'0532457998','Najeeb':'0532457998',
     'Baher':'0508945907',
@@ -280,6 +280,9 @@ kptx:{
     '10/04':[{role:'Weekend Coverage',name:'Zahra'},{role:'Consultant On-Call 24h',name:'Dr. Khalid B. Akkari'}],
     '11/04':[{role:'Weekend Coverage',name:'Zahra'},{role:'Consultant On-Call 24h',name:'Dr. Khalid B. Akkari'}],
     '12/04':[{role:'Day Coverage',name:'Ali / Abdullah'},{role:'After-Hours On-Call',name:'Ali / Baher'},{role:'Consultant On-Call 24h',name:'Dr. Maher Aldemerdash'}],
+    '28/04':[{role:'Consultant On-Call 24h',name:'Dr. Fahad Al Otaibi',phone:'0505542777'}],
+    '29/04':[{role:'Consultant On-Call 24h',name:'Dr. Fahad Al Otaibi',phone:'0505542777'}],
+    '30/04':[{role:'Consultant On-Call 24h',name:'Dr. Fahad Al Otaibi',phone:'0505542777'}],
   }
 },
 
