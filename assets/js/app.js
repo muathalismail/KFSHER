@@ -2816,7 +2816,17 @@ const SPECIALTY_RESOLVERS = {
 
 function defaultBuiltInResolver(deptKey, dept, schedKey, now) {
   if (isMedicineSubspecialty(deptKey)) return splitMultiDoctorEntries(getMedicineEntries(deptKey, schedKey, now), deptKey);
-  return splitMultiDoctorEntries(filterActiveEntriesV2(dept.schedule[schedKey] || [], now, deptKey), deptKey);
+  const split = splitMultiDoctorEntries(filterActiveEntriesV2(dept.schedule[schedKey] || [], now, deptKey), deptKey);
+  // Resolve phones for split entries that lost their phone during "/" splitting
+  if (dept.contacts && split.length) {
+    for (const entry of split) {
+      if (!entry.phone) {
+        const ph = dept.contacts[entry.name];
+        if (ph) { entry.phone = ph; entry.phoneUncertain = false; }
+      }
+    }
+  }
+  return split;
 }
 
 function getEntries(deptKey, dept, schedKey, now, qLow='') {

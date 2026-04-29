@@ -161,7 +161,8 @@ async function buildCard(deptKey, dept, entries) {
     rowsHtml = `<div class="empty">Needs review${reasonText ? ` · ${escapeHtml(reasonText)}` : ''}</div>`;
   } else if (!entries || entries.length === 0) {
     const uploaded = uploadedRecordForDept(deptKey);
-    if (uploaded && uploaded.review && (uploaded.review.parsing || uploaded.review.auditRejected)) {
+    const _hasBuiltIn = ROTAS[deptKey] && ROTAS[deptKey].schedule && Object.keys(ROTAS[deptKey].schedule).length > 0;
+    if (uploaded && uploaded.review && (uploaded.review.parsing || uploaded.review.auditRejected) && !_hasBuiltIn) {
       const reasonText = uploadBlockReasonSummary(uploaded);
       rowsHtml = `<div class="empty">Parsing failed - review needed${reasonText ? ` · ${escapeHtml(reasonText)}` : ''}</div>`;
     } else if ((deptKey === 'radiology_duty' || deptKey === 'radiology_oncall') && imagingIconForced === deptKey) {
