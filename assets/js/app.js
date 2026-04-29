@@ -3014,6 +3014,12 @@ async function loadUploadedSpecialties() {
     const refreshed = refreshUploadedRecordIfNeeded(record);
     if (refreshed !== record) {
       await savePdfRecord(refreshed);
+      // Sync corrected record back to Supabase so all devices get the fix
+      if (typeof syncRecordToSupabase === 'function') {
+        syncRecordToSupabase(refreshed).catch(err =>
+          console.warn('[REFRESH] Supabase sync-back failed:', err.message)
+        );
+      }
     }
     const normalized = canonicalizeUploadedRecord(refreshed);
     cacheUploadedRecord(normalized);
