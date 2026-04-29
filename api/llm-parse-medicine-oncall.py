@@ -11,7 +11,7 @@ import json, os, re, hashlib, time, urllib.request, urllib.error
 
 # ── Cache helpers (server-side only — writes use SUPABASE_SERVICE_KEY) ──
 
-CACHE_VERSION = 'v1.0'
+CACHE_VERSION = 'v1.1'
 CACHE_TTL_DAYS = 30
 CACHE_SPECIALTY = 'medicine_on_call'
 
@@ -111,6 +111,7 @@ Seniority mapping (use the Resident level shown in the contact list to disambigu
 - Senior columns (sr_day, sr_night) are staffed by Resident 3 or Resident 4 level doctors
 - Junior columns (jer_day, jer_night, jw_day, jw_night) are staffed by Resident 1 or Resident 2 level doctors
 - Example: "Lama" in sr_night → must be a Resident 3 (Lama Almubarak), NOT Resident 1 (Lama Alkunaizi)
+- Example: "H.Barbari" → Dr. Hassan Sh. Albarbari (phone 0569021663). Do NOT confuse with Hassan Buhmood (different person, different phone).
 
 Data:
 {schedule_lines}
