@@ -177,7 +177,11 @@ function stabilizeMedicineOnCallErEntry(entry={}) {
       next.phone = _rotasPhone;
       next.phoneUncertain = false;
     } else {
+      // Suppress server contacts to prevent cross-specialty contamination
+      const _savedSc = window._serverExtractedContacts;
+      delete window._serverExtractedContacts;
       const resolved = resolvePhone(_dept, next);
+      if (_savedSc) window._serverExtractedContacts = _savedSc;
       if (resolved?.phone) {
         next.phone = resolved.phone;
         next.phoneUncertain = !!resolved.uncertain;
@@ -2267,6 +2271,8 @@ async function parseUploadedPdf(file, deptKey) {
   if (deptKey === 'pediatrics' && typeof parsePediatricsPdfEntries !== 'undefined') {
     delete parsePediatricsPdfEntries._serverSchedule;
   }
+  // Clear global server contacts to prevent cross-specialty contamination
+  delete window._serverExtractedContacts;
 
   const parseDebug = {
     templateDetected: !!parserMeta.templateDetected,
@@ -3039,6 +3045,8 @@ async function loadUploadedSpecialties() {
 
 document.addEventListener('DOMContentLoaded', () => {
   tick(); setInterval(tick,1000);
+  // Ensure no stale server contacts persist from previous session
+  delete window._serverExtractedContacts;
 
   // 1. Pull cloud records from Supabase FIRST
   // 2. Then load uploaded specialties from IndexedDB (now includes cloud data)
@@ -3373,6 +3381,8 @@ document.addEventListener('DOMContentLoaded', () => {
     await refreshPdfListAsync();
     renderTags();
     renderWelcomeGrid();
+    // Clear server contacts after all uploads — prevent stale data in subsequent searches
+    delete window._serverExtractedContacts;
     // Run regression suite in background — don't block the upload response
     Auditor.runRegressionSuite().then(() => Auditor.renderReviewPanel()).catch(() => {});
     status.innerHTML = debugLines.length
