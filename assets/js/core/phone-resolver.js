@@ -210,14 +210,36 @@ function resolvePhone(dept, entry) {
     return best;
   };
 
+  // Bare name conflict guard: if the name is a single word (no dot, no space, no "Dr.")
+  // and multiple contacts across specialties share that first name with different phones,
+  // mark as uncertain to avoid picking the wrong person.
+  const _bareNameCheck = (name, phone) => {
+    const stripped = name.replace(/^Dr\.?\s*/i, '').trim();
+    if (stripped.includes(' ') || stripped.includes('.') || stripped.length < 3) return false; // not bare
+    // Count how many DIFFERENT phones this bare name maps to across all contacts
+    const phones = new Set();
+    for (const [cn, cp] of Object.entries(c)) {
+      if (!cp) continue;
+      const cnBare = cn.replace(/^Dr\.?\s*/i, '').trim();
+      if (cnBare === stripped || cnBare.split(/\s+/)[0] === stripped) phones.add(cp);
+    }
+    if (phones.size > 1) {
+      console.warn(`[BARE_NAME_CONFLICT] "${name}" matches ${phones.size} different phones:`, [...phones]);
+      return true;
+    }
+    return false;
+  };
+
   // Exact key match in contacts dict
   if (c[entry.name]) {
-    return { phone: c[entry.name], uncertain: false, matchedName: _fullNameForPhone(c[entry.name], entry.name), matchRule: 'exact' };
+    const _uncertain = _bareNameCheck(entry.name, c[entry.name]);
+    return { phone: c[entry.name], uncertain: _uncertain, matchedName: _fullNameForPhone(c[entry.name], entry.name), matchRule: 'exact' };
   }
 
   for (const targetName of splitPossibleNames(entry.name)) {
     if (c[targetName]) {
-      return { phone: c[targetName], uncertain: false, matchedName: _fullNameForPhone(c[targetName], targetName), matchRule: 'exact' };
+      const _uncertain = _bareNameCheck(targetName, c[targetName]);
+      return { phone: c[targetName], uncertain: _uncertain, matchedName: _fullNameForPhone(c[targetName], targetName), matchRule: 'exact' };
     }
 
     const tNorm = canonicalName(targetName);
