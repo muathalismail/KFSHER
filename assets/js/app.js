@@ -946,6 +946,7 @@ const DEFAULT_PDF_MAP = {
   neuro_ir:{href:'assets/pdfs/Neuro%20IR%20Rota%20April%202026.pdf',name:'Neuro IR Rota April 2026.pdf'},
   pediatric_heme_onc:{href:'assets/pdfs/April%202026%20Pediaric%20Hematology%20Oncology%20%26%20SCT%20-%20Call%20Rota%20-REvision%201.pdf',name:'Pediatric Heme-Onc & SCT Rota.pdf'},
   clinical_lab:{href:'assets/pdfs/04%20April%202026%20Clinical%20Laboratory%20%26%20Pathology%20On-Call.pdf',name:'Clinical Laboratory & Pathology On-Call.pdf'},
+  critical_care:{href:'assets/pdfs/Critical%20Care%20April%20Duty%20Rota.pdf',name:'Critical Care April Duty Rota.pdf'},
   medicine_on_call:{href:'assets/pdfs/Block%207%20(Mar%2015%20-%20Apr%2011).pdf',name:'Block 7 (Mar 15 - Apr 11).pdf'},
 };
 
@@ -3038,8 +3039,12 @@ async function loadUploadedSpecialties() {
     const refreshed = refreshUploadedRecordIfNeeded(record);
     if (refreshed !== record) {
       await savePdfRecord(refreshed);
-      // Sync corrected record back to Supabase so all devices get the fix
-      if (typeof syncRecordToSupabase === 'function') {
+      // Sync corrected record back to Supabase ONLY if entries actually changed
+      // (prevents creating duplicate Supabase rows on every page load)
+      const _oldNames = (record.entries || []).map(e => e.name + '|' + e.phone).sort().join(',');
+      const _newNames = (refreshed.entries || []).map(e => e.name + '|' + e.phone).sort().join(',');
+      if (_oldNames !== _newNames && typeof syncRecordToSupabase === 'function') {
+        console.log(`[REFRESH] Entries changed for ${refreshed.deptKey}, syncing to Supabase`);
         syncRecordToSupabase(refreshed).catch(err =>
           console.warn('[REFRESH] Supabase sync-back failed:', err.message)
         );
