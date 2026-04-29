@@ -523,9 +523,21 @@ function refreshUploadedRecordIfNeeded(record) {
       splitMultiDoctorEntries(parseMedicineOnCallPdfEntries(record.rawText, 'medicine_on_call'), 'medicine_on_call')
     );
     if (!reparsed.length) return record;
+    // Rebuild normalized payload so it matches the re-parsed entries
+    // (stale normalized from old parse would override the fresh entries)
+    const freshNormalized = typeof buildNormalizedUploadPayload === 'function'
+      ? buildNormalizedUploadPayload({
+          deptKey: 'medicine_on_call',
+          fileName: record.name || '',
+          entries: reparsed,
+          parseDebug: record.diagnostics || record.debug || {},
+          rawText: record.rawText || '',
+        })
+      : null;
     return {
       ...record,
       entries: reparsed,
+      normalized: freshNormalized || record.normalized,
       isActive: true,
       parsedActive: true,
       audit: {

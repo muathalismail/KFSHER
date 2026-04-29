@@ -40,12 +40,11 @@ _SKIP_LABEL_RE = re.compile(
     re.I
 )
 
-# Matches Saudi mobile numbers in BOTH formats:
-#   05XXXXXXXX (10 digits, leading 0)   ← standard format, MISSED by old regex
+# Matches Saudi mobile numbers in multiple formats:
+#   05XXXXXXXX (10 digits, leading 0)   ← standard format
 #   5XXXXXXXX  (9 digits, no leading 0) ← short format used in some PDFs
-# Uses negative lookbehind/lookahead to avoid matching phone fragments inside
-# longer digit strings (e.g. employee IDs like "05123456789").
-_PHONE_RE = re.compile(r'(?<!\d)(0?5\d{8})(?!\d)')
+#   056 902 1663 / 056-902-1663         ← spaced/dashed format in some PDFs
+_PHONE_RE = re.compile(r'(?<!\d)(0?5[\d\s-]{8,14})(?!\d)')
 
 
 def extract_contacts(pdf_bytes):
