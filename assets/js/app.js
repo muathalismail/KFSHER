@@ -169,10 +169,12 @@ function stabilizeMedicineOnCallErEntry(entry={}) {
     next.role = 'Junior ER';
     next.section = 'Junior ER';
   }
-  const resolved = resolvePhone(ROTAS.medicine_on_call || { contacts:{} }, next);
-  if (resolved?.phone) {
-    next.phone = resolved.phone;
-    next.phoneUncertain = !!resolved.uncertain;
+  if (!next.phone || next.phoneUncertain) {
+    const resolved = resolvePhone(ROTAS.medicine_on_call || { contacts:{} }, next);
+    if (resolved?.phone) {
+      next.phone = resolved.phone;
+      next.phoneUncertain = !!resolved.uncertain;
+    }
   }
   return next;
 }
