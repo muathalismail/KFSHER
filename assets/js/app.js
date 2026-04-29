@@ -170,10 +170,18 @@ function stabilizeMedicineOnCallErEntry(entry={}) {
     next.section = 'Junior ER';
   }
   if (!next.phone || next.phoneUncertain) {
-    const resolved = resolvePhone(ROTAS.medicine_on_call || { contacts:{} }, next);
-    if (resolved?.phone) {
-      next.phone = resolved.phone;
-      next.phoneUncertain = !!resolved.uncertain;
+    // Try ROTAS contacts exact match first (avoids fuzzy matching picking wrong person)
+    const _dept = ROTAS.medicine_on_call || { contacts:{} };
+    const _rotasPhone = _dept.contacts?.[next.name];
+    if (_rotasPhone) {
+      next.phone = _rotasPhone;
+      next.phoneUncertain = false;
+    } else {
+      const resolved = resolvePhone(_dept, next);
+      if (resolved?.phone) {
+        next.phone = resolved.phone;
+        next.phoneUncertain = !!resolved.uncertain;
+      }
     }
   }
   return next;
