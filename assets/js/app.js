@@ -140,6 +140,10 @@ function isMedicineOnCallDay(now) {
 const MEDICINE_ON_CALL_DISPLAY_CONTACT_OVERRIDES = {
   mabdulatif: { name:'Dr. Mohammed Alabdulatif', phone:'0591536669' },
   mohammedalabdulatif: { name:'Dr. Mohammed Alabdulatif', phone:'0591536669' },
+  lamaalshehri: { name:'Dr. Lama Almubarak', phone:'0565109002' },
+  lamaalkunaizi: { name:'Dr. Lama Almubarak', phone:'0565109002' },
+  drlamaalshehri: { name:'Dr. Lama Almubarak', phone:'0565109002' },
+  drlamaalkunaizi: { name:'Dr. Lama Almubarak', phone:'0565109002' },
 };
 
 function isMedicineOnCallErEntry(entry={}) {
