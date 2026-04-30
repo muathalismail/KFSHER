@@ -237,6 +237,7 @@ async function buildCard(deptKey, dept, entries) {
       </div>
     </div>
     <div class="beta-warning-banner">⚠️ This is Beta Version - PLEASE double check using the rota below before calling.</div>
+    ${pdf && pdf.name ? `<div style="font-size:11px;color:var(--muted);padding:0 16px 4px;opacity:0.7">📄 ${escapeHtml(pdf.name)}${pdf.uploadedAt ? ' · ' + new Date(pdf.uploadedAt).toLocaleDateString('en-GB') : ''}</div>` : ''}
     <div class="dgrid">${rowsHtml}${traceHtml}</div>`;
   return card;
 }
