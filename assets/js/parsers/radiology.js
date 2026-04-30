@@ -518,43 +518,11 @@ function refreshUploadedRecordIfNeeded(record) {
     };
   }
   if (record.deptKey === 'medicine_on_call') {
-    // Always re-parse medicine_on_call on startup to pick up alias/parser fixes
-    const reparsed = normalizeParsedEntries(
-      splitMultiDoctorEntries(parseMedicineOnCallPdfEntries(record.rawText, 'medicine_on_call'), 'medicine_on_call')
-    );
-    if (!reparsed.length) return record;
-    // Rebuild normalized payload so it matches the re-parsed entries
-    // (stale normalized from old parse would override the fresh entries)
-    const freshNormalized = typeof buildNormalizedUploadPayload === 'function'
-      ? buildNormalizedUploadPayload({
-          deptKey: 'medicine_on_call',
-          fileName: record.name || '',
-          entries: reparsed,
-          parseDebug: record.diagnostics || record.debug || {},
-          rawText: record.rawText || '',
-        })
-      : null;
-    return {
-      ...record,
-      entries: reparsed,
-      normalized: freshNormalized || record.normalized,
-      isActive: true,
-      parsedActive: true,
-      audit: {
-        ...(record.audit || {}),
-        publishable: true,
-        approved: true,
-        livePublished: true,
-      },
-      review: {
-        ...(record.review || {}),
-        parsing: false,
-        auditRejected: false,
-        pendingUploadReview: false,
-        reviewOnly: false,
-        reviewReason: '',
-      },
-    };
+    // Do NOT re-parse if the record was from server/LLM extraction —
+    // client-side re-parsing produces wrong names (Lama Alshehri instead of Almubarak)
+    // because it lacks the LLM context and server contacts.
+    // Only return the record as-is with display overrides applied at render time.
+    return record;
   }
   if (record.deptKey === 'neurology' && isNeurologyDutyTemplate(record.rawText)) {
     if (!hasLegacyNeurologyUploadEntries(record.entries || [])) return record;
