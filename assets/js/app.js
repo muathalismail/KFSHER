@@ -3088,6 +3088,16 @@ document.addEventListener('DOMContentLoaded', () => {
     // Re-render after data loads (picks up any uploaded specialties)
     renderTags();
     renderWelcomeGrid();
+    // Background revalidation: re-check Supabase every 5 minutes
+    // to pick up uploads from other devices
+    setInterval(() => {
+      if (typeof pullFromSupabase === 'function') {
+        pullFromSupabase()
+          .then(() => loadUploadedSpecialties())
+          .then(() => { renderTags(); renderWelcomeGrid(); })
+          .catch(() => {});
+      }
+    }, 5 * 60 * 1000);
     // ── AUDITOR: run startup checks after data loads ──────────
     Promise.all([
       Auditor.auditSystemState(),

@@ -115,19 +115,22 @@ async function pullFromSupabase() {
 
     console.log(`[SUPABASE SYNC] Found ${records.length} cloud record(s)`);
 
-    // Records are sorted by created_at DESC — first record per specialty is the newest.
-    // Only use the NEWEST record per specialty, skip older duplicates.
-    const seenSpecialties = new Set();
-    let merged = 0;
+    // Find the record with the HIGHEST uploadedAt per specialty
+    // (not created_at — sync-backs create newer rows for older data)
+    const bestPerSpecialty = {};
     for (const cloudRecord of records) {
       const deptKey = cloudRecord.specialty;
       if (!deptKey || !cloudRecord.data) continue;
-      if (seenSpecialties.has(deptKey)) continue; // skip older duplicates
-      seenSpecialties.add(deptKey);
+      const uploadedAt = cloudRecord.data?.uploadedAt || new Date(cloudRecord.created_at).getTime() || 0;
+      if (!bestPerSpecialty[deptKey] || uploadedAt > bestPerSpecialty[deptKey].uploadedAt) {
+        bestPerSpecialty[deptKey] = { cloudRecord, uploadedAt };
+      }
+    }
 
+    let merged = 0;
+    for (const [deptKey, { cloudRecord, uploadedAt: cloudTime }] of Object.entries(bestPerSpecialty)) {
       const local = await getPdfRecord(deptKey).catch(() => null);
       const localTime = local?.uploadedAt || 0;
-      const cloudTime = cloudRecord.data?.uploadedAt || new Date(cloudRecord.created_at).getTime() || 0;
 
       if (cloudTime > localTime) {
         const record = {
