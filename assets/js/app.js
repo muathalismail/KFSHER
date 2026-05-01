@@ -3053,13 +3053,8 @@ async function getPdfHref(deptKey) {
       recordName: fallbackMeta?.name || '',
     };
   }
-  // Sprint 0: DEFAULT_PDF_MAP contains April-specific static PDFs.
-  // Only show them during April. In May+, return null to avoid misleading users.
+  // Show static PDFs from DEFAULT_PDF_MAP (always available for reference)
   const staticPdf = DEFAULT_PDF_MAP[deptKey] || DEFAULT_PDF_MAP[fallbackKey] || null;
-  if (staticPdf) {
-    const currentMonth = new Date().getMonth(); // 0-indexed: 3 = April
-    if (currentMonth !== 3) return null; // April PDFs only valid in April
-  }
   return staticPdf;
 }
 
