@@ -871,6 +871,17 @@ function normalizedUploadedBaseEntries(record, deptKey) {
 function resolveSpecialtyEntries(deptKey, base, schedKey, now, qLow='') {
   if (!base.length) return [];
   if (base.some(isNoCoverageEntry)) return base.filter(isNoCoverageEntry);
+  // Universal ROTAS phone override: fix stale wrong phones from old uploads
+  const _rotasContacts = ROTAS[deptKey]?.contacts;
+  if (_rotasContacts) {
+    for (const entry of base) {
+      const correct = _rotasContacts[entry.name];
+      if (correct && correct !== entry.phone) {
+        entry.phone = correct;
+        entry.phoneUncertain = false;
+      }
+    }
+  }
   if (deptKey === 'medicine_on_call') {
     return splitMultiDoctorEntries(getMedicineOnCallDisplayEntries(base.map(cloneEntry), now), deptKey);
   }
