@@ -171,16 +171,18 @@ SPECIALTY_CONFIGS = {
         'fallback_cols': [2, 3, 6],
         'min_headers': 99,  # merged headers — always use fallback
     },
-    # PICU: 11 cols — Consultant 24h(2), Resident Asst On-Call(5), 1st Responder(7), 2nd Responder(9)
-    # Date: DD/MM/YYYY. Multi-row headers.
+    # PICU: 11 cols — Resident(2), 1st Responder Day(3), 2nd Responder Day(4),
+    # Residents Oncall(5), Asst PM(6), 1st Responder Night(7), 2nd Responder Night(8),
+    # Backup Consultant(9), Consultant 24h(10)
+    # Read all useful columns so weekend rows aren't dropped as empty.
     # Last verified: 2026-05-01, Sample: PICU_April_2026.pdf
     'picu_extract': {
-        'columns': ['consultant_24h', 'resident_oncall', 'first_responder'],
+        'columns': ['resident', 'first_responder_day', 'residents_oncall', 'first_responder_night', 'consultant_24h'],
         'headers': {},
         'date_pattern': re.compile(r'(\d{1,2})/(\d{1,2})/(\d{4})'),
         'day_pattern': re.compile(r'^(Sun|Mon|Tue|Wed|Thu|Fri|Sat)', re.I),
-        'fallback_cols': [2, 5, 7],
-        'min_headers': 99,  # merged headers
+        'fallback_cols': [2, 3, 5, 7, 10],
+        'min_headers': 99,
     },
     # Ped Heme-Onc: 12 cols — 1st On-Duty Day(6), Night(7), 2nd(8), 3rd(9), 4th(10), 5th(11)
     # Date: DD-MM-YYYY (dashes). Date col shifts between 3 and 4 (weekday/weekend).
@@ -195,7 +197,8 @@ SPECIALTY_CONFIGS = {
         'date_col_offset': True,
         'base_date_col': 3,
     },
-    # Neurology: Page 1 has on-call table (18 cols)
+    # Neurology: Page 1 ONLY (on-call table, 18 cols)
+    # Page 0 = inpatient/ER (different format), Page 2 = clinic (not needed)
     # Junior Resident(3), Senior Resident(4), Associate(5), Stroke(6), Consultant(7)
     # Date: D-Mon-YY
     # Last verified: 2026-05-01
@@ -206,7 +209,8 @@ SPECIALTY_CONFIGS = {
         'date_format': 'dMONyy',
         'day_pattern': re.compile(r'^(Sun|Mon|Tue|Wed|Thu|Fri|Sat)', re.I),
         'fallback_cols': [3, 4, 5, 6, 7],
-        'min_headers': 99,  # merged headers
+        'min_headers': 99,
+        'only_pages': [1],  # Page 1 only — skip inpatient (page 0) and clinic (page 2)
     },
     # Oncology: 21 cols — complex merged headers across 4 rows
     # Too complex for reliable extraction — defer to ROTAS + client-side parser
@@ -298,7 +302,10 @@ def extract_table_rows(pdf_bytes, specialty):
     rows_out = []
 
     with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
-        for page in pdf.pages:
+        only_pages = config.get('only_pages')  # e.g. [1] = page index 1 only
+        for page_idx, page in enumerate(pdf.pages):
+            if only_pages is not None and page_idx not in only_pages:
+                continue
             tables = page.extract_tables()
             if not tables:
                 continue
