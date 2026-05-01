@@ -939,7 +939,7 @@ const DEFAULT_PDF_MAP = {
   surgery:{href:'assets/pdfs/Surgery%20%20April%202026.pdf',name:'Surgery April 2026.pdf'},
   orthopedics:{href:'assets/pdfs/Orthopedic%20Duty%20Rota%20April%202026-signed.pdf',name:'Orthopedic Duty Rota April 2026.pdf'},
   neurology:{href:'assets/pdfs/Neurology%20Duty%20Rota%20April%202026.pdf',name:'Neurology Duty Rota April 2026.pdf'},
-  anesthesia:{href:'assets/pdfs/04%20April%202026%20Anesthesia%20Rota%20TAAM.pdf',name:'Anesthesia Rota TAAM.pdf'},
+  anesthesia:{href:'assets/pdfs/05%20May%202026%20Rota%20Anesthesia.pdf',name:'05 May 2026 Rota Anesthesia.pdf'},
   hospitalist:{href:'assets/pdfs/April%202026%20Hospitalist-Duty%20Rota.pdf',name:'Hospitalist Duty Rota.pdf'},
   physical_medicine_rehabilitation:{href:'assets/pdfs/Physical%20Medicine%20%26%20Rehabilitaion%20Duty%20Rota%20updated%20on%2031-03-2026%20in%20April.pdf',name:'Physical Medicine & Rehabilitation Duty Rota.pdf'},
   pediatric_neurology:{href:'assets/pdfs/Ped%20Neuro%20D%20Master%20On-Call%20Consultants%20updated%20on%2031-03-2026%20in%20April.pdf',name:'Pediatric Neurology On-Call.pdf'},
