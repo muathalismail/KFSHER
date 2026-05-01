@@ -1,0 +1,195 @@
+{
+  "medicine_on_call": {
+    "rows_count": 19,
+    "dates_count": 19,
+    "first_date": "01/04",
+    "last_date": "31/03",
+    "sample_row": {
+      "date": "24/03",
+      "day": "Tue",
+      "jw_day": "Elaf",
+      "jw_night": "Salma",
+      "jer_day": "H.Darwish",
+      "jer_night": "Dana",
+      "sr_day": "Razan",
+      "sr_night": "Z.Saihati"
+    },
+    "pdf": "Block 7 (Mar 15 - Apr 11).pdf"
+  },
+  "surgery": {
+    "rows_count": 30,
+    "dates_count": 30,
+    "first_date": "1 April 2026",
+    "last_date": "9 April 2026",
+    "sample_row": {
+      "date": "1 April 2026",
+      "jr_er": "A.AlTala",
+      "sr_er": "Hamidah",
+      "gs_assoc": "Najdi",
+      "gs_consult": "Mansi"
+    },
+    "pdf": "Surgery  April 2026.pdf"
+  },
+  "radiology_oncall": {
+    "rows_count": 38,
+    "dates_count": 30,
+    "first_date": "01/04",
+    "last_date": "30/04",
+    "sample_row": {
+      "date": "01/04",
+      "day": "Wed",
+      "first": "Mona Awaji",
+      "second": "Maryam Al Khalifah",
+      "third": "Fatimah AlKhabbaz"
+    },
+    "pdf": "04 April 2026 MISC On-Call ROTA.pdf"
+  },
+  "hospitalist": {
+    "rows_count": 30,
+    "dates_count": 30,
+    "first_date": "01/04",
+    "last_date": "30/04",
+    "sample_row": {
+      "date": "01/04",
+      "day": "Wed",
+      "onc_er_day": "Dr. Ahmed Hassan",
+      "onc_er_night": "Dr. Elrayess"
+    },
+    "pdf": "April 2026 Hospitalist-Duty Rota.pdf"
+  },
+  "ent": {
+    "rows_count": 28,
+    "dates_count": 28,
+    "first_date": "01/04",
+    "last_date": "29/04",
+    "sample_row": {
+      "date": "01/04",
+      "day": "Wed",
+      "first_oncall": "Abdullah Al Faqih",
+      "second_oncall": "Mashael Alharbi",
+      "third_oncall": "Mohammed Alahmari"
+    },
+    "pdf": "April Duty ENT Rota 2026 Update.pdf"
+  },
+  "orthopedics": {
+    "rows_count": 30,
+    "dates_count": 30,
+    "first_date": "01/04",
+    "last_date": "30/04",
+    "sample_row": {
+      "date": "01/04",
+      "day": "",
+      "resident": "Aqeel",
+      "second_oncall": "Biju",
+      "pediatric_assoc": "",
+      "adult_consultant": "Dr Faraidy"
+    },
+    "pdf": "Orthopedic Duty Rota April 2026-signed.pdf"
+  },
+  "neurosurgery": {
+    "rows_count": 30,
+    "dates_count": 30,
+    "first_date": "01/04",
+    "last_date": "30/04",
+    "sample_row": {
+      "date": "01/04",
+      "day": "Wed",
+      "resident_day": "Faisal",
+      "resident_night": "Mohamed",
+      "fellow_assistant": "Dr Amin",
+      "associate_consultant": "",
+      "neurosurgeon_consultant": "Dr Sultan"
+    },
+    "pdf": "Neuro Surgery D Duty Rota -April 2026.pdf"
+  },
+  "spine": {
+    "rows_count": 30,
+    "dates_count": 30,
+    "first_date": "01/04",
+    "last_date": "30/04",
+    "sample_row": {
+      "date": "01/04",
+      "day": "Wed",
+      "resident_day": "Faisal",
+      "resident_night": "Mohamed",
+      "fellow_second": "Dr. Elkholy",
+      "consultant": "Dr. Bachar"
+    },
+    "pdf": "Spine Surgery D Duty Rota Of April 2026.pdf"
+  },
+  "hematology": {
+    "rows_count": 30,
+    "dates_count": 30,
+    "first_date": "01/04",
+    "last_date": "30/04",
+    "sample_row": {
+      "date": "01/04",
+      "day": "Wed",
+      "oncall1_resident": "Zainab",
+      "oncall2_fellow": "Enas",
+      "second_rounder": "Almahroos/Reem S",
+      "oncall4_consultant": "Omar",
+      "er_fellow": ". Wael",
+      "consultation_consultant": "Manar"
+    },
+    "pdf": "April 2026 - Adult Hematology-Oncology & SCT Department On-Call and Duty Rota.pdf"
+  },
+  "kptx": {
+    "rows_count": 30,
+    "dates_count": 30,
+    "first_date": "01/04",
+    "last_date": "30/04",
+    "sample_row": {
+      "date": "01/04",
+      "day": "Wed",
+      "inpatient": "Ali / Abdullah",
+      "first_oncall": "Abdullah",
+      "second_oncall": "",
+      "consultant_oncall": "Dr. Abdulnaser Al Abadi",
+      "consultant_scot": "",
+      "coordinator": "Judee Selem"
+    },
+    "pdf": "April 2026 of KPTx Call Schedule.pdf"
+  },
+  "liver": {
+    "rows_count": 30,
+    "dates_count": 30,
+    "first_date": "01/04",
+    "last_date": "30/04",
+    "sample_row": {
+      "date": "01/04",
+      "day": "Wed",
+      "day_coverage": "Sharafeldin/Attalaah ( till 12 PM)",
+      "after_duty": "Attalaah",
+      "second_oncall": "Attalaah",
+      "consultant_oncall": "Hadi",
+      "coordinator": ""
+    },
+    "pdf": "April 2026 Adult Liver Transplant Call Schedule.pdf"
+  },
+  "pediatrics": {
+    "rows_count": 31,
+    "dates_count": 30,
+    "first_date": "01/04",
+    "last_date": "30/04",
+    "sample_row": {
+      "date": "01/04",
+      "day": "Wed",
+      "first_oncall": "Tahirah AlGarrous",
+      "second_oncall": "Ahmed Abuelazz",
+      "third_oncall": "",
+      "hospitalist_er": "Dr Sherifah",
+      "hospitalist_ward": "Dr Reem",
+      "hospitalist_after": "Dr Reem"
+    },
+    "pdf": "Pidiatric Duty Rota April 2026.pdf"
+  },
+  "critical_care": {
+    "rows_count": 0,
+    "dates_count": 30,
+    "first_date": "01/04",
+    "last_date": "30/04",
+    "method": "rotas_builtin",
+    "pdf": "Critical Care April Duty Rota.pdf"
+  }
+}
