@@ -143,6 +143,74 @@ SPECIALTY_CONFIGS = {
         'fallback_cols': [2, 3],
         'min_headers': 99,  # image PDF — always falls to Claude Vision
     },
+    # Gynecology: Date | Duty | Resident | Fellow | Consultant | Inpatient
+    # Format: DD/MM/YYYY, 24H duty, bare first names
+    # Last verified: 2026-05-01, Sample: Gynecology_April_2026.pdf
+    'gynecology': {
+        'columns': ['resident', 'fellow', 'consultant'],
+        'headers': {
+            'resident': re.compile(r'resident', re.I),
+            'fellow': re.compile(r'assistant|fellow', re.I),
+            'consultant': re.compile(r'consultant', re.I),
+        },
+        'date_pattern': re.compile(r'(\d{1,2})/(\d{1,2})/(\d{4})'),
+        'day_pattern': None,
+        'fallback_cols': [2, 3, 4],
+        'min_headers': 2,
+    },
+    # Psychiatry: 16 cols — Adults: IP Consult(2), Resident(3), 2nd On-Duty(4), CL(5), Consultant(6)
+    # Children: Resident IP(7), Resident On-Duty(8), Consultant(9)
+    # Date format: D-Mon-YY (1-Apr-26). Merged headers row 0.
+    # Last verified: 2026-05-01, Sample: Psychiatry_April_2026.pdf
+    'psychiatry': {
+        'columns': ['ip_consultation', 'resident_onduty', 'consultant_onduty'],
+        'headers': {},
+        'date_pattern': re.compile(r'(\d{1,2})-([A-Za-z]{3})-(\d{2,4})'),
+        'date_format': 'dMONyy',
+        'day_pattern': re.compile(r'^(Sun|Mon|Tue|Wed|Thu|Fri|Sat)', re.I),
+        'fallback_cols': [2, 3, 6],
+        'min_headers': 99,  # merged headers — always use fallback
+    },
+    # PICU: 11 cols — Consultant 24h(2), Resident Asst On-Call(5), 1st Responder(7), 2nd Responder(9)
+    # Date: DD/MM/YYYY. Multi-row headers.
+    # Last verified: 2026-05-01, Sample: PICU_April_2026.pdf
+    'picu_extract': {
+        'columns': ['consultant_24h', 'resident_oncall', 'first_responder'],
+        'headers': {},
+        'date_pattern': re.compile(r'(\d{1,2})/(\d{1,2})/(\d{4})'),
+        'day_pattern': re.compile(r'^(Sun|Mon|Tue|Wed|Thu|Fri|Sat)', re.I),
+        'fallback_cols': [2, 5, 7],
+        'min_headers': 99,  # merged headers
+    },
+    # Ped Heme-Onc: 12 cols — 1st On-Duty Day(6), Night(7), 2nd(8), 3rd(9), 4th(10), 5th(11)
+    # Date: DD-MM-YYYY (dashes). Date col shifts between 3 and 4 (weekday/weekend).
+    # Last verified: 2026-05-01
+    'pediatric_heme_onc': {
+        'columns': ['first_onduty_day', 'first_onduty_night', 'second_onduty', 'third_onduty'],
+        'headers': {},
+        'date_pattern': re.compile(r'(\d{1,2})-(\d{1,2})-(\d{4})'),
+        'day_pattern': re.compile(r'^(Sun|Mon|Tue|Wed|Thu|Fri|Sat)', re.I),
+        'fallback_cols': [6, 7, 8, 9],
+        'min_headers': 99,
+        'date_col_offset': True,
+        'base_date_col': 3,
+    },
+    # Neurology: Page 1 has on-call table (18 cols)
+    # Junior Resident(3), Senior Resident(4), Associate(5), Stroke(6), Consultant(7)
+    # Date: D-Mon-YY
+    # Last verified: 2026-05-01
+    'neurology_extract': {
+        'columns': ['junior_resident', 'senior_resident', 'associate', 'stroke_oncall', 'consultant'],
+        'headers': {},
+        'date_pattern': re.compile(r'(\d{1,2})-([A-Za-z]{3})-(\d{2,4})'),
+        'date_format': 'dMONyy',
+        'day_pattern': re.compile(r'^(Sun|Mon|Tue|Wed|Thu|Fri|Sat)', re.I),
+        'fallback_cols': [3, 4, 5, 6, 7],
+        'min_headers': 99,  # merged headers
+    },
+    # Oncology: 21 cols — complex merged headers across 4 rows
+    # Too complex for reliable extraction — defer to ROTAS + client-side parser
+    # 'oncology': deferred
 }
 
 MONTH_MAP = {
