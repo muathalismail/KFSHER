@@ -212,6 +212,18 @@ SPECIALTY_CONFIGS = {
         'min_headers': 99,
         'only_pages': [1],  # Page 1 only — skip inpatient (page 0) and clinic (page 2)
     },
+    # Adult Cardiology: 48 cols — 1st On-Call(6), 2nd On-Call(9), 3rd On-Call(12)
+    # Date: D/MM/YYYY at col 3. Only page 0 (schedule). Page 1 = contacts.
+    # Last verified: 2026-05-01
+    'adult_cardiology': {
+        'columns': ['first_oncall', 'second_oncall', 'third_oncall'],
+        'headers': {},
+        'date_pattern': re.compile(r'(\d{1,2})/(\d{1,2})/(\d{4})'),
+        'day_pattern': re.compile(r'^(Sun|Mon|Tue|Wed|Thu|Fri|Sat)', re.I),
+        'fallback_cols': [6, 9, 12],
+        'min_headers': 99,
+        'only_pages': [0],
+    },
     # Urology: 17 cols — weekday: 1st(6) 2nd(8) consultant(11)
     # Weekend: date shifts to col 1, 1st stays(6) but 2nd shifts(9) consultant(12)
     # Solution: read both possible positions, merge in post-processing

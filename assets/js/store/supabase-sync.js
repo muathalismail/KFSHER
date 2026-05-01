@@ -115,15 +115,27 @@ async function pullFromSupabase() {
 
     console.log(`[SUPABASE SYNC] Found ${records.length} cloud record(s)`);
 
-    // Find the record with the HIGHEST uploadedAt per specialty
-    // (not created_at — sync-backs create newer rows for older data)
+    // Find the BEST record per specialty:
+    // 1. Prefer records with entries > 0
+    // 2. Among those, prefer highest uploadedAt
+    // 3. If ALL have 0 entries, pick newest (for PDF view)
     const bestPerSpecialty = {};
     for (const cloudRecord of records) {
       const deptKey = cloudRecord.specialty;
       if (!deptKey || !cloudRecord.data) continue;
       const uploadedAt = cloudRecord.data?.uploadedAt || new Date(cloudRecord.created_at).getTime() || 0;
-      if (!bestPerSpecialty[deptKey] || uploadedAt > bestPerSpecialty[deptKey].uploadedAt) {
-        bestPerSpecialty[deptKey] = { cloudRecord, uploadedAt };
+      const entries = cloudRecord.data?.entries || [];
+      const hasEntries = entries.length > 0;
+      const current = bestPerSpecialty[deptKey];
+
+      if (!current) {
+        bestPerSpecialty[deptKey] = { cloudRecord, uploadedAt, hasEntries };
+      } else if (hasEntries && !current.hasEntries) {
+        // New has entries, current doesn't → prefer new (even if older)
+        bestPerSpecialty[deptKey] = { cloudRecord, uploadedAt, hasEntries };
+      } else if (hasEntries === current.hasEntries && uploadedAt > current.uploadedAt) {
+        // Same entry status → prefer newer
+        bestPerSpecialty[deptKey] = { cloudRecord, uploadedAt, hasEntries };
       }
     }
 

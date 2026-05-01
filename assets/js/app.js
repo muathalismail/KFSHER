@@ -2106,7 +2106,8 @@ async function parseUploadedPdf(file, deptKey) {
     // PDF view only — schedule managed in ROTAS, skip extraction
     console.log(`[${deptKey.toUpperCase()}] PDF view only, schedule from ROTAS`);
   } else if (deptKey === 'gynecology' || deptKey === 'psychiatry' || deptKey === 'picu'
-      || deptKey === 'pediatric_heme_onc' || deptKey === 'neurology' || deptKey === 'urology') {
+      || deptKey === 'pediatric_heme_onc' || deptKey === 'neurology' || deptKey === 'urology'
+      || deptKey === 'adult_cardiology') {
     // pdfplumber extraction via extract-table.py
     const extractKey = deptKey === 'picu' ? 'picu_extract' : deptKey === 'neurology' ? 'neurology_extract' : deptKey;
     try {
