@@ -366,7 +366,13 @@ function getHospitalistEntries(schedKey, now) {
     if (end > start) return mins >= start && mins < end;
     return mins >= start || mins < end;
   });
-  return active;
+  // Resolve phones from ROTAS contacts (fixes stale wrong phones from old uploads)
+  const contacts = dept.contacts || {};
+  return active.map(entry => {
+    const rotasPhone = contacts[entry.name];
+    if (rotasPhone) return { ...entry, phone: rotasPhone, phoneUncertain: false };
+    return entry;
+  });
 }
 
 
