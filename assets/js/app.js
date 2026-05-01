@@ -871,14 +871,25 @@ function normalizedUploadedBaseEntries(record, deptKey) {
 function resolveSpecialtyEntries(deptKey, base, schedKey, now, qLow='') {
   if (!base.length) return [];
   if (base.some(isNoCoverageEntry)) return base.filter(isNoCoverageEntry);
-  // Universal ROTAS phone override: fix stale wrong phones from old uploads
+  // Universal ROTAS phone + name override: fix stale wrong phones and expand short names
   const _rotasContacts = ROTAS[deptKey]?.contacts;
   if (_rotasContacts) {
     for (const entry of base) {
-      const correct = _rotasContacts[entry.name];
-      if (correct && correct !== entry.phone) {
-        entry.phone = correct;
+      // 1) Direct match: entry.name exists in contacts → fix phone
+      const directPhone = _rotasContacts[entry.name];
+      if (directPhone) {
+        entry.phone = directPhone;
         entry.phoneUncertain = false;
+        // 2) Expand name: find the longest "Dr. Firstname Lastname" with same phone
+        let fullName = null;
+        for (const [cn, cp] of Object.entries(_rotasContacts)) {
+          if (cp === directPhone && /^Dr\.?\s/i.test(cn) && cn.length > (fullName || '').length) {
+            fullName = cn;
+          }
+        }
+        if (fullName && fullName.length > entry.name.length) {
+          entry.name = fullName;
+        }
       }
     }
   }
