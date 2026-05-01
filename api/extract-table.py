@@ -212,9 +212,18 @@ SPECIALTY_CONFIGS = {
         'min_headers': 99,
         'only_pages': [1],  # Page 1 only — skip inpatient (page 0) and clinic (page 2)
     },
-    # Oncology: 21 cols — complex merged headers across 4 rows
-    # Too complex for reliable extraction — defer to ROTAS + client-side parser
-    # 'oncology': deferred
+    # Urology: 17 cols — weekday: 1st(6) 2nd(8) consultant(11)
+    # Weekend: date shifts to col 1, 1st stays(6) but 2nd shifts(9) consultant(12)
+    # Solution: read both possible positions, merge in post-processing
+    # Last verified: 2026-05-01
+    'urology': {
+        'columns': ['first_oncall', 'second_oncall_wd', 'second_oncall_we', 'consultant_wd', 'consultant_we'],
+        'headers': {},
+        'date_pattern': re.compile(r'(\d{1,2})/(\d{1,2})(?!/\d)'),
+        'day_pattern': re.compile(r'^(Sun|Mon|Tue|Wed|Thu|Fri|Sat)', re.I),
+        'fallback_cols': [6, 8, 9, 11, 12],
+        'min_headers': 99,
+    },
 }
 
 MONTH_MAP = {

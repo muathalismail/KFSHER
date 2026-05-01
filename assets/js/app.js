@@ -2089,7 +2089,7 @@ async function parseUploadedPdf(file, deptKey) {
     // PDF view only — schedule managed in ROTAS, skip extraction
     console.log(`[${deptKey.toUpperCase()}] PDF view only, schedule from ROTAS`);
   } else if (deptKey === 'gynecology' || deptKey === 'psychiatry' || deptKey === 'picu'
-      || deptKey === 'pediatric_heme_onc' || deptKey === 'neurology') {
+      || deptKey === 'pediatric_heme_onc' || deptKey === 'neurology' || deptKey === 'urology') {
     // pdfplumber extraction via extract-table.py
     const extractKey = deptKey === 'picu' ? 'picu_extract' : deptKey === 'neurology' ? 'neurology_extract' : deptKey;
     try {
@@ -2112,8 +2112,14 @@ async function parseUploadedPdf(file, deptKey) {
               const dateKey = row.date || '';
               if (!dateKey) continue;
               const cols = result.columns || [];
-              const entries = cols.map(col => {
-                const name = (row[col] || '').trim();
+              // Merge dual columns (e.g. urology second_oncall_wd/second_oncall_we)
+              const mergedRow = {};
+              for (const col of cols) {
+                const base = col.replace(/_wd$|_we$/, '');
+                const val = (row[col] || '').trim();
+                if (val && !mergedRow[base]) mergedRow[base] = val;
+              }
+              const entries = Object.entries(mergedRow).map(([col, name]) => {
                 if (!name) return null;
                 return { role: col.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()), name, shiftType: '24h', startTime: '07:30', endTime: '07:30', parsedFromPdf: true };
               }).filter(Boolean);
