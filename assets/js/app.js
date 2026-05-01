@@ -1109,7 +1109,7 @@ const PDF_DETECTION_RULES = [
   { key:'kptx', terms:['kptx','kidney transplant','kidney tx','زراعة الكلى'] },
   { key:'liver', terms:['liver transplant','hepat','زراعة الكبد'] },
   { key:'palliative', terms:['palliative','palliative medicine','رعاية تلطيفية'] },
-  { key:'gynecology', terms:['gynecology','gynaecology','gynae','obgyn','نسائية'] },
+  { key:'gynecology', terms:['gynecology','gynaecology','gynae','obgyn','ob-gyn','ob/gyn','obstetrics','نسائية','duty rota gynecology'] },
   { key:'dental', terms:['dental','dentistry','أسنان'] },
   { key:'psychiatry', terms:['psychiatry','mental health','نفسية'] },
   { key:'anesthesia', terms:['anesthesia','anaesthesia','anesthesiology','anaesthesiology','taam','تخدير'] },
@@ -3042,6 +3042,11 @@ async function getPdfHref(deptKey) {
   const fallbackKey = PDF_FALLBACKS[deptKey];
   let uploaded = await getLatestActivePdfRecord(deptKey);
   if (!uploaded && fallbackKey) uploaded = await getLatestActivePdfRecord(fallbackKey);
+  // Fallback: even if no active record, check IndexedDB for any record with a PDF blob/URL
+  if (!uploaded) {
+    const anyRecord = await getPdfRecord(deptKey).catch(() => null);
+    if (anyRecord && (anyRecord.blob || anyRecord._cloudPdfUrl)) uploaded = anyRecord;
+  }
   const renderKey = uploaded ? (uploaded.deptKey || deptKey) : (DEFAULT_PDF_MAP[deptKey] ? deptKey : fallbackKey);
   if (uploaded && uploaded.blob) {
     if (runtimePdfUrls[renderKey]) URL.revokeObjectURL(runtimePdfUrls[renderKey]);
@@ -3447,12 +3452,13 @@ document.addEventListener('DOMContentLoaded', () => {
       if (publishToLive) {
         await saveActivePdfRecord(uploadRecord);
         registerUploadedSpecialty(canonicalizeUploadedRecord(uploadRecord));
-        // Sync to Supabase with the PDF file for cross-device viewing
-        if (typeof syncRecordToSupabase === 'function') {
-          syncRecordToSupabase(uploadRecord, file).catch(() => {});
-        }
       } else {
         await saveRejectedPdfRecord(uploadRecord);
+      }
+      // Always sync PDF to Supabase Storage — even if extraction failed,
+      // so the PDF is viewable on all devices
+      if (typeof syncRecordToSupabase === 'function') {
+        syncRecordToSupabase(uploadRecord, file).catch(() => {});
       }
 
       debug.saved = true;
