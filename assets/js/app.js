@@ -2085,7 +2085,7 @@ async function parseUploadedPdf(file, deptKey) {
     } catch (err) {
       console.warn('[PEDIATRICS] Server schedule extraction failed, using client-side:', err.message);
     }
-  } else if (deptKey === 'critical_care' || deptKey === 'oncology') {
+  } else if (deptKey === 'critical_care' || deptKey === 'oncology' || deptKey === 'anesthesia') {
     // PDF view only — schedule managed in ROTAS, skip extraction
     console.log(`[${deptKey.toUpperCase()}] PDF view only, schedule from ROTAS`);
   } else if (deptKey === 'gynecology' || deptKey === 'psychiatry' || deptKey === 'picu'
