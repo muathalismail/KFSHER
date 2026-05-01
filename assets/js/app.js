@@ -146,6 +146,23 @@ const MEDICINE_ON_CALL_DISPLAY_CONTACT_OVERRIDES = {
   drlamaalkunaizi: { name:'Dr. Lama Almubarak', phone:'0565109002' },
 };
 
+// Soft validation: expected ranges per specialty (warns, never blocks)
+const EXPECTED_EXTRACTION_RANGES = {
+  medicine_on_call:{min:100,max:250}, surgery:{min:80,max:200}, pediatrics:{min:50,max:150},
+  radiology_oncall:{min:20,max:80}, hospitalist:{min:30,max:100}, gynecology:{min:5,max:30},
+  psychiatry:{min:10,max:40}, picu:{min:10,max:40}, neurology:{min:15,max:50},
+  pediatric_heme_onc:{min:10,max:40}, adult_cardiology:{min:15,max:60}, nephrology:{min:5,max:50},
+  radonc:{min:5,max:30}, dental:{min:10,max:80}, physical_medicine_rehabilitation:{min:3,max:15},
+};
+function validateExtractionResult(deptKey, entries) {
+  const r = EXPECTED_EXTRACTION_RANGES[deptKey];
+  if (!r) return;
+  const docs = new Set((entries||[]).map(e=>(e.name||'').toLowerCase().trim())).size;
+  if (docs < r.min) console.warn(`[VALIDATION] ${deptKey}: ${docs} doctors (expected ${r.min}+)`);
+  if (docs > r.max) console.warn(`[VALIDATION] ${deptKey}: ${docs} doctors (max ${r.max}) — possible over-extraction`);
+  else console.log(`[VALIDATION] ${deptKey}: ${docs} doctors ✓`);
+}
+
 function isMedicineOnCallErEntry(entry={}) {
   const role = normalizeText(entry.role || '');
   const section = normalizeText(entry.section || '');
@@ -1102,6 +1119,7 @@ const PDF_DETECTION_RULES = [
   { key:'gastroenterology', terms:['gastroenterology','gastro','gi rota','ercp','جهاز هضمي'] },
   { key:'pulmonary', terms:['pulmonary','pulmonology','pulmon','respiratory','chest','صدرية'] },
   { key:'infectious', terms:['infectious disease','infection','id rota','أمراض معدية'] },
+  { key:'physical_medicine_rehabilitation', terms:['physical medicine','rehabilitation duty','rehabilitaion duty','pmr duty','phys med'] },
   { key:'medicine_on_call', terms:['medicine on call','in house on call rota','department of medicnie','block 7','internal medicine on call'] },
   { key:'critical_care', terms:['critical care','icu','intensive care','icu duty','critical care duty','العناية المركزة','العناية'] },
   { key:'picu', terms:['picu','pediatric icu','picu duty'] },
@@ -1113,7 +1131,6 @@ const PDF_DETECTION_RULES = [
   { key:'surgery', terms:['department of surgery','surgery april','general surgery'] },
   { key:'neurology', terms:['neurology','neurology duty','neurology department','neurology rota','neurology main'] },
   { key:'hospitalist', terms:['hospitalist department','hospitalist duty'] },
-  { key:'physical_medicine_rehabilitation', terms:['physical medicine','rehabilitation duty','rehabilitaion duty'] },
   { key:'medicine', terms:['department of medicine','medicine rota','medical department'] },
   { key:'ent', terms:['ent','ear nose throat','أنف وأذن وحنجرة'] },
 ];
@@ -3381,6 +3398,7 @@ document.addEventListener('DOMContentLoaded', () => {
         review.reasonCodes = diagnostics.activation.reasonCodes;
       }
 
+      validateExtractionResult(deptKey, entries);
       debug.rows = entries.length;
       debug.trustScore = trustProfile.trustScore;
       debug.trustLevel = trustProfile.trustLevel;
@@ -3408,7 +3426,7 @@ document.addEventListener('DOMContentLoaded', () => {
         uploadedAt: Date.now(),
         blob: file,
         detectionSource: source,
-        parsedActive: publishToLive,
+        parsedActive: publishToLive && entries.length > 0,
         entries,
         textSample: parsed.textSample || '',
         rawText: parsed.rawText || '',

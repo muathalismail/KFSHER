@@ -954,7 +954,53 @@ function parseDaySequence(text='', deptKey='', monthYear='') {
 }
 
 
+// Specialties with dedicated parsers — generic should NOT run for these
+const SPECIALTIES_WITH_DEDICATED_PARSERS = new Set([
+  // Claude API parsers
+  'medicine_on_call', 'surgery', 'pediatrics', 'radiology_oncall',
+  // pdfplumber via extract-table.py
+  'hospitalist', 'ent', 'orthopedics', 'neurosurgery', 'spine',
+  'hematology', 'kptx', 'liver', 'gynecology', 'psychiatry',
+  'picu', 'pediatric_heme_onc', 'neurology', 'urology',
+  // PDF view only
+  'critical_care', 'oncology', 'anesthesia',
+]);
+
+// Names that should never be treated as doctor names
+const NAME_BLACKLIST = new Set([
+  'name', 'name id ext', 'see general pediatric rota', 'see general',
+  'header', 'footer', 'date', 'doctor', 'specialty', 'phone', 'number',
+  'mobile', 'day', 'time', 'shift', 'role', 'position', 'department',
+  'on-call', 'on call', 'consultant', 'resident', 'fellow', 'associate',
+  'ext', 'id', 'pager', 'office', 'bleep', 'leave', 'annual',
+]);
+
+const NAME_BLACKLIST_PATTERNS = [
+  /^[A-Z\s]{20,}$/,           // All caps 20+ chars
+  /^\d+$/,                     // Pure numbers
+  /^[\d\s\-\/]+$/,            // Only digits/separators
+  /^(Sun|Mon|Tue|Wed|Thu|Fri|Sat)(day)?$/i,
+  /^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)$/i,
+  /^(1st|2nd|3rd|4th|5th)\s*(on|call|duty)/i,
+];
+
+function isValidDoctorName(name) {
+  if (!name || typeof name !== 'string') return false;
+  const trimmed = name.trim();
+  if (trimmed.length < 3 || trimmed.length > 80) return false;
+  if (NAME_BLACKLIST.has(trimmed.toLowerCase())) return false;
+  for (const p of NAME_BLACKLIST_PATTERNS) { if (p.test(trimmed)) return false; }
+  if (!/[a-zA-Z\u0600-\u06FF]/.test(trimmed)) return false;
+  return true;
+}
+
 function parseGenericPdfEntries(text='', deptKey='') {
+  // GUARD: skip generic for specialties with dedicated parsers
+  if (SPECIALTIES_WITH_DEDICATED_PARSERS.has(deptKey)) {
+    console.log(`[GENERIC_GUARD] Skipping ${deptKey} — has dedicated parser`);
+    return [];
+  }
+
   // Step 1: build contact map from the full text (name→phone from staff list)
   const contactMap = buildContactMapFromText(text);
 
@@ -1068,7 +1114,7 @@ function normalizeParsedEntries(entries=[]) {
     expanded2.push(entry);
   }
 
-  return dedupeParsedEntries(expanded2
+  const deduped = dedupeParsedEntries(expanded2
     .map(entry => {
       const meta = parseRoleMeta(entry.role || '');
       let name = (entry.name || '').replace(/\bTAAM\b/gi, '').replace(/\s+/g, ' ').trim();
@@ -1108,5 +1154,26 @@ function normalizeParsedEntries(entries=[]) {
       const words = entry.name.split(' ').filter(Boolean);
       return words.length >= 1 && words.every(w => w.length >= 4) && words.some(w => w.length >= 5);
     })
+    // Name blacklist filter — remove headers/labels mistakenly extracted as names
+    .filter(entry => {
+      if (!isValidDoctorName(entry.name)) {
+        console.warn(`[NAME_FILTER] Removed invalid: "${entry.name}"`);
+        return false;
+      }
+      return true;
+    })
   );
+
+  // Final deduplication: max 3 occurrences of same (name + role + date)
+  const dedupSeen = new Map();
+  return deduped.filter(entry => {
+    const key = `${(entry.name||'').toLowerCase().trim()}|${entry.role||''}|${entry.date||''}`;
+    const count = (dedupSeen.get(key) || 0) + 1;
+    dedupSeen.set(key, count);
+    if (count > 3) {
+      console.warn(`[DEDUP] Removed excess duplicate: "${entry.name}" (${count}x)`);
+      return false;
+    }
+    return true;
+  });
 }
