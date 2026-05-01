@@ -2085,40 +2085,45 @@ async function parseUploadedPdf(file, deptKey) {
     } catch (err) {
       console.warn('[PEDIATRICS] Server schedule extraction failed, using client-side:', err.message);
     }
-  } else if (deptKey === 'critical_care') {
-    // Critical Care PDF is image-based — extract-table.py falls back to Claude Vision
+  } else if (deptKey === 'critical_care' || deptKey === 'oncology') {
+    // PDF view only — schedule managed in ROTAS, skip extraction
+    console.log(`[${deptKey.toUpperCase()}] PDF view only, schedule from ROTAS`);
+  } else if (deptKey === 'gynecology' || deptKey === 'psychiatry' || deptKey === 'picu'
+      || deptKey === 'pediatric_heme_onc' || deptKey === 'neurology') {
+    // pdfplumber extraction via extract-table.py
+    const extractKey = deptKey === 'picu' ? 'picu_extract' : deptKey === 'neurology' ? 'neurology_extract' : deptKey;
     try {
       const buffer = await file.arrayBuffer();
       const b64 = btoa(new Uint8Array(buffer).reduce((s, b) => s + String.fromCharCode(b), ''));
       const resp = await fetch('/api/extract-table', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pdf_base64: b64, specialty: 'critical_care' }),
+        body: JSON.stringify({ pdf_base64: b64, specialty: extractKey }),
       });
       if (resp.ok) {
         const result = await resp.json();
         const rows = result.rows || [];
         if (rows.length) {
-          console.log(`[CRITICAL_CARE] Extracted ${rows.length} rows via ${result.method || 'unknown'}`);
-          // Store in ROTAS schedule directly (no dedicated parser)
-          const dept = ROTAS.critical_care;
+          console.log(`[${deptKey.toUpperCase()}] Extracted ${rows.length} rows via ${result.method || 'pdfplumber'}`);
+          const dept = ROTAS[deptKey];
           if (dept) {
+            dept.schedule = dept.schedule || {};
             for (const row of rows) {
               const dateKey = row.date || '';
               if (!dateKey) continue;
-              const dayNames = (row.first_oncall || '').trim();
-              const nightNames = (row.second_oncall || '').trim();
-              const entries = [];
-              if (dayNames) entries.push({role:'Day Shift',shiftType:'day',startTime:'07:30',endTime:'15:30',name:dayNames});
-              if (nightNames) entries.push({role:'Night Shift',shiftType:'night',startTime:'15:30',endTime:'07:30',name:nightNames});
+              const cols = result.columns || [];
+              const entries = cols.map(col => {
+                const name = (row[col] || '').trim();
+                if (!name) return null;
+                return { role: col.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()), name, shiftType: '24h', startTime: '07:30', endTime: '07:30', parsedFromPdf: true };
+              }).filter(Boolean);
               if (entries.length) dept.schedule[dateKey] = entries;
             }
-            console.log(`[CRITICAL_CARE] Updated ROTAS schedule with ${rows.length} dates`);
           }
         }
       }
     } catch (err) {
-      console.warn('[CRITICAL_CARE] Extraction failed, using ROTAS built-in:', err.message);
+      console.warn(`[${deptKey.toUpperCase()}] Extraction failed, using ROTAS built-in:`, err.message);
     }
   } else if (deptKey === 'orthopedics' || deptKey === 'spine' || deptKey === 'neurosurgery') {
     try {
