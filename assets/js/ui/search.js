@@ -277,7 +277,7 @@ const TAG_LIST = [
   ['neurosurgery','Neurosurgery'],
   ['spine','Spine'],
   ['gynecology','Gynecology'],
-  ['critical_care','Critical Care'],
+  ['critical_care','ICU'],
   ['picu','PICU'],
   ['anesthesia','Anesthesia'],
   ['psychiatry','Psychiatry'],
