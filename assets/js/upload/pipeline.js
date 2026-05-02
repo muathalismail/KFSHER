@@ -160,6 +160,10 @@ const SPECIALTY_PIPELINE_RULES = {
     requiredRoles: [],
     autoActivate: true,
   },
+  critical_care: {
+    requiredRoles: [],
+    autoActivate: true,
+  },
   pediatric_heme_onc: {
     requiredRoles: ['on-duty', 'consultant'],
     autoActivate: true,

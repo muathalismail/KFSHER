@@ -3484,7 +3484,7 @@ document.addEventListener('DOMContentLoaded', () => {
         uploadedAt: Date.now(),
         blob: file,
         detectionSource: source,
-        parsedActive: publishToLive && entries.length > 0,
+        parsedActive: publishToLive && (entries.length > 0 || deptKey === 'critical_care' || deptKey === 'oncology'),
         entries,
         textSample: parsed.textSample || '',
         rawText: parsed.rawText || '',
