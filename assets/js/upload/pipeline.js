@@ -60,6 +60,21 @@ const AUTO_PUBLISH_SPECIALTIES = new Set([
   'pediatrics',
   'hematology',
   'orthopedics',
+  'urology',
+  'dental',
+  'gynecology',
+  'psychiatry',
+  'adult_cardiology',
+  'kptx',
+  'liver',
+  'ent',
+  'neurosurgery',
+  'spine',
+  'palliative',
+  'radiology_oncall',
+  'medicine_on_call',
+  'pediatric_heme_onc',
+  'critical_care',
   ...MEDICINE_SUBSPECIALTY_KEYS,
 ]);
 
@@ -161,6 +176,10 @@ const SPECIALTY_PIPELINE_RULES = {
     autoActivate: true,
   },
   critical_care: {
+    requiredRoles: [],
+    autoActivate: true,
+  },
+  urology: {
     requiredRoles: [],
     autoActivate: true,
   },
