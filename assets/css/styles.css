@@ -44,7 +44,7 @@ h1{font-size:clamp(26px,5vw,40px);font-weight:700;background:linear-gradient(135
 
 /* tags */
 .tags{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:22px}
-.tag{padding:5px 14px;background:var(--surf2);border:1px solid var(--border);border-radius:50px;font-size:11px;color:var(--muted);cursor:pointer;transition:all .2s;white-space:nowrap}
+.tag{padding:5px 14px;background:var(--surf2);border:1px solid var(--border);border-radius:50px;font-size:11px;color:#e0e8f5;cursor:pointer;transition:all .2s;white-space:nowrap}
 .tag:hover,.tag.on{background:rgba(0,212,255,.1);border-color:var(--accent);color:var(--accent)}
 
 /* welcome grid */
