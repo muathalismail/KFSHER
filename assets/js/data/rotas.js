@@ -1653,6 +1653,7 @@ medicine_on_call:{
     'M.Haddad':'0549095077',
     'Maha':'0561632377',
     'Mahdi':'0568655425',
+    'Dr. Mahdi Alahmad':'0548377141','Mahdi Alahmad':'0548377141',
     'Marwa':'0542332175',
     'Mujtaba':'0568443393',
     'Nasser':'0552221982',
