@@ -149,7 +149,7 @@ const MEDICINE_ON_CALL_DISPLAY_CONTACT_OVERRIDES = {
 // Soft validation: expected ranges per specialty (warns, never blocks)
 const EXPECTED_EXTRACTION_RANGES = {
   medicine_on_call:{min:100,max:250}, surgery:{min:80,max:200}, pediatrics:{min:50,max:150},
-  radiology_oncall:{min:20,max:80}, hospitalist:{min:30,max:100}, gynecology:{min:5,max:30},
+  radiology_oncall:{min:20,max:80}, hospitalist:{min:20,max:300}, gynecology:{min:5,max:30},
   psychiatry:{min:10,max:40}, picu:{min:10,max:40}, neurology:{min:15,max:50},
   pediatric_heme_onc:{min:10,max:40}, adult_cardiology:{min:15,max:60}, nephrology:{min:5,max:50},
   radonc:{min:5,max:30}, dental:{min:10,max:80}, physical_medicine_rehabilitation:{min:3,max:15},
