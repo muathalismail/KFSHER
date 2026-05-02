@@ -212,9 +212,10 @@ SPECIALTY_CONFIGS = {
         'min_headers': 99,
         'only_pages': [1],  # Page 1 only — skip inpatient (page 0) and clinic (page 2)
     },
-    # Adult Cardiology: 48 cols — 1st On-Call(6), 2nd On-Call(9), 3rd On-Call(12)
-    # Date: D/MM/YYYY at col 3. Only page 0 (schedule). Page 1 = contacts.
-    # Last verified: 2026-05-01
+    # Adult Cardiology: 48 cols — weekday: 1st(6) 2nd(9) 3rd(12), date at col 3
+    # Weekends: ALL cols shift +1 (date at col 4, 1st→7, 2nd→10, 3rd→13)
+    # Only page 0 (schedule). Page 1 = contacts.
+    # Last verified: 2026-05-02
     'adult_cardiology': {
         'columns': ['first_oncall', 'second_oncall', 'third_oncall'],
         'headers': {},
@@ -223,6 +224,8 @@ SPECIALTY_CONFIGS = {
         'fallback_cols': [6, 9, 12],
         'min_headers': 99,
         'only_pages': [0],
+        'date_col_offset': True,
+        'base_date_col': 3,
     },
     # Urology: 17 cols — weekday: 1st(6) 2nd(8) consultant(11)
     # Weekend: date shifts to col 1, 1st stays(6) but 2nd shifts(9) consultant(12)
@@ -245,7 +248,7 @@ MONTH_MAP = {
 
 SKIP_LABELS = re.compile(
     r'^(day|date|resident|fellow|consultant|senior|junior|on.?call|on.?duty|'
-    r'am\s*shift|pm\s*shift|hours|associate|hospitalist|coverage|floor|'
+    r'am\s*shift|pm\s*shift|hours|24\s*h|associate|hospitalist|coverage|floor|'
     r'inpatient|er|ward|coordinator|scot|team\s|oncall\s*\d|'
     r'1st\s*on|2nd\s*on|3rd\s*on|\d{1,2}:\d{2})',
     re.I
