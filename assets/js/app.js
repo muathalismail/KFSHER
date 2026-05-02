@@ -2005,10 +2005,10 @@ async function parseUploadedPdf(file, deptKey) {
           const contacts = await serverContactsPromise.catch(() => null);
           if (contacts && Object.keys(contacts).length && !window._skipLlmCalls) {
             try {
-              const llmResp = await fetch('/api/llm-parse-medicine-oncall', {
+              const llmResp = await fetch('/api/llm-parse', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ schedule_rows: rows, contacts, pdf_hash: pdfHash }),
+                body: JSON.stringify({ specialty: 'medicine_on_call', schedule_rows: rows, contacts, pdf_hash: pdfHash }),
               });
               if (llmResp.ok) {
                 const llmData = await llmResp.json();
@@ -2052,10 +2052,35 @@ async function parseUploadedPdf(file, deptKey) {
         body: JSON.stringify({ pdf_base64: b64, specialty: 'hospitalist' }),
       });
       if (resp.ok) {
-        const result = await resp.json();
-        if (result.rows && result.rows.length) {
-          console.log(`[HOSPITALIST] Server extracted ${result.rows.length} schedule rows`);
-          parseHospitalistPdfEntries._serverSchedule = result.rows;
+        let rows = await resp.json();
+        rows = rows.rows || rows;
+        if (Array.isArray(rows) && rows.length) {
+          console.log(`[HOSPITALIST] Server extracted ${rows.length} schedule rows`);
+          // Use Claude API to resolve abbreviated names
+          const contacts = await serverContactsPromise.catch(() => null);
+          if (contacts && Object.keys(contacts).length && !window._skipLlmCalls) {
+            try {
+              const llmResp = await fetch('/api/llm-parse', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ specialty: 'hospitalist', schedule_rows: rows, contacts }),
+              });
+              if (llmResp.ok) {
+                const resolved = await llmResp.json();
+                if (Array.isArray(resolved) && resolved.length) {
+                  rows = resolved.map(r => ({
+                    date: r.date || '',
+                    onc_er_day: r.onc_er_day || '',
+                    onc_er_night: r.onc_er_night || '',
+                  }));
+                  console.log(`[HOSPITALIST] LLM resolved ${resolved.length} rows with full names`);
+                }
+              }
+            } catch (llmErr) {
+              console.warn('[HOSPITALIST] LLM failed, using pdfplumber names:', llmErr.message);
+            }
+          }
+          parseHospitalistPdfEntries._serverSchedule = rows;
         }
       }
     } catch (err) {
@@ -2099,10 +2124,10 @@ async function parseUploadedPdf(file, deptKey) {
           const contacts = await serverContactsPromise.catch(() => null);
           if (contacts && Object.keys(contacts).length && !window._skipLlmCalls) {
             try {
-              const llmResp = await fetch('/api/llm-parse-pediatrics', {
+              const llmResp = await fetch('/api/llm-parse', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ schedule_rows: rows, contacts }),
+                body: JSON.stringify({ specialty: 'pediatrics', schedule_rows: rows, contacts }),
               });
               if (llmResp.ok) {
                 const resolved = await llmResp.json();
@@ -2216,10 +2241,10 @@ async function parseUploadedPdf(file, deptKey) {
           const contacts = await serverContactsPromise.catch(() => null);
           if (contacts && Object.keys(contacts).length && !window._skipLlmCalls) {
             try {
-              const llmResp = await fetch('/api/llm-parse-radiology-oncall', {
+              const llmResp = await fetch('/api/llm-parse', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ schedule_rows: rows, contacts }),
+                body: JSON.stringify({ specialty: 'radiology_oncall', schedule_rows: rows, contacts }),
               });
               if (llmResp.ok) {
                 const resolved = await llmResp.json();
@@ -2284,10 +2309,10 @@ async function parseUploadedPdf(file, deptKey) {
           const contacts = await serverContactsPromise.catch(() => null);
           if (contacts && Object.keys(contacts).length && !window._skipLlmCalls) {
             try {
-              const llmResp = await fetch('/api/llm-parse-surgery', {
+              const llmResp = await fetch('/api/llm-parse', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ schedule_rows: rows, contacts }),
+                body: JSON.stringify({ specialty: 'surgery', schedule_rows: rows, contacts }),
               });
               if (llmResp.ok) {
                 const resolved = await llmResp.json();
