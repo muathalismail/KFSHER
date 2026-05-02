@@ -434,10 +434,12 @@ function mapValidationReasonCodes({ deptKey='', parseDebug={}, auditResult=null,
     : null;
   const medicineStructurallyUsable = !!(medicineCurrentResolution && medicineCurrentResolution.ok);
 
-  if (!(normalizedPayload?.roles || []).length) {
+  const hasAutoActivate = !!(SPECIALTY_PIPELINE_RULES[deptKey] && SPECIALTY_PIPELINE_RULES[deptKey].autoActivate);
+  // PDF-view-only specialties (image PDFs) skip all validation
+  const isPdfViewOnly = deptKey === 'critical_care' || deptKey === 'oncology';
+  if (!(normalizedPayload?.roles || []).length && !isPdfViewOnly) {
     reasonCodes.add(UPLOAD_REASON_CODES.NO_DOCTOR_ROWS_FOUND);
   }
-  const hasAutoActivate = !!(SPECIALTY_PIPELINE_RULES[deptKey] && SPECIALTY_PIPELINE_RULES[deptKey].autoActivate);
   if (
     (!auditResult?.publishable && !(deptKey === 'medicine_on_call' && medicineStructurallyUsable) && !hasAutoActivate)
     || (issueTypes.has('uncertain-specialty') && !(deptKey === 'medicine_on_call' && medicineStructurallyUsable) && !hasAutoActivate)
@@ -479,6 +481,7 @@ function buildUploadPipelineDiagnostics({ deptKey='', detectedSpecialty='', pars
   // required role checks — sustainable for future uploads without code changes.
   const profile = SPECIALTY_PIPELINE_RULES[deptKey]
     || { autoActivate: true, requiredRoles: [] };
+  const isPdfViewOnly = deptKey === 'critical_care' || deptKey === 'oncology';
   const medicineCurrentResolution = deptKey === 'medicine_on_call'
     ? isMedicineOnCallCurrentResolutionUsable(normalizedPayload, now)
     : null;
@@ -515,10 +518,11 @@ function buildUploadPipelineDiagnostics({ deptKey='', detectedSpecialty='', pars
       UPLOAD_REASON_CODES.AMBIGUOUS_LAYOUT,
       UPLOAD_REASON_CODES.MISSING_REQUIRED_ROLE,
     ];
-  const eligibleForActivation = validationPassed
+  const eligibleForActivation = isPdfViewOnly
+    || (validationPassed
     && publishable
     && profile.autoActivate
-    && !validation.reasonCodes.some(code => activationBlockingCodes.includes(code));
+    && !validation.reasonCodes.some(code => activationBlockingCodes.includes(code)));
   const activationStatus = eligibleForActivation
     ? 'activated'
     : ((validationPassed && publishable && ambiguityOnly) ? 'needs_review' : 'rejected');
