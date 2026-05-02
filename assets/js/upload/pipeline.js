@@ -153,7 +153,11 @@ const SPECIALTY_PIPELINE_RULES = {
     autoActivate: true,
   },
   dental: {
-    requiredRoles: ['adult', 'pediatric'],
+    requiredRoles: [],
+    autoActivate: true,
+  },
+  gynecology: {
+    requiredRoles: [],
     autoActivate: true,
   },
   pediatric_heme_onc: {
@@ -467,10 +471,10 @@ function mapValidationReasonCodes({ deptKey='', parseDebug={}, auditResult=null,
 
 function buildUploadPipelineDiagnostics({ deptKey='', detectedSpecialty='', parseDebug={}, parsed=null, auditResult=null, fileName='', normalizedPayload=null, now=new Date() } = {}) {
   const validation = mapValidationReasonCodes({ deptKey, parseDebug, auditResult, normalizedPayload, now });
-  // Fallback: derive autoActivate from AUTO_PUBLISH_SPECIALTIES so that any
-  // specialty added to that set auto-activates even without an explicit rule entry.
+  // Default: auto-activate all specialties. Unknown specialties publish without
+  // required role checks — sustainable for future uploads without code changes.
   const profile = SPECIALTY_PIPELINE_RULES[deptKey]
-    || { autoActivate: AUTO_PUBLISH_SPECIALTIES.has(deptKey), requiredRoles: [] };
+    || { autoActivate: true, requiredRoles: [] };
   const medicineCurrentResolution = deptKey === 'medicine_on_call'
     ? isMedicineOnCallCurrentResolutionUsable(normalizedPayload, now)
     : null;

@@ -961,7 +961,7 @@ const SPECIALTIES_WITH_DEDICATED_PARSERS = new Set([
   // pdfplumber via extract-table.py
   'hospitalist', 'ent', 'orthopedics', 'neurosurgery', 'spine',
   'hematology', 'kptx', 'liver', 'gynecology', 'psychiatry',
-  'picu', 'pediatric_heme_onc', 'neurology', 'urology', 'adult_cardiology',
+  'picu', 'pediatric_heme_onc', 'neurology', 'urology', 'adult_cardiology', 'dental',
   // PDF view only
   'critical_care', 'oncology', 'anesthesia',
 ]);

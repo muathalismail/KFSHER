@@ -227,6 +227,18 @@ SPECIALTY_CONFIGS = {
         'date_col_offset': True,
         'base_date_col': 3,
     },
+    # Dental: 12 cols — Adult(6), Pediatric(9). Date shifts col 3→4.
+    # Last verified: 2026-05-02
+    'dental': {
+        'columns': ['adult_duty', 'pediatric_duty'],
+        'headers': {},
+        'date_pattern': re.compile(r'(\d{1,2})/(\d{1,2})\s*/?\s*(\d{4})'),
+        'day_pattern': re.compile(r'^(Sun|Mon|Tue|Wed|Thu|Fri|Sat)', re.I),
+        'fallback_cols': [6, 9],
+        'min_headers': 99,
+        'date_col_offset': True,
+        'base_date_col': 3,
+    },
     # Urology: 17 cols — weekday: 1st(6) 2nd(8) consultant(11)
     # Weekend: date shifts to col 1, 1st stays(6) but 2nd shifts(9) consultant(12)
     # Solution: read both possible positions, merge in post-processing
