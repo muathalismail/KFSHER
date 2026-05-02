@@ -878,16 +878,16 @@ function resolveSpecialtyEntries(deptKey, base, schedKey, now, qLow='') {
       const directPhone = _rotasContacts[entry.name];
       if (!directPhone) continue;
 
-      // Fix phone only if uncertain
-      if (!entry.phone || entry.phoneUncertain) {
+      const bare = (entry.name || '').replace(/^Dr\.?\s*/i, '').trim();
+      const isAbbreviated = !bare.includes(' ') || /^[A-Z]\./.test(bare);
+
+      // Fix phone: always for abbreviated names (their "certain" flag is unreliable),
+      // only if uncertain for full names
+      if (isAbbreviated || !entry.phone || entry.phoneUncertain) {
         entry.phone = directPhone;
         entry.phoneUncertain = false;
       }
 
-      // Expand short name: only if entry.name is clearly abbreviated
-      // (single word, Initial.Name, or no space after Dr.)
-      const bare = (entry.name || '').replace(/^Dr\.?\s*/i, '').trim();
-      const isAbbreviated = !bare.includes(' ') || /^[A-Z]\./.test(bare);
       if (!isAbbreviated) continue;
 
       // Find full "Dr. Firstname Lastname" with same phone
