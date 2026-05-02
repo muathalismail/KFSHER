@@ -152,9 +152,28 @@ async function buildCard(deptKey, dept, entries) {
   let rowsHtml = '';
   const hasRenderableEntries = Array.isArray(entries) && entries.length && !entries.every(isNoCoverageEntry);
 
-  // Imaging On-Duty: always show "Needs Review" instead of doctor list
+  // Imaging On-Duty: show permanent department extensions
   if (deptKey === 'radiology_duty') {
-    rowsHtml = `<div class="empty" style="text-align:center;padding:14px 12px;font-size:13px;">Needs Review<br>يرجى مراجعة الجدول الأصلي للتأكد من البيانات</div>`;
+    const exts = ROTAS.radiology_duty?.schedule?.extensions || [];
+    if (exts.length) {
+      rowsHtml = exts.map(e => `
+        <div class="drow">
+          <div class="dinfo">
+            <div class="ddrname">${escapeHtml(e.name)}</div>
+            <div class="drrole">${escapeHtml(e.role)}</div>
+            <div class="dsection">${escapeHtml(e.section || '')}</div>
+            <div class="dshift">${e.startTime}-${e.endTime}</div>
+          </div>
+          <div class="dmeta">
+            <div class="ph">${escapeHtml(e.phone)}</div>
+            <div class="row-actions">
+              <button class="callbtn copy" type="button" data-copy-phone="${escapeHtml(e.phone)}">Copy</button>
+            </div>
+          </div>
+        </div>`).join('');
+    } else {
+      rowsHtml = `<div class="empty">No extensions configured</div>`;
+    }
   } else if (isDeptHardBlocked(deptKey) && !hasRenderableEntries) {
     const uploaded = uploadedRecordForDept(deptKey);
     const reasonText = uploadBlockReasonSummary(uploaded);
