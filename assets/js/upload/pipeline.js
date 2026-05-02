@@ -530,6 +530,10 @@ function buildUploadPipelineDiagnostics({ deptKey='', detectedSpecialty='', pars
       UPLOAD_REASON_CODES.BLOCK_DATE_MISMATCH,
       UPLOAD_REASON_CODES.FAILED_SPECIALTY_VALIDATION,
     ]
+    : hasAutoActivate
+    ? [
+      UPLOAD_REASON_CODES.BLOCK_DATE_MISMATCH,
+    ]
     : [
       UPLOAD_REASON_CODES.NO_DOCTOR_ROWS_FOUND,
       UPLOAD_REASON_CODES.BLOCK_DATE_MISMATCH,
