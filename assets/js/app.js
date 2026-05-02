@@ -871,29 +871,34 @@ function normalizedUploadedBaseEntries(record, deptKey) {
 function resolveSpecialtyEntries(deptKey, base, schedKey, now, qLow='') {
   if (!base.length) return [];
   if (base.some(isNoCoverageEntry)) return base.filter(isNoCoverageEntry);
-  // Universal ROTAS phone + name override: fix stale wrong phones and expand short names
+  // Universal ROTAS phone + name resolution for uncertain entries
   const _rotasContacts = ROTAS[deptKey]?.contacts;
   if (_rotasContacts) {
     for (const entry of base) {
       const directPhone = _rotasContacts[entry.name];
-      if (directPhone) {
-        // 1) Fix phone only if uncertain (don't override certain PDF/Claude phones)
-        if (!entry.phone || entry.phoneUncertain) {
-          entry.phone = directPhone;
-          entry.phoneUncertain = false;
-        }
-        // 2) Expand short name to full name (always — even with certain phone)
-        const ph = entry.phone || directPhone;
-        let fullName = null;
-        for (const [cn, cp] of Object.entries(_rotasContacts)) {
-          if (cp === ph && /^Dr\.?\s/i.test(cn) && cn.length > (fullName || '').length) {
-            fullName = cn;
-          }
-        }
-        if (fullName && fullName.length > entry.name.length) {
-          entry.name = fullName;
-        }
+      if (!directPhone) continue;
+
+      // Fix phone only if uncertain
+      if (!entry.phone || entry.phoneUncertain) {
+        entry.phone = directPhone;
+        entry.phoneUncertain = false;
       }
+
+      // Expand short name: only if entry.name is clearly abbreviated
+      // (single word, Initial.Name, or no space after Dr.)
+      const bare = (entry.name || '').replace(/^Dr\.?\s*/i, '').trim();
+      const isAbbreviated = !bare.includes(' ') || /^[A-Z]\./.test(bare);
+      if (!isAbbreviated) continue;
+
+      // Find full "Dr. Firstname Lastname" with same phone
+      let fullName = null;
+      for (const [cn, cp] of Object.entries(_rotasContacts)) {
+        if (cp !== directPhone || !/^Dr\.?\s/i.test(cn)) continue;
+        const cnBare = cn.replace(/^Dr\.?\s*/i, '').trim();
+        if (cnBare.split(' ').length < 2) continue; // need at least 2 words
+        if (cn.length > (fullName || '').length) fullName = cn;
+      }
+      if (fullName) entry.name = fullName;
     }
   }
   if (deptKey === 'medicine_on_call') {
