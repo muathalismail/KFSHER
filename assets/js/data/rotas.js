@@ -1512,7 +1512,7 @@ hospitalist:{
   label:'Hospitalist / أطباء المستشفى', icon:'🏥',
   keywords:['hospitalist','hospital medicine','طب المستشفى','أطباء المستشفى'],
   contacts:{
-    'Dr. Ahmed Hassan':'0546550268','Dr. Osama Elrayess':'0570594610',
+    'Dr. Ahmed Hassan':'0546550268','Dr. Osama Elrayess':'0570594610','Elrayess':'0570594610','Dr. Elrayess':'0570594610',
     'Dr. Hamada Elshemy':'0537417865','Dr. Yousra':'0509684791',
     'Dr. Khaleda':'0508184013','Dr. Sumia':'0551397704',
     'Dr. O. Bahamid':'0535924388','Dr. Z. Alfateh':'0561467322',

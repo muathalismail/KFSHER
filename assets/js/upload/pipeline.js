@@ -97,7 +97,7 @@ const SPECIALTY_PIPELINE_RULES = {
     autoActivate: true,
   },
   hospitalist: {
-    requiredRoles: ['medical er', 'oncology er', 'inpatient'],
+    requiredRoles: ['oncology er'],
     autoActivate: true,
   },
   picu: {

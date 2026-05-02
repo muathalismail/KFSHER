@@ -348,11 +348,7 @@ function isLegacyHospitalistRecord(record) {
     normalizeText(entry.section || '') === 'oncology er'
     && !!(entry.name || '').trim()
   ).length;
-  // Also reject records that have the old incomplete alias 'Dr. Elrayess' (without first name)
-  const hasIncompleteElrayess = record.entries.some(entry =>
-    /^dr\.?\s*elrayess\s*$/i.test((entry.name || '').trim())
-  );
-  return oncologyStructured < 2 || oncologyNames < 2 || hasIncompleteElrayess;
+  return oncologyStructured < 2 || oncologyNames < 2;
 }
 
 function getHospitalistEntries(schedKey, now) {
