@@ -3153,8 +3153,9 @@ async function getPdfHref(deptKey) {
 // homepagePriorityOf, sortDeptEntriesForHome, renderTags, renderWelcomeGrid → now in ui/search.js
 
 async function loadUploadedSpecialties() {
-  const uploaded = await getAllPdfRecords();
-  uploadedPdfRecords.clear();
+  const uploaded = await getAllPdfRecords().catch(() => []);
+  // Build new data BEFORE clearing — prevents flash of empty content
+  const newRecords = [];
   for (const record of uploaded) {
     const refreshed = refreshUploadedRecordIfNeeded(record);
     if (refreshed !== record) {
@@ -3171,6 +3172,11 @@ async function loadUploadedSpecialties() {
       }
     }
     const normalized = canonicalizeUploadedRecord(refreshed);
+    newRecords.push(normalized);
+  }
+  // Atomic swap: clear and repopulate in one go — no window of empty data
+  uploadedPdfRecords.clear();
+  for (const normalized of newRecords) {
     cacheUploadedRecord(normalized);
     if (shouldRegisterUploadedSpecialty(normalized)) registerUploadedSpecialty(normalized);
   }
@@ -3197,7 +3203,10 @@ document.addEventListener('DOMContentLoaded', () => {
     (typeof pullFromSupabase === 'function')
       ? pullFromSupabase().catch(err => console.warn('[SUPABASE] Pull skipped:', err.message))
       : Promise.resolve()
-  ).then(() => loadUploadedSpecialties());
+  ).then(() => loadUploadedSpecialties()).catch(err => {
+    console.warn('[INIT] Data load failed, using ROTAS built-in:', err.message);
+    markCacheLoaded();
+  });
 
   uploadedSpecialtiesReadyPromise.then(() => Promise.all([
     hydrateBundledSurgerySchedule(),

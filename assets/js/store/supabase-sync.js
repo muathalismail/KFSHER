@@ -92,6 +92,8 @@ async function pullFromSupabase() {
 
   try {
     // Query Supabase REST API directly from client (publishable key is read-only with RLS)
+    const _controller = new AbortController();
+    const _timeout = setTimeout(() => _controller.abort(), 10000); // 10s timeout
     const resp = await fetch(
       `${cfg.supabaseUrl}/rest/v1/kfsher?select=*&order=created_at.desc`,
       {
@@ -99,8 +101,10 @@ async function pullFromSupabase() {
           'apikey': cfg.supabaseKey,
           'Authorization': `Bearer ${cfg.supabaseKey}`,
         },
+        signal: _controller.signal,
       }
     );
+    clearTimeout(_timeout);
 
     if (!resp.ok) {
       console.warn('[SUPABASE SYNC] Pull failed:', resp.status, await resp.text());
