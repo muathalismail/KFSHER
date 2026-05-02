@@ -152,25 +152,11 @@ async function buildCard(deptKey, dept, entries) {
   let rowsHtml = '';
   const hasRenderableEntries = Array.isArray(entries) && entries.length && !entries.every(isNoCoverageEntry);
 
-  // Imaging On-Duty: show permanent department extensions
+  // Imaging On-Duty: show permanent department extensions as compact grid
   if (deptKey === 'radiology_duty') {
     const exts = ROTAS.radiology_duty?.schedule?.extensions || [];
     if (exts.length) {
-      rowsHtml = exts.map(e => `
-        <div class="drow">
-          <div class="dinfo">
-            <div class="ddrname">${escapeHtml(e.name)}</div>
-            <div class="drrole">${escapeHtml(e.role)}</div>
-            <div class="dsection">${escapeHtml(e.section || '')}</div>
-            <div class="dshift">${e.startTime}-${e.endTime}</div>
-          </div>
-          <div class="dmeta">
-            <div class="ph">${escapeHtml(e.phone)}</div>
-            <div class="row-actions">
-              <button class="callbtn copy" type="button" data-copy-phone="${escapeHtml(e.phone)}">Copy</button>
-            </div>
-          </div>
-        </div>`).join('');
+      rowsHtml = `<div class="ext-grid">${exts.map(e => `<div class="ext-card"><div class="ext-name">${escapeHtml(e.role)}</div><div class="ext-num">${escapeHtml(e.phone === '1520' ? '1520 / 1512' : e.phone)}</div></div>`).join('')}</div>`;
     } else {
       rowsHtml = `<div class="empty">No extensions configured</div>`;
     }
