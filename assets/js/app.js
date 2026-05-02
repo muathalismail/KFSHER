@@ -941,9 +941,6 @@ function resolveDisplayEntriesFromNormalizedPayload(deptKey, normalizedPayload, 
 
 function uploadedEntriesForDept(deptKey, schedKey, now, qLow='') {
   if (deptKey === 'radiology_duty') return null;
-  // Temporarily force radiology_oncall to use ROTAS built-in (correct data)
-  // until stale uploaded record with wrong names is cleared
-  if (deptKey === 'radiology_oncall') return null;
   const record = uploadedRecordForDept(deptKey);
   if (!record || !record.parsedActive || !Array.isArray(record.entries)) return null;
   // Sprint 0: skip stale records from a prior month
