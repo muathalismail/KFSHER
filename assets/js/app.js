@@ -2176,6 +2176,9 @@ async function parseUploadedPdf(file, deptKey) {
         if (rows.length) {
           console.log(`[${deptKey.toUpperCase()}] Extracted ${rows.length} rows via ${result.method || 'pdfplumber'}`);
           const dept = ROTAS[deptKey];
+          // Build entries for BOTH ROTAS schedule AND uploadRecord persistence
+          window._lastPdfplumberEntries = window._lastPdfplumberEntries || [];
+          window._lastPdfplumberEntries.length = 0;
           if (dept) {
             dept.schedule = dept.schedule || {};
             for (const row of rows) {
@@ -2189,11 +2192,14 @@ async function parseUploadedPdf(file, deptKey) {
                 const val = (row[col] || '').trim();
                 if (val && !mergedRow[base]) mergedRow[base] = val;
               }
-              const entries = Object.entries(mergedRow).map(([col, name]) => {
+              const dateEntries = Object.entries(mergedRow).map(([col, name]) => {
                 if (!name) return null;
-                return { role: col.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()), name, shiftType: '24h', startTime: '07:30', endTime: '07:30', parsedFromPdf: true };
+                return { specialty: deptKey, date: dateKey, role: col.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()), name, shiftType: '24h', startTime: '07:30', endTime: '07:30', parsedFromPdf: true };
               }).filter(Boolean);
-              if (entries.length) dept.schedule[dateKey] = entries;
+              if (dateEntries.length) {
+                dept.schedule[dateKey] = dateEntries;
+                window._lastPdfplumberEntries.push(...dateEntries);
+              }
             }
           }
         }
@@ -2420,6 +2426,17 @@ async function parseUploadedPdf(file, deptKey) {
       return true;
     });
   }
+  // If client parser found 0 entries but pdfplumber extracted rows (server-side),
+  // use the pdfplumber entries so they persist in the upload record
+  if (!normalizedEntries.length && window._lastPdfplumberEntries && window._lastPdfplumberEntries.length) {
+    normalizedEntries = [...window._lastPdfplumberEntries];
+    parseDebug.parserMode = 'specialized';
+    parseDebug.templateDetected = true;
+    console.log(`[PARSE] Using ${normalizedEntries.length} pdfplumber entries (client parser found 0)`);
+  }
+  // Clean up
+  if (window._lastPdfplumberEntries) window._lastPdfplumberEntries.length = 0;
+
   return {
     rawText: text,
     textSample: text.slice(0, 4000),
