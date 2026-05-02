@@ -224,6 +224,8 @@ function hasTrustedUploadParser(deptKey='', parseDebug={}) {
   if (deptKey === 'pediatrics') return parserMode === 'specialized' && !!parseDebug.templateDetected;
   if (deptKey === 'hematology') return parserMode === 'specialized' && !!parseDebug.templateDetected;
   if (isMedicineSubspecialty(deptKey)) return parserMode === 'specialized';
+  // All autoActivate specialties with specialized parser mode are trusted
+  if (AUTO_PUBLISH_SPECIALTIES.has(deptKey) && parserMode === 'specialized') return true;
   return false;
 }
 
