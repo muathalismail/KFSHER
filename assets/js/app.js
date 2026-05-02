@@ -875,15 +875,18 @@ function resolveSpecialtyEntries(deptKey, base, schedKey, now, qLow='') {
   const _rotasContacts = ROTAS[deptKey]?.contacts;
   if (_rotasContacts) {
     for (const entry of base) {
-      // 1) Direct match: entry.name exists in contacts → fix phone
       const directPhone = _rotasContacts[entry.name];
       if (directPhone) {
-        entry.phone = directPhone;
-        entry.phoneUncertain = false;
-        // 2) Expand name: find the longest "Dr. Firstname Lastname" with same phone
+        // 1) Fix phone only if uncertain (don't override certain PDF/Claude phones)
+        if (!entry.phone || entry.phoneUncertain) {
+          entry.phone = directPhone;
+          entry.phoneUncertain = false;
+        }
+        // 2) Expand short name to full name (always — even with certain phone)
+        const ph = entry.phone || directPhone;
         let fullName = null;
         for (const [cn, cp] of Object.entries(_rotasContacts)) {
-          if (cp === directPhone && /^Dr\.?\s/i.test(cn) && cn.length > (fullName || '').length) {
+          if (cp === ph && /^Dr\.?\s/i.test(cn) && cn.length > (fullName || '').length) {
             fullName = cn;
           }
         }
