@@ -456,7 +456,7 @@ function mapValidationReasonCodes({ deptKey='', parseDebug={}, auditResult=null,
   const hasAutoActivate = !!(SPECIALTY_PIPELINE_RULES[deptKey] && SPECIALTY_PIPELINE_RULES[deptKey].autoActivate);
   // PDF-view-only specialties (image PDFs) skip all validation
   const isPdfViewOnly = deptKey === 'critical_care' || deptKey === 'oncology';
-  if (!(normalizedPayload?.roles || []).length && !isPdfViewOnly) {
+  if (!(normalizedPayload?.roles || []).length && !isPdfViewOnly && !hasAutoActivate) {
     reasonCodes.add(UPLOAD_REASON_CODES.NO_DOCTOR_ROWS_FOUND);
   }
   if (
