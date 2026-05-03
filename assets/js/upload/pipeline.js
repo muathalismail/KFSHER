@@ -502,6 +502,7 @@ function buildUploadPipelineDiagnostics({ deptKey='', detectedSpecialty='', pars
   // required role checks — sustainable for future uploads without code changes.
   const profile = SPECIALTY_PIPELINE_RULES[deptKey]
     || { autoActivate: true, requiredRoles: [] };
+  const hasAutoActivate = !!profile.autoActivate;
   const isPdfViewOnly = deptKey === 'critical_care' || deptKey === 'oncology';
   const medicineCurrentResolution = deptKey === 'medicine_on_call'
     ? isMedicineOnCallCurrentResolutionUsable(normalizedPayload, now)
