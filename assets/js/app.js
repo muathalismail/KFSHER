@@ -1955,7 +1955,9 @@ async function parseUploadedPdf(file, deptKey) {
   // ── Start server-side extraction IN PARALLEL with local text extraction ──
   // The server call only needs the raw file bytes, not the parsed text,
   // so we can overlap the two operations to save 200-800ms.
-  const serverContactsPromise = (async () => {
+  // Only extract contacts for specialties that use Claude API for name resolution
+  const _needsContacts = ['medicine_on_call','surgery','pediatrics','radiology_oncall','hospitalist'].includes(deptKey);
+  const serverContactsPromise = _needsContacts ? (async () => {
     try {
       const buffer = await file.arrayBuffer();
       const b64 = btoa(new Uint8Array(buffer).reduce((s, b) => s + String.fromCharCode(b), ''));
@@ -1972,7 +1974,7 @@ async function parseUploadedPdf(file, deptKey) {
       console.warn('[SERVER] Contact extraction failed, using client-side:', err.message);
     }
     return null;
-  })();
+  })() : Promise.resolve(null);
 
   // Column-aware extraction for complex table layouts
   let columnarText = null;
