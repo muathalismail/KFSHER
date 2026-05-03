@@ -11,6 +11,9 @@
   const refreshBtn = document.getElementById('refresh-btn');
   const tabs = document.querySelectorAll('.tab[data-tab]');
 
+  let editorLoaded = false;
+  let auditLoaded = false;
+
   function showLogin() {
     loginScreen.classList.remove('hidden');
     adminShell.classList.add('hidden');
@@ -24,6 +27,25 @@
       document.getElementById('admin-username').textContent = session.user;
     }
     loadDashboard();
+  }
+
+  function activateTab(tabName) {
+    tabs.forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    const targetTab = document.querySelector(`.tab[data-tab="${tabName}"]`);
+    const targetPanel = document.getElementById(`panel-${tabName}`);
+    if (targetTab) targetTab.classList.add('active');
+    if (targetPanel) targetPanel.classList.add('active');
+
+    // Lazy-load editor and audit
+    if (tabName === 'editor' && !editorLoaded) {
+      editorLoaded = true;
+      Editor.initEditor();
+    }
+    if (tabName === 'audit' && !auditLoaded) {
+      auditLoaded = true;
+      Audit.initAudit();
+    }
   }
 
   // Check existing session
@@ -60,17 +82,15 @@
     document.getElementById('username').value = '';
     document.getElementById('password').value = '';
     loginError.textContent = '';
+    editorLoaded = false;
+    auditLoaded = false;
   });
 
   // Tabs
   tabs.forEach(tab => {
     tab.addEventListener('click', () => {
       if (tab.disabled) return;
-      tabs.forEach(t => t.classList.remove('active'));
-      tab.classList.add('active');
-      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-      const target = document.getElementById(`panel-${tab.dataset.tab}`);
-      if (target) target.classList.add('active');
+      activateTab(tab.dataset.tab);
     });
   });
 

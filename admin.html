@@ -49,8 +49,8 @@
   <!-- Tabs -->
   <nav class="tabs">
     <button class="tab active" data-tab="dashboard">📊 Dashboard</button>
-    <button class="tab" data-tab="editor" disabled>✏️ Editor</button>
-    <button class="tab" data-tab="audit" disabled>📋 Audit</button>
+    <button class="tab" data-tab="editor">✏️ Editor</button>
+    <button class="tab" data-tab="audit">📋 Audit</button>
     <button class="tab tab-logout" id="logout-btn">🚪 Logout</button>
   </nav>
 
@@ -73,7 +73,7 @@
     </div>
   </div>
 
-  <!-- Tab panels -->
+  <!-- ── Dashboard Panel ── -->
   <div class="panel active" id="panel-dashboard">
     <div class="panel-loading" id="dashboard-loading">
       <div class="spinner"></div>
@@ -82,25 +82,57 @@
     <div id="specialty-grid" class="specialty-grid"></div>
   </div>
 
+  <!-- ── Editor Panel ── -->
   <div class="panel" id="panel-editor">
-    <div class="placeholder-panel">
-      <span class="placeholder-icon">✏️</span>
-      <h3>محرر الجداول</h3>
-      <p>قريبا — Day 3</p>
+    <div class="draft-banner" id="draft-banner"></div>
+
+    <!-- Selector + Actions -->
+    <div class="ed-header">
+      <select id="ed-selector" class="ed-selector"></select>
+      <div class="ed-actions">
+        <button id="ed-undo-btn" class="ed-icon-btn" title="تراجع (Ctrl+Z)">↩</button>
+        <button id="ed-redo-btn" class="ed-icon-btn" title="إعادة (Ctrl+Y)">↪</button>
+        <button id="ed-add-btn" class="ed-action-btn ed-add-btn">➕ إضافة</button>
+        <button id="ed-discard-btn" class="ed-action-btn ed-discard-btn">✖ تجاهل</button>
+        <button id="ed-save-btn" class="ed-save-btn" disabled>حفظ (0)</button>
+      </div>
     </div>
+
+    <!-- Toolbar: search + bulk -->
+    <div id="ed-toolbar" class="ed-toolbar hidden">
+      <div class="ed-search-wrap">
+        <input type="text" id="ed-search" class="ed-search" placeholder="بحث بالاسم، الهاتف، الدور...">
+        <button id="ed-search-clear" class="ed-search-clear">✕</button>
+      </div>
+      <span id="ed-count" class="ed-count"></span>
+      <button id="ed-bulk-delete" class="ed-action-btn ed-bulk-del-btn hidden">🗑️ حذف (<span id="ed-bulk-count">0</span>)</button>
+    </div>
+
+    <!-- Table -->
+    <div id="ed-table-wrap" class="ed-table-wrap"></div>
+
+    <!-- Pagination -->
+    <div id="ed-pagination" class="ed-pagination"></div>
   </div>
 
+  <!-- ── Audit Panel ── -->
   <div class="panel" id="panel-audit">
-    <div class="placeholder-panel">
-      <span class="placeholder-icon">📋</span>
-      <h3>سجل المراجعة</h3>
-      <p>قريبا — Day 3</p>
+    <div class="panel-loading" id="audit-loading">
+      <div class="spinner"></div>
+      <span>جاري تحميل السجل...</span>
     </div>
+    <div id="audit-filters" class="audit-filters"></div>
+    <div class="audit-count-bar"><span id="audit-count"></span></div>
+    <div id="audit-list" class="audit-list"></div>
+    <div id="audit-pagination" class="ed-pagination"></div>
   </div>
+
 </div>
 
 <script src="assets/js/admin/auth.js"></script>
 <script src="assets/js/admin/dashboard.js"></script>
+<script src="assets/js/admin/editor.js"></script>
+<script src="assets/js/admin/audit.js"></script>
 <script src="assets/js/admin/app.js"></script>
 </body>
 </html>
