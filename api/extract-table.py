@@ -422,112 +422,89 @@ def extract_table_rows(pdf_bytes, specialty):
     if rows_out:
         return {'rows': rows_out, 'columns': columns, 'specialty': specialty, 'method': 'pdfplumber'}
 
-    # pdfplumber found no rows — PDF might be image-based. Try Claude Vision.
-    vision_result = _claude_vision_fallback(pdf_bytes, specialty, config)
-    if vision_result:
-        return {'rows': vision_result, 'columns': columns, 'specialty': specialty, 'method': 'claude_vision'}
+    # pdfplumber found no rows — try Claude API fallback (native PDF support, no PyMuPDF needed)
+    claude_result = _claude_pdf_fallback(pdf_bytes, specialty, config)
+    if claude_result:
+        return {'rows': claude_result, 'columns': columns, 'specialty': specialty, 'method': 'claude_api_fallback'}
 
     return {'rows': [], 'columns': columns, 'specialty': specialty, 'method': 'empty'}
 
 
-# ── Claude Vision fallback for image-based PDFs ──────────────────
+# ── Claude PDF fallback (no PyMuPDF needed) ──────────────────────
 
-VISION_PROMPTS = {
-    'critical_care': """Extract the medical duty schedule from this image.
-Focus ONLY on the "Assistant Consultant/Fellow/Specialist" columns.
-IGNORE the "Consultant Intensivist" columns.
+def _build_claude_prompt(specialty, config):
+    """Build extraction prompt with column names from the specialty config."""
+    columns = config.get('columns', [])
+    col_fields = ', '.join(f'"{c}"' for c in columns)
+    example_row = ', '.join(f'"{c}": "Doctor Name"' for c in columns)
 
-There are two sub-columns for Assistant:
-- Column 1: Day shift (07:30 - 15:30)
-- Column 2: Night shift (15:30 - 07:30)
+    return f"""Extract the on-call/duty schedule from this PDF document.
+This is a {specialty.replace('_', ' ')} department schedule.
 
-Each cell contains 2-3 doctor names separated by " / ".
+Return ONLY a JSON array. Each element must have:
+- "date": the date in DD/MM format (2-digit day, 2-digit month)
+- One field per duty column: {col_fields}
 
-Return ONLY a JSON array. Each element:
-{"date":"DD/MM","first_oncall":"Name1 / Name2 / Name3","second_oncall":"Name1 / Name2","third_oncall":"","hospitalist_er":"","hospitalist_ward":"","hospitalist_after":""}
+Example row: {{"date": "01/05", {example_row}}}
 
-Map the columns:
-- first_oncall = Day shift names (07:30-15:30)
-- second_oncall = Night shift names (15:30-07:30)
-- Leave third_oncall, hospitalist_er, hospitalist_ward, hospitalist_after empty
-
-Use the exact names as written. Do NOT add "Dr." prefix.
-Return ONLY the JSON array, no explanation.""",
-}
-
-# Default prompt for any specialty without a specific one
-_DEFAULT_VISION_PROMPT = """Extract the medical schedule from this image.
-Return a JSON array of rows. Each row should have:
-- "date": the date in DD/MM format
-- One field per column with the doctor name(s)
-
-Return ONLY the JSON array, no explanation."""
+Rules:
+- Use exact names as written in the PDF. Do NOT add "Dr." prefix.
+- If a cell is empty, use an empty string "".
+- Include ALL dates in the schedule.
+- Return ONLY the JSON array, no explanation or markdown."""
 
 
-def _claude_vision_fallback(pdf_bytes, specialty, config):
-    """Try to extract schedule using Claude Vision (for image-based PDFs)."""
+def _claude_pdf_fallback(pdf_bytes, specialty, config):
+    """Extract schedule by sending PDF directly to Claude (native PDF support)."""
     api_key = os.environ.get('ANTHROPIC_API_KEY', '')
     if not api_key:
         return None
 
     try:
-        import fitz  # PyMuPDF — converts PDF pages to PNG
         import anthropic
 
-        doc = fitz.open(stream=pdf_bytes, filetype='pdf')
-        if doc.page_count == 0:
-            return None
-
-        prompt = VISION_PROMPTS.get(specialty, _DEFAULT_VISION_PROMPT)
+        pdf_b64 = base64.b64encode(pdf_bytes).decode()
+        prompt = _build_claude_prompt(specialty, config)
         client = anthropic.Anthropic(api_key=api_key)
-        all_rows = []
 
-        # Process up to 2 pages (Vercel 10s timeout)
-        for page_idx in range(min(doc.page_count, 2)):
-            page = doc[page_idx]
-            pix = page.get_pixmap(dpi=150)
-            img_bytes = pix.tobytes('png')
-            img_b64 = base64.b64encode(img_bytes).decode()
+        print(f'[CLAUDE_FALLBACK] {specialty} sending PDF ({len(pdf_bytes)//1024}KB)')
 
-            print(f'[VISION] {specialty} page {page_idx + 1}/{doc.page_count} ({len(img_bytes)//1024}KB)')
-
-            message = client.messages.create(
-                model='claude-haiku-4-5-20251001',
-                max_tokens=2000,
-                messages=[{
-                    'role': 'user',
-                    'content': [
-                        {
-                            'type': 'image',
-                            'source': {
-                                'type': 'base64',
-                                'media_type': 'image/png',
-                                'data': img_b64,
-                            },
+        message = client.messages.create(
+            model='claude-haiku-4-5-20251001',
+            max_tokens=4000,
+            messages=[{
+                'role': 'user',
+                'content': [
+                    {
+                        'type': 'document',
+                        'source': {
+                            'type': 'base64',
+                            'media_type': 'application/pdf',
+                            'data': pdf_b64,
                         },
-                        {'type': 'text', 'text': prompt},
-                    ],
-                }],
-            )
+                    },
+                    {'type': 'text', 'text': prompt},
+                ],
+            }],
+        )
 
-            response_text = message.content[0].text.strip()
-            if response_text.startswith('```'):
-                response_text = re.sub(r'^```(?:json)?\s*', '', response_text)
-                response_text = re.sub(r'\s*```$', '', response_text)
+        response_text = message.content[0].text.strip()
+        if response_text.startswith('```'):
+            response_text = re.sub(r'^```(?:json)?\s*', '', response_text)
+            response_text = re.sub(r'\s*```$', '', response_text)
 
-            try:
-                page_rows = json.loads(response_text)
-                if isinstance(page_rows, list):
-                    all_rows.extend(page_rows)
-                    print(f'[VISION] {specialty} page {page_idx + 1}: {len(page_rows)} rows extracted')
-            except json.JSONDecodeError:
-                print(f'[VISION] {specialty} page {page_idx + 1}: JSON parse failed')
+        try:
+            rows = json.loads(response_text)
+            if isinstance(rows, list) and rows:
+                print(f'[CLAUDE_FALLBACK] {specialty}: {len(rows)} rows extracted')
+                return rows
+        except json.JSONDecodeError:
+            print(f'[CLAUDE_FALLBACK] {specialty}: JSON parse failed')
 
-        doc.close()
-        return all_rows if all_rows else None
+        return None
 
     except Exception as e:
-        print(f'[VISION] {specialty} fallback failed: {e}')
+        print(f'[CLAUDE_FALLBACK] {specialty} failed: {e}')
         return None
 
 
