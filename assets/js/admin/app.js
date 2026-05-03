@@ -1,0 +1,84 @@
+// ═══════════════════════════════════════════════════════════════
+// admin/app.js — Admin SPA bootstrap + tab management
+// ═══════════════════════════════════════════════════════════════
+
+(function () {
+  const loginScreen = document.getElementById('login-screen');
+  const adminShell = document.getElementById('admin-shell');
+  const loginForm = document.getElementById('login-form');
+  const loginError = document.getElementById('login-error');
+  const logoutBtn = document.getElementById('logout-btn');
+  const refreshBtn = document.getElementById('refresh-btn');
+  const tabs = document.querySelectorAll('.tab[data-tab]');
+
+  function showLogin() {
+    loginScreen.classList.remove('hidden');
+    adminShell.classList.add('hidden');
+  }
+
+  function showDashboard() {
+    loginScreen.classList.add('hidden');
+    adminShell.classList.remove('hidden');
+    const session = getSession();
+    if (session) {
+      document.getElementById('admin-username').textContent = session.user;
+    }
+    loadDashboard();
+  }
+
+  // Check existing session
+  if (isAuthenticated()) {
+    showDashboard();
+  }
+
+  // Login form
+  loginForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    loginError.textContent = '';
+    const user = document.getElementById('username').value.trim();
+    const pass = document.getElementById('password').value;
+
+    if (!user || !pass) {
+      loginError.textContent = 'أدخل اسم المستخدم وكلمة المرور';
+      return;
+    }
+
+    const ok = await authenticate(user, pass);
+    if (ok) {
+      saveSession();
+      showDashboard();
+    } else {
+      loginError.textContent = 'اسم المستخدم أو كلمة المرور غير صحيحة';
+      document.getElementById('password').value = '';
+    }
+  });
+
+  // Logout
+  logoutBtn.addEventListener('click', () => {
+    clearSession();
+    showLogin();
+    document.getElementById('username').value = '';
+    document.getElementById('password').value = '';
+    loginError.textContent = '';
+  });
+
+  // Tabs
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      if (tab.disabled) return;
+      tabs.forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      const target = document.getElementById(`panel-${tab.dataset.tab}`);
+      if (target) target.classList.add('active');
+    });
+  });
+
+  // Refresh
+  refreshBtn.addEventListener('click', () => {
+    refreshBtn.classList.add('spinning');
+    loadDashboard().finally(() => {
+      setTimeout(() => refreshBtn.classList.remove('spinning'), 500);
+    });
+  });
+})();

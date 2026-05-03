@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KFSH-D Admin</title>
+<link rel="icon" type="image/png" href="/favicon-96x96.png" sizes="96x96">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/admin.css">
+</head>
+<body>
+
+<!-- ── LOGIN SCREEN ── -->
+<div id="login-screen" class="login-screen">
+  <div class="login-card">
+    <div class="login-badge"><div class="dot"></div><span class="mono">KFSH-D ADMIN</span></div>
+    <h1 class="login-title">لوحة التحكم</h1>
+    <p class="login-sub">مستشفى الملك فهد التخصصي — الدمام</p>
+    <form id="login-form" autocomplete="off">
+      <div class="field">
+        <label for="username">اسم المستخدم</label>
+        <input type="text" id="username" autocomplete="username" required>
+      </div>
+      <div class="field">
+        <label for="password">كلمة المرور</label>
+        <input type="password" id="password" autocomplete="current-password" required>
+      </div>
+      <div class="login-error" id="login-error"></div>
+      <button type="submit" class="login-btn">تسجيل الدخول</button>
+    </form>
+  </div>
+</div>
+
+<!-- ── ADMIN SHELL ── -->
+<div id="admin-shell" class="admin-shell hidden">
+  <div class="glow"></div>
+
+  <!-- Top bar -->
+  <header class="admin-header">
+    <div class="admin-brand">
+      <div class="admin-badge"><div class="dot"></div><span class="mono">ADMIN PANEL</span></div>
+      <h2>لوحة التحكم</h2>
+    </div>
+    <div class="admin-user">
+      <span id="admin-username" class="mono"></span>
+    </div>
+  </header>
+
+  <!-- Tabs -->
+  <nav class="tabs">
+    <button class="tab active" data-tab="dashboard">📊 Dashboard</button>
+    <button class="tab" data-tab="editor" disabled>✏️ Editor</button>
+    <button class="tab" data-tab="audit" disabled>📋 Audit</button>
+    <button class="tab tab-logout" id="logout-btn">🚪 Logout</button>
+  </nav>
+
+  <!-- Stats bar -->
+  <div class="stats-bar" id="stats-bar">
+    <div class="stat">
+      <span class="stat-value" id="stat-specialties">—</span>
+      <span class="stat-label">التخصصات</span>
+    </div>
+    <div class="stat">
+      <span class="stat-value" id="stat-uploads">—</span>
+      <span class="stat-label">الرفعات</span>
+    </div>
+    <div class="stat">
+      <span class="stat-value" id="stat-success">—</span>
+      <span class="stat-label">نسبة النجاح</span>
+    </div>
+    <div class="stat stat-action">
+      <button class="refresh-btn" id="refresh-btn" title="تحديث">⟳</button>
+    </div>
+  </div>
+
+  <!-- Tab panels -->
+  <div class="panel active" id="panel-dashboard">
+    <div class="panel-loading" id="dashboard-loading">
+      <div class="spinner"></div>
+      <span>جاري تحميل البيانات...</span>
+    </div>
+    <div id="specialty-grid" class="specialty-grid"></div>
+  </div>
+
+  <div class="panel" id="panel-editor">
+    <div class="placeholder-panel">
+      <span class="placeholder-icon">✏️</span>
+      <h3>محرر الجداول</h3>
+      <p>قريبا — Day 3</p>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-audit">
+    <div class="placeholder-panel">
+      <span class="placeholder-icon">📋</span>
+      <h3>سجل المراجعة</h3>
+      <p>قريبا — Day 3</p>
+    </div>
+  </div>
+</div>
+
+<script src="assets/js/admin/auth.js"></script>
+<script src="assets/js/admin/dashboard.js"></script>
+<script src="assets/js/admin/app.js"></script>
+</body>
+</html>
