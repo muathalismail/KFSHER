@@ -12,7 +12,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 /* header */
 header{text-align:center;margin-bottom:40px}
 .header-top{display:flex;align-items:center;justify-content:center;position:relative;margin-bottom:0}
-.admin-link{position:absolute;left:0;top:50%;transform:translateY(-50%);width:30px;height:30px;display:flex;align-items:center;justify-content:center;border-radius:8px;background:var(--surf2);border:1px solid var(--border);color:var(--muted);font-size:14px;text-decoration:none;transition:all .25s;opacity:.5}
+.admin-link{position:absolute;left:0;top:0;width:30px;height:30px;display:flex;align-items:center;justify-content:center;border-radius:8px;background:var(--surf2);border:1px solid var(--border);color:var(--muted);font-size:14px;text-decoration:none;transition:all .25s;opacity:.5}
 .admin-link:hover{opacity:1;border-color:var(--accent);color:var(--accent);background:rgba(0,212,255,.06)}
 .badge{display:inline-flex;align-items:center;gap:10px;background:var(--surf2);border:1px solid var(--border);border-radius:50px;padding:7px 18px;margin-bottom:20px}
 .dot{width:8px;height:8px;border-radius:50%;background:var(--accent);animation:pulse 2s infinite}
