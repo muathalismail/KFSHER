@@ -605,6 +605,7 @@ function render() {
   renderTable();
   renderPagination();
   renderSaveBtn();
+  bindTableEvents(); // must run after both table + pagination are in DOM
 }
 
 function renderSelector() {
@@ -704,7 +705,6 @@ function renderTable() {
   }
   html += '</tbody></table>';
   wrap.innerHTML = html;
-  bindTableEvents();
 }
 
 function renderPagination() {
