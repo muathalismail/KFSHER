@@ -2254,9 +2254,28 @@ async function parseUploadedPdf(file, deptKey) {
   } else if (deptKey === 'critical_care' || deptKey === 'oncology' || deptKey === 'anesthesia') {
     // PDF view only — schedule managed in ROTAS, skip extraction
     console.log(`[${deptKey.toUpperCase()}] PDF view only, schedule from ROTAS`);
+  } else if (deptKey === 'dental') {
+    try {
+      const buffer = await file.arrayBuffer();
+      const b64 = btoa(new Uint8Array(buffer).reduce((s, b) => s + String.fromCharCode(b), ''));
+      const resp = await fetch('/api/extract-table', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pdf_base64: b64, specialty: 'dental' }),
+      });
+      if (resp.ok) {
+        const result = await resp.json();
+        if (result.rows && result.rows.length) {
+          console.log(`[DENTAL] Server extracted ${result.rows.length} schedule rows`);
+          parseDentalPdfEntries._serverSchedule = result.rows;
+        }
+      }
+    } catch (err) {
+      console.warn('[DENTAL] Server schedule extraction failed, using client-side:', err.message);
+    }
   } else if (deptKey === 'psychiatry' || deptKey === 'picu'
       || deptKey === 'pediatric_heme_onc' || deptKey === 'neurology' || deptKey === 'urology'
-      || deptKey === 'adult_cardiology' || deptKey === 'dental') {
+      || deptKey === 'adult_cardiology') {
     // pdfplumber extraction via extract-table.py
     const extractKey = deptKey === 'picu' ? 'picu_extract' : deptKey === 'neurology' ? 'neurology_extract' : deptKey;
     try {
@@ -2491,6 +2510,9 @@ async function parseUploadedPdf(file, deptKey) {
   }
   if (deptKey === 'liver' && typeof parseLiverPdfEntries !== 'undefined') {
     delete parseLiverPdfEntries._serverSchedule;
+  }
+  if (deptKey === 'dental' && typeof parseDentalPdfEntries !== 'undefined') {
+    delete parseDentalPdfEntries._serverSchedule;
   }
   if (deptKey === 'palliative' && typeof parsePalliativePdfEntries !== 'undefined') {
     delete parsePalliativePdfEntries._serverSchedule;

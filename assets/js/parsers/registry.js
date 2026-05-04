@@ -196,6 +196,10 @@ PARSER_REGISTRY['palliative'] = function(text, deptKey) {
   return { entries: [], parserMode: 'generic-fallback', meta: { templateDetected: false } };
 };
 
+PARSER_REGISTRY['dental'] = templateFallbackStrategy(parseDentalPdfEntries, {
+  templatePrefix: 'dental',
+});
+
 PARSER_REGISTRY['ent'] = templateFallbackStrategy(parseEntPdfEntries, {
   templatePrefix: 'ent',
 });
