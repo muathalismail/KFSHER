@@ -92,6 +92,7 @@ function rebuildRawEntries() {
       raw.name = e.doctor;      // main app reads .name
       raw.doctor = e.doctor;    // keep for editor compat
       raw.phone = e.phone;
+      raw.phoneUncertain = false; // admin-edited = verified
       raw.role = e.role;
       raw.shift = e.shift;
       return raw;
