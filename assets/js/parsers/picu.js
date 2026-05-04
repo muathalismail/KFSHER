@@ -154,10 +154,55 @@ function buildPicuRowEntries(dateKey='', tokens=[], contactMap=null) {
 }
 
 function parsePicuPdfEntries(text='', deptKey='picu') {
-  const contactMap = buildContactMapFromText(text);
+  const contactResult = buildContactMapFromText(text);
+  const dept = ROTAS[deptKey] || { contacts:{} };
   const entries = [];
   // Detect month/year from PDF — supports any month, not just April 2026
   const { month: detectedMon, year: detectedYr, monthPad } = detectPdfMonthYear(text);
+
+  // ── Server-extracted pdfplumber path ──
+  const serverSchedule = parsePicuPdfEntries._serverSchedule;
+  if (Array.isArray(serverSchedule) && serverSchedule.length) {
+    console.log(`[PICU] Using server-extracted schedule (${serverSchedule.length} rows)`);
+    const FIELD_TO_ROLE = [
+      { field: 'resident',              role: 'Resident 24h',          picuField: 'resident',              shiftType: '24h' },
+      { field: 'first_responder_day',   role: 'First Responder (Day)', picuField: 'first_responder_day',   shiftType: 'day',   startTime: '07:30', endTime: '15:30' },
+      { field: 'residents_oncall',      role: 'Residents On-Call 24h', picuField: 'after_hours_doctor',     shiftType: '24h' },
+      { field: 'first_responder_night', role: 'First Responder (Night)', picuField: 'first_responder_night', shiftType: 'night', startTime: '15:30', endTime: '07:30' },
+      { field: 'consultant_24h',        role: 'Consultant 24h',        picuField: 'consultant_24h',        shiftType: '24h' },
+    ];
+    for (const row of serverSchedule) {
+      const dateKey = row.date || '';
+      if (!dateKey) continue;
+      for (const { field, role, picuField, shiftType, startTime, endTime } of FIELD_TO_ROLE) {
+        const rawName = (row[field] || '').trim();
+        if (!rawName) continue;
+        const names = rawName.split(/\s*\/\s*/).filter(Boolean);
+        for (const name of names) {
+          const phoneMeta = resolvePhoneFromContactMap(name, contactResult)
+            || resolvePhone(dept, { name, phone: '' })
+            || { phone: '', uncertain: true };
+          entries.push({
+            specialty: deptKey, date: dateKey, role, name, picuField,
+            phone: phoneMeta.phone || '',
+            phoneUncertain: !phoneMeta.phone || !!phoneMeta.uncertain,
+            shiftType, startTime: startTime || '07:30', endTime: endTime || '07:30',
+            parsedFromPdf: true,
+          });
+        }
+      }
+    }
+    const deduped = dedupeParsedEntries(entries);
+    const sectionSet = new Set(deduped.map(e => e.picuField).filter(Boolean));
+    deduped._templateDetected = deduped.length >= 20 && sectionSet.has('consultant_24h') && sectionSet.has('after_hours_doctor');
+    deduped._templateName = deduped._templateDetected ? `picu-${monthPad}-${detectedYr}` : '';
+    deduped._coreSectionsFound = [...sectionSet];
+    deduped._serverExtracted = true;
+    return deduped;
+  }
+
+  // ── Legacy client-side text parsing fallback ──
+  const contactMap = contactResult;
   // Generic: captures any numeric month + any 4-digit year
   const rowRe = /^(Wed|Thu|Fri|Sat|Sun|Mon|Tue)\s+(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(.+)$/i;
   const lines = String(text || '').split(/\n/).map(line => line.trim()).filter(Boolean);

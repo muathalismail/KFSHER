@@ -2291,6 +2291,10 @@ async function parseUploadedPdf(file, deptKey) {
         const rows = result.rows || [];
         if (rows.length) {
           console.log(`[${deptKey.toUpperCase()}] Extracted ${rows.length} rows via ${result.method || 'pdfplumber'}`);
+          // Pass server rows to PICU parser via _serverSchedule
+          if (deptKey === 'picu' && typeof parsePicuPdfEntries !== 'undefined') {
+            parsePicuPdfEntries._serverSchedule = rows;
+          }
           const dept = ROTAS[deptKey];
           // Build entries for BOTH ROTAS schedule AND uploadRecord persistence
           window._lastPdfplumberEntries = window._lastPdfplumberEntries || [];
@@ -2513,6 +2517,9 @@ async function parseUploadedPdf(file, deptKey) {
   }
   if (deptKey === 'dental' && typeof parseDentalPdfEntries !== 'undefined') {
     delete parseDentalPdfEntries._serverSchedule;
+  }
+  if (deptKey === 'picu' && typeof parsePicuPdfEntries !== 'undefined') {
+    delete parsePicuPdfEntries._serverSchedule;
   }
   if (deptKey === 'palliative' && typeof parsePalliativePdfEntries !== 'undefined') {
     delete parsePalliativePdfEntries._serverSchedule;
