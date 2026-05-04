@@ -1071,7 +1071,7 @@ const SPECIALTY_FILENAME_INTERPRETERS = [
   { key:'medicine_on_call', icon:'🩺', label:'Medicine On-Call / باطنية المناوبة', terms:['medicine on call','in house on call rota','department of medicnie','block 7'] },
   { key:'neurology', icon:'🧠', label:'Neurology / الأعصاب', terms:['neurology','neurology duty','neurology department','neurology rota','neurology main'] },
   { key:'neurosurgery', icon:'🧠', label:'Neurosurgery / جراحة الأعصاب', terms:['neuro surg','neuro-surg','neurosurg','neurosurgery','neuro surgery'] },
-  { key:'medicine', icon:'🩺', label:'Medicine / الباطنية', terms:['department medicine','medicine'] },
+  { key:'medicine', icon:'🩺', label:'Medicine / الباطنية', terms:['department medicine','im resident rota','department of medicine'] },
 ];
 
 const HOMEPAGE_PRIORITY = [
@@ -1135,7 +1135,7 @@ const PDF_DETECTION_RULES = [
   { key:'nephrology', terms:['nephrology','renal','gen nephrology','adult nephrology','كلى'] },
   { key:'kptx', terms:['kptx','kidney transplant','kidney tx','زراعة الكلى'] },
   { key:'liver', terms:['liver transplant','hepat','زراعة الكبد'] },
-  { key:'palliative', terms:['palliative','palliative medicine','رعاية تلطيفية'] },
+  { key:'palliative', terms:['palliative','palliative medicine','palliative medicine department','palliative on-call','palliative duty','رعاية تلطيفية'] },
   { key:'gynecology', terms:['gynecology','gynaecology','gynae','obgyn','ob-gyn','ob/gyn','obstetrics','نسائية','duty rota gynecology'] },
   { key:'dental', terms:['dental','dentistry','أسنان'] },
   { key:'psychiatry', terms:['psychiatry','mental health','نفسية'] },
@@ -1158,7 +1158,7 @@ const PDF_DETECTION_RULES = [
   { key:'surgery', terms:['department of surgery','surgery april','general surgery'] },
   { key:'neurology', terms:['neurology','neurology duty','neurology department','neurology rota','neurology main'] },
   { key:'hospitalist', terms:['hospitalist department','hospitalist duty'] },
-  { key:'medicine', terms:['department of medicine','medicine rota','medical department'] },
+  { key:'medicine', terms:['department of medicine','medicine rota','medical department','im resident rota'] },
   { key:'ent', terms:['ent','ear nose throat','أنف وأذن وحنجرة'] },
 ];
 
