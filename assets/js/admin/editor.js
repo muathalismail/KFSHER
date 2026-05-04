@@ -39,7 +39,8 @@ function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTi
 
 // ── Data Loading ──
 async function loadAllRecords() {
-  const resp = await fetch('/api/records');
+  // Cache-bust: records.js has max-age=300, must bypass after save
+  const resp = await fetch(`/api/records?_t=${Date.now()}`);
   if (!resp.ok) throw new Error('Failed to fetch records');
   state.allRecords = await resp.json();
   buildSpecialtyList();
@@ -82,16 +83,17 @@ function flattenEntries(raw) {
 
 function rebuildRawEntries() {
   // Rebuild data.entries from flat state.entries (excluding deleted)
+  // Main app uses entry.name (not .doctor), so always set both
   return state.entries
     .filter((_, i) => !state.changes.has(i) || state.changes.get(i).type !== 'delete')
     .map(e => {
       const raw = { ...e._raw };
       raw.date = e.date;
-      raw.doctor = e.doctor;
+      raw.name = e.doctor;      // main app reads .name
+      raw.doctor = e.doctor;    // keep for editor compat
       raw.phone = e.phone;
       raw.role = e.role;
       raw.shift = e.shift;
-      if (raw.name !== undefined) raw.name = e.doctor;
       return raw;
     });
 }

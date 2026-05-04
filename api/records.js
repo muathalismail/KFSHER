@@ -29,7 +29,7 @@ module.exports = async function handler(req, res) {
     }
 
     const data = await dbResp.json();
-    res.setHeader('Cache-Control', 'public, max-age=300');
+    res.setHeader('Cache-Control', 'public, max-age=30, s-maxage=30');
     return res.status(200).json(data || []);
   } catch (err) {
     return res.status(500).json({ error: err.message });
