@@ -183,9 +183,18 @@ PARSER_REGISTRY['hematology'] = templateFallbackStrategy(parseHematologyPdfEntri
   templatePrefix: 'hematology',
 });
 
-PARSER_REGISTRY['palliative'] = templateFallbackStrategy(parsePalliativePdfEntries, {
-  templatePrefix: 'palliative',
-});
+PARSER_REGISTRY['palliative'] = function(text, deptKey) {
+  const parsed = parsePalliativePdfEntries(text, deptKey);
+  if (parsed._templateDetected && parsed.length) {
+    return {
+      entries: dedupeParsedEntries([...parsed]),
+      parserMode: 'specialized',
+      meta: { templateDetected: true, templateName: parsed._templateName || 'palliative-monthly-uploaded' },
+    };
+  }
+  // No server data → return empty, do NOT merge with generic (corrupts with header text)
+  return { entries: [], parserMode: 'generic-fallback', meta: { templateDetected: false } };
+};
 
 PARSER_REGISTRY['ent'] = templateFallbackStrategy(parseEntPdfEntries, {
   templatePrefix: 'ent',
