@@ -446,6 +446,9 @@ async function saveChanges() {
     const updatedData = {
       ...state.currentRecord.data,
       entries: newEntries,
+      // Clear normalized so main app rebuilds it from fresh entries
+      // (canonicalizeUploadedRecord uses normalized if present, skipping entries)
+      normalized: null,
       uploadedAt: Date.now(),
       lastEditedBy: 'Muath',
       lastEditedAt: new Date().toISOString(),
