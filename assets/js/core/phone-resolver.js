@@ -125,7 +125,7 @@ function _classifyTokenMatch(tTokens, cTokens) {
         const dist = levenshtein(tt, ct);
         if (dist === 1 && (!bestForToken || _RULE_RANK[bestForToken] > _RULE_RANK['levenshtein-1'])) {
           bestForToken = 'levenshtein-1';
-        } else if (dist === 2 && tt.length >= 5 && ct.length >= 5 && (!bestForToken || _RULE_RANK[bestForToken] > _RULE_RANK['levenshtein-2'])) {
+        } else if (dist === 2 && tt.length >= 6 && ct.length >= 6 && (!bestForToken || _RULE_RANK[bestForToken] > _RULE_RANK['levenshtein-2'])) {
           bestForToken = 'levenshtein-2';
         }
       }
