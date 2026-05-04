@@ -252,4 +252,78 @@ async function loadDashboard() {
   } finally {
     loading.classList.remove('active');
   }
+
+  // Load click analytics
+  loadClickStats();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Click Analytics
+// ═══════════════════════════════════════════════════════════════
+
+let _clickStatsRange = '7d';
+let _clickRefreshTimer = null;
+
+async function loadClickStats() {
+  const container = document.getElementById('click-stats');
+  if (!container) return;
+
+  try {
+    const resp = await fetch(`/api/click-stats?range=${_clickStatsRange}&_t=${Date.now()}`);
+    if (!resp.ok) return;
+    const stats = await resp.json();
+    renderClickStats(stats);
+  } catch {}
+
+  // Auto-refresh every 60s
+  clearInterval(_clickRefreshTimer);
+  _clickRefreshTimer = setInterval(() => loadClickStats(), 60000);
+}
+
+function renderClickStats(stats) {
+  const container = document.getElementById('click-stats');
+  if (!container) return;
+
+  const maxCount = stats.length ? stats[0].count : 1;
+  const RANGE_LABELS = {
+    'today': 'اليوم',
+    '24h': 'آخر 24 ساعة',
+    '7d': 'آخر 7 أيام',
+    '30d': 'آخر 30 يوم',
+    'all': 'الكل',
+  };
+
+  let html = `<div class="click-header">
+    <h3>🔥 الأكثر استخداماً</h3>
+    <div class="click-range">
+      ${Object.entries(RANGE_LABELS).map(([val, label]) =>
+        `<button class="click-range-btn${val === _clickStatsRange ? ' active' : ''}" data-range="${val}">${label}</button>`
+      ).join('')}
+    </div>
+  </div>`;
+
+  if (!stats.length) {
+    html += '<div class="click-empty">لا توجد بيانات للفترة المحددة</div>';
+  } else {
+    html += '<div class="click-bars">';
+    for (const { specialty, count } of stats) {
+      const pct = Math.round((count / maxCount) * 100);
+      html += `<div class="click-bar-row">
+        <span class="click-bar-label">${iconFor(specialty)} ${labelFor(specialty)}</span>
+        <div class="click-bar-track"><div class="click-bar-fill" style="width:${pct}%"></div></div>
+        <span class="click-bar-count">${count}</span>
+      </div>`;
+    }
+    html += '</div>';
+  }
+
+  container.innerHTML = html;
+
+  // Bind range buttons
+  container.querySelectorAll('.click-range-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _clickStatsRange = btn.dataset.range;
+      loadClickStats();
+    });
+  });
 }

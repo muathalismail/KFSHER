@@ -250,6 +250,7 @@ async function renderDeptList(matched, qLow, exactMode=false) {
 
 async function showExactDept(deptKey) {
   closePdfPreview();
+  if (typeof trackClick === 'function') trackClick(deptKey);
   const welcome = document.getElementById('welcome');
   welcome.style.display = 'none';
   const dept = ROTAS[deptKey];
