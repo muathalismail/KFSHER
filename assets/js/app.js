@@ -2178,7 +2178,7 @@ async function parseUploadedPdf(file, deptKey) {
   } else if (deptKey === 'critical_care' || deptKey === 'oncology' || deptKey === 'anesthesia') {
     // PDF view only — schedule managed in ROTAS, skip extraction
     console.log(`[${deptKey.toUpperCase()}] PDF view only, schedule from ROTAS`);
-  } else if (deptKey === 'gynecology' || deptKey === 'psychiatry' || deptKey === 'picu'
+  } else if (deptKey === 'psychiatry' || deptKey === 'picu'
       || deptKey === 'pediatric_heme_onc' || deptKey === 'neurology' || deptKey === 'urology'
       || deptKey === 'adult_cardiology' || deptKey === 'dental') {
     // pdfplumber extraction via extract-table.py

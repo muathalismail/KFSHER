@@ -147,15 +147,16 @@ SPECIALTY_CONFIGS = {
     # Format: DD/MM/YYYY, 24H duty, bare first names
     # Last verified: 2026-05-01, Sample: Gynecology_April_2026.pdf
     'gynecology': {
-        'columns': ['resident', 'fellow', 'consultant'],
+        'columns': ['resident', 'fellow', 'consultant', 'obs_consultant'],
         'headers': {
             'resident': re.compile(r'resident', re.I),
             'fellow': re.compile(r'assistant|fellow', re.I),
-            'consultant': re.compile(r'consultant', re.I),
+            'consultant': re.compile(r'gynecol|consultant', re.I),
+            'obs_consultant': re.compile(r'obstetric', re.I),
         },
         'date_pattern': re.compile(r'(\d{1,2})/(\d{1,2})/(\d{4})'),
         'day_pattern': None,
-        'fallback_cols': [2, 3, 4],
+        'fallback_cols': [2, 3, 4, 5],
         'min_headers': 2,
     },
     # Psychiatry: 16 cols — Adults: IP Consult(2), Resident(3), 2nd On-Duty(4), CL(5), Consultant(6)

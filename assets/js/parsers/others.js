@@ -7,50 +7,44 @@
 function parseGynecologyPdfEntries(text='', deptKey='gynecology') {
   const entries = [];
   const contactResult = buildContactMapFromText(text);
-  const roles = ['Fellow / Resident', 'Resident', 'Consultant On-Call'];
-  // Detect month/year from PDF
-  const { month: detectedMon, year: detectedYr, monthPad } = detectPdfMonthYear(text);
-  const daysInMonth = new Date(detectedYr, detectedMon, 0).getDate();
+  const dept = ROTAS[deptKey] || { contacts:{} };
+  const { monthPad, year: detectedYr } = detectPdfMonthYear(text);
 
-  // Find the packed line with "24 H" blocks
-  for (const line of text.split('\n')) {
-    if (!line.includes('24 H')) continue;
-    const blocks = line.split(/\s*24\s*H\s*/);
-    // blocks[0] = header, blocks[1] = day 1, blocks[2] = day 2 ...
-    for (let b = 1; b < blocks.length; b++) {
-      const day = b; // block index maps to calendar day
-      if (day < 1 || day > daysInMonth) continue;
-      const dateKey = `${String(day).padStart(2,'0')}/${monthPad}`;
-      const chunk = (blocks[b] || '').trim();
-      const parts = chunk.split(/\s{2,}/).map(s => s.trim()).filter(s =>
-        s && s.length >= 2 &&
-        !/^\d+$/.test(s) &&
-        !/^(mobile|physician|number|mobile numbe)$/i.test(s)
-      );
-      parts.forEach((name, idx) => {
-        const resolved = resolvePhoneFromContactMap(name, contactResult) || resolvePhone(ROTAS[deptKey] || { contacts:{} }, { name, phone:'' });
+  const serverSchedule = parseGynecologyPdfEntries._serverSchedule;
+  if (Array.isArray(serverSchedule) && serverSchedule.length) {
+    console.log(`[GYNECOLOGY] Using server-extracted schedule (${serverSchedule.length} rows)`);
+    const FIELD_TO_ROLE = [
+      { field: 'resident',       role: 'Resident',                    shiftType: '24h' },
+      { field: 'fellow',         role: 'Fellow',                       shiftType: '24h' },
+      { field: 'consultant',     role: 'Gynecology Consultant On-Call', shiftType: '24h' },
+      { field: 'obs_consultant', role: 'Obstetrics Consultant On-Call', shiftType: '24h' },
+    ];
+    for (const row of serverSchedule) {
+      const dateKey = row.date || '';
+      if (!dateKey) continue;
+      for (const { field, role, shiftType } of FIELD_TO_ROLE) {
+        const rawName = (row[field] || '').trim();
+        if (!rawName) continue;
+        const phoneMeta = resolvePhoneFromContactMap(rawName, contactResult)
+          || resolvePhone(dept, { name: rawName, phone: '' })
+          || { phone: '', uncertain: true };
         entries.push({
-          specialty: deptKey,
-          date: dateKey,
-          role: roles[Math.min(idx, roles.length-1)],
-          name,
-          phone: resolved?.phone || '',
-          phoneUncertain: !!(resolved && resolved.uncertain && resolved.phone),
-          parsedFromPdf: true
+          specialty: deptKey, date: dateKey, role, name: rawName,
+          phone: phoneMeta.phone || '',
+          phoneUncertain: !phoneMeta.phone || !!phoneMeta.uncertain,
+          shiftType, startTime: '07:30', endTime: '07:30',
+          parsedFromPdf: true,
         });
-      });
+      }
     }
-    break; // only one such line
+    const deduped = dedupeParsedEntries(entries);
+    deduped._templateDetected = deduped.length >= 20;
+    deduped._templateName = deduped._templateDetected ? `gynecology-${monthPad}-${detectedYr}` : '';
+    deduped._serverExtracted = true;
+    return deduped;
   }
 
-  // Also pick up consultant name from "Approved:" line
-  const approvedMatch = text.match(/Approved:\s*(Dr\.[^\n]+)/i);
-  if (approvedMatch) {
-    const consultant = approvedMatch[1].trim();
-    entries.push({ specialty: deptKey, date: '', role: 'Consultant On-Call', name: consultant, phone: '', parsedFromPdf: true });
-  }
-
-  return dedupeParsedEntries(entries);
+  return parseGenericPdfEntries(text, deptKey);
 }
 
 const NEUROSURGERY_NAME_HINTS = {
