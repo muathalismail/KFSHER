@@ -135,15 +135,9 @@ PARSER_REGISTRY['orthopedics'] = function(text, deptKey) {
   };
 };
 
-PARSER_REGISTRY['gynecology'] = function(text, deptKey) {
-  const gynParsed = parseGynecologyPdfEntries(text, deptKey);
-  const genericParsed = parseGenericPdfEntries(text, deptKey);
-  return {
-    entries: dedupeParsedEntries([...gynParsed, ...genericParsed]),
-    parserMode: 'generic',
-    meta: { templateDetected: false },
-  };
-};
+PARSER_REGISTRY['gynecology'] = templateFallbackStrategy(parseGynecologyPdfEntries, {
+  templatePrefix: 'gynecology',
+});
 
 // ── Template-detection parsers (specialized or fallback) ──────
 
