@@ -940,7 +940,9 @@ function resolveDisplayEntriesFromNormalizedPayload(deptKey, normalizedPayload, 
 }
 
 function uploadedEntriesForDept(deptKey, schedKey, now, qLow='') {
-  if (deptKey === 'radiology_duty' || deptKey === 'radiology_oncall') return null;
+  if (deptKey === 'radiology_duty') return null;
+  // radiology_oncall: only use uploaded data during on-call hours
+  if (deptKey === 'radiology_oncall' && !isSpecialtyActiveNow('radiology_oncall', now)) return null;
   const record = uploadedRecordForDept(deptKey);
   if (!record || !record.parsedActive || !Array.isArray(record.entries)) return null;
   // Sprint 0: skip stale records from a prior month
