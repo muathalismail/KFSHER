@@ -459,20 +459,15 @@ async function saveChanges() {
         recordId: state.currentRecord.id,
         specialty: state.currentSpecialty,
         data: updatedData,
-        expectedUploadedAt: state.currentRecord.data?.uploadedAt || 0,
+        // Single-user system: skip conflict check to avoid false 409s
+        // expectedUploadedAt: state.currentRecord.data?.uploadedAt || 0,
         auditEntries,
       }),
     });
 
-    if (resp.status === 409) {
-      const conflict = await resp.json();
-      handleConflict(conflict);
-      return;
-    }
-
     if (!resp.ok) {
-      const err = await resp.json();
-      throw new Error(err.error || 'Save failed');
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${resp.status}`);
     }
 
     showToast('تم الحفظ! التحديثات متزامنة لجميع الأجهزة.', 'success');
@@ -529,21 +524,6 @@ function buildAuditEntries() {
     }
   }
   return entries;
-}
-
-function handleConflict(conflict) {
-  const choice = confirm(
-    'تم تعديل السجل من جلسة أخرى.\n\n' +
-    '[ OK ] = استخدام تعديلاتي (تجاهل التحديث الأخير)\n' +
-    '[ Cancel ] = إعادة تحميل البيانات الجديدة'
-  );
-  if (choice) {
-    // Force save — retry without conflict check
-    state.currentRecord.data.uploadedAt = conflict.serverUploadedAt;
-    saveChanges();
-  } else {
-    loadAllRecords().then(() => loadSpecialtyEntries(state.currentSpecialty));
-  }
 }
 
 // ── Draft Auto-save ──
@@ -783,21 +763,22 @@ function startEdit(idx, field) {
         cell.innerHTML = `<input class="ed-inline-input" value="" style="min-width:${width}px">`;
         const inp = cell.querySelector('input');
         inp.focus();
-        inp.addEventListener('blur', () => commitEdit(idx, field, inp.value));
+        inp.onblur = () => commitEdit(idx, field, inp.value);
         inp.addEventListener('keydown', (e) => handleEditKey(e, idx, field, inp));
       } else {
+        sel.onblur = null; // prevent double-fire
         commitEdit(idx, field, sel.value);
       }
     });
-    sel.addEventListener('blur', () => {
+    sel.onblur = () => {
       if (sel.value !== '__custom__') commitEdit(idx, field, sel.value);
-    });
+    };
   } else if (field === 'phone') {
     cell.innerHTML = `<input type="tel" class="ed-inline-input" value="${escHtml(oldVal)}" placeholder="05xxxxxxxx" style="min-width:${width}px" dir="ltr">`;
     const inp = cell.querySelector('input');
     inp.focus();
     inp.select();
-    inp.addEventListener('blur', () => commitEdit(idx, field, inp.value));
+    inp.onblur = () => commitEdit(idx, field, inp.value);
     inp.addEventListener('keydown', (e) => handleEditKey(e, idx, field, inp));
   } else if (field === 'doctor') {
     cell.innerHTML = `<input class="ed-inline-input" value="${escHtml(oldVal)}" style="min-width:${width}px"><div class="ed-suggest" id="ed-suggest"></div>`;
@@ -805,19 +786,21 @@ function startEdit(idx, field) {
     inp.focus();
     inp.select();
     inp.addEventListener('input', debounce(() => showNameSuggestions(inp, idx), 200));
-    inp.addEventListener('blur', () => setTimeout(() => commitEdit(idx, field, inp.value), 150));
+    inp.onblur = () => setTimeout(() => commitEdit(idx, field, inp.value), 150);
     inp.addEventListener('keydown', (e) => handleEditKey(e, idx, field, inp));
   } else {
     cell.innerHTML = `<input class="ed-inline-input" value="${escHtml(oldVal)}" style="min-width:${width}px" ${field === 'date' ? 'placeholder="DD/MM" dir="ltr"' : ''}>`;
     const inp = cell.querySelector('input');
     inp.focus();
     inp.select();
-    inp.addEventListener('blur', () => commitEdit(idx, field, inp.value));
+    inp.onblur = () => commitEdit(idx, field, inp.value);
     inp.addEventListener('keydown', (e) => handleEditKey(e, idx, field, inp));
   }
 }
 
 function commitEdit(idx, field, newVal) {
+  // Guard: prevent double-commit (blur fires after Enter/Tab destroys the input)
+  if (!state.editingCell || state.editingCell.idx !== idx || state.editingCell.field !== field) return;
   const oldVal = state.entries[idx][field] || '';
   newVal = (newVal || '').trim();
   state.entries[idx][field] = newVal;
@@ -840,10 +823,11 @@ function commitEdit(idx, field, newVal) {
 function handleEditKey(e, idx, field, inp) {
   if (e.key === 'Escape') {
     state.editingCell = null;
-    inp.removeEventListener('blur', () => {});
     render();
   } else if (e.key === 'Enter' || e.key === 'Tab') {
     e.preventDefault();
+    // Detach blur so it doesn't double-fire after render destroys the input
+    inp.onblur = null;
     commitEdit(idx, field, inp.value);
     // Move to next field
     const fi = FIELDS.indexOf(field);
