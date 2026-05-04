@@ -236,28 +236,51 @@ function normalizeKptxName(raw='') {
 }
 
 function parseKptxPdfEntries(text='', deptKey='kptx') {
-  // ── KPTX column layout (from PDF header) ─────────────────────
-  // Col 0: Day                         → skip (day name)
-  // Col 1: Date                        → dateKey
-  // Col 2: Inpatient + Consultation    → IGNORE
-  // Col 3: On-Call 1st                 → '1st On-Call'   16:30-07:30
-  // Col 4: On-Call 2nd                 → '2nd On-Call'   16:30-07:30
-  // Col 5: Consultant On-Call 24h      → 'Consultant On-Call'  07:30-07:30
-  // Col 6: Consultant SCOT On-Call     → IGNORE
-  // Col 7: Transplant Coordinator      → IGNORE
-  //
-  // Rules:
-  //  • A cell may contain "Ali Al Harbi / Baher" — split on "/" per name
-  //  • If the same name appears in multiple lanes on one day,
-  //    keep only the first (highest-priority) occurrence:
-  //    Consultant → 1st On-Call → 2nd On-Call
-  // ─────────────────────────────────────────────────────────────
   const entries = [];
+  const contactResult = buildContactMapFromText(text);
+  const dept = ROTAS[deptKey] || { contacts:{} };
   const { month: detectedMon, year: detectedYr, monthPad } = detectPdfMonthYear(text);
+
+  // ── Server-extracted pdfplumber path ──
+  const serverSchedule = parseKptxPdfEntries._serverSchedule;
+  if (Array.isArray(serverSchedule) && serverSchedule.length) {
+    console.log(`[KPTX] Using server-extracted schedule (${serverSchedule.length} rows)`);
+    const FIELD_TO_ROLE = [
+      { field: 'first_oncall',      role: '1st On-Call',        shiftType: 'night', startTime: '16:30', endTime: '07:30' },
+      { field: 'second_oncall',     role: '2nd On-Call',        shiftType: 'night', startTime: '16:30', endTime: '07:30' },
+      { field: 'consultant_oncall', role: 'Consultant On-Call', shiftType: '24h',   startTime: '07:30', endTime: '07:30' },
+    ];
+    for (const row of serverSchedule) {
+      const dateKey = row.date || '';
+      if (!dateKey) continue;
+      for (const { field, role, shiftType, startTime, endTime } of FIELD_TO_ROLE) {
+        const rawName = (row[field] || '').trim();
+        if (!rawName) continue;
+        // Handle "Name1 / Name2" splits
+        const names = rawName.split(/\s*\/\s*/).filter(Boolean);
+        for (const name of names) {
+          const phoneMeta = resolvePhoneFromContactMap(name, contactResult)
+            || resolvePhone(dept, { name, phone: '' })
+            || { phone: '', uncertain: true };
+          entries.push({
+            specialty: deptKey, date: dateKey, role, name,
+            phone: phoneMeta.phone || '',
+            phoneUncertain: !phoneMeta.phone || !!phoneMeta.uncertain,
+            shiftType, startTime, endTime, parsedFromPdf: true,
+          });
+        }
+      }
+    }
+    const deduped = dedupeParsedEntries(entries);
+    deduped._templateDetected = deduped.length >= 20;
+    deduped._templateName = deduped._templateDetected ? `kptx-${monthPad}-${detectedYr}` : '';
+    deduped._serverExtracted = true;
+    return deduped;
+  }
+
+  // ── Legacy client-side text parsing fallback ──
   const rowRe = /^(Wednesday|Thursday|Friday|Saturday|Sunday|Monday|Tuesday)\s+(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(.+)$/i;
   const lines = String(text || '').split(/\n/).map(line => line.trim()).filter(Boolean);
-  const dept  = ROTAS[deptKey] || { contacts:{} };
-  const contactResult = buildContactMapFromText(text);
 
   // Resolve name → phone from PDF contact table or ROTAS
   const resolveKptxPhone = (name) =>
@@ -416,6 +439,43 @@ function parseLiverPdfEntries(text='', deptKey='liver') {
   const dept = ROTAS[deptKey] || { contacts:{} };
   const contactResult = buildContactMapFromText(text);
   const { year: detectedYr, monthPad } = detectPdfMonthYear(text);
+
+  // ── Server-extracted pdfplumber path ──
+  const serverSchedule = parseLiverPdfEntries._serverSchedule;
+  if (Array.isArray(serverSchedule) && serverSchedule.length) {
+    console.log(`[LIVER] Using server-extracted schedule (${serverSchedule.length} rows)`);
+    const FIELD_TO_ROLE = [
+      { field: 'day_coverage',      role: 'Day Coverage',       shiftType: 'day',   startTime: '07:30', endTime: '16:30' },
+      { field: 'after_duty',        role: 'After Duty',         shiftType: 'night', startTime: '16:30', endTime: '07:30' },
+      { field: 'second_oncall',     role: '2nd On-Call',        shiftType: '24h',   startTime: '07:30', endTime: '07:30' },
+      { field: 'consultant_oncall', role: 'Consultant On-Call', shiftType: '24h',   startTime: '07:30', endTime: '07:30' },
+    ];
+    for (const row of serverSchedule) {
+      const dateKey = row.date || '';
+      if (!dateKey) continue;
+      for (const { field, role, shiftType, startTime, endTime } of FIELD_TO_ROLE) {
+        const rawName = (row[field] || '').trim();
+        if (!rawName) continue;
+        const names = rawName.split(/\s*\/\s*/).filter(Boolean);
+        for (const name of names) {
+          const phoneMeta = resolvePhoneFromContactMap(name, contactResult)
+            || resolvePhone(dept, { name, phone: '' })
+            || { phone: '', uncertain: true };
+          entries.push({
+            specialty: deptKey, date: dateKey, role, name,
+            phone: phoneMeta.phone || '',
+            phoneUncertain: !phoneMeta.phone || !!phoneMeta.uncertain,
+            shiftType, startTime, endTime, parsedFromPdf: true,
+          });
+        }
+      }
+    }
+    const deduped = dedupeParsedEntries(entries);
+    deduped._templateDetected = deduped.length >= 20;
+    deduped._templateName = deduped._templateDetected ? `liver-${monthPad}-${detectedYr}` : '';
+    deduped._serverExtracted = true;
+    return deduped;
+  }
 
   // ── Columnar mode: text has \t between column boundaries ──
   // extractLiverColumnarText inserts \t at detected column positions.
@@ -1614,18 +1674,55 @@ function buildHematologyEntries(dateKey, roleMeta, rawCell, contactMap, rotasCon
 
 function parseHematologyPdfEntries(text='', deptKey='hematology') {
   const entries = [];
-  const rotasContacts = (ROTAS[deptKey] || {}).contacts || {};
+  const contactResult = buildContactMapFromText(text);
+  const dept = ROTAS[deptKey] || { contacts:{} };
+  const { monthPad, year: detectedYr } = detectPdfMonthYear(text);
+
+  // ── Server-extracted pdfplumber path ──
+  const serverSchedule = parseHematologyPdfEntries._serverSchedule;
+  if (Array.isArray(serverSchedule) && serverSchedule.length) {
+    console.log(`[HEMATOLOGY] Using server-extracted schedule (${serverSchedule.length} rows)`);
+    const FIELD_TO_ROLE = [
+      { field: 'oncall1_resident',        role: 'On-Call 1 Resident' },
+      { field: 'oncall2_fellow',          role: 'On-Call 2 Fellow' },
+      { field: 'second_rounder',          role: '2nd Rounder' },
+      { field: 'oncall4_consultant',      role: 'On-Call 4 Consultant' },
+      { field: 'er_fellow',              role: 'ER/Consult Fellow' },
+      { field: 'consultation_consultant', role: 'Consultation Consultant' },
+    ];
+    for (const row of serverSchedule) {
+      const dateKey = row.date || '';
+      if (!dateKey) continue;
+      for (const { field, role } of FIELD_TO_ROLE) {
+        const rawName = (row[field] || '').trim();
+        if (!rawName || rawName === '.') continue;
+        const phoneMeta = resolvePhoneFromContactMap(rawName, contactResult)
+          || resolvePhone(dept, { name: rawName, phone: '' })
+          || { phone: '', uncertain: true };
+        entries.push({
+          specialty: deptKey, date: dateKey, role, name: rawName,
+          phone: phoneMeta.phone || '',
+          phoneUncertain: !phoneMeta.phone || !!phoneMeta.uncertain,
+          shiftType: '24h', startTime: '07:30', endTime: '07:30',
+          parsedFromPdf: true,
+        });
+      }
+    }
+    const deduped = dedupeParsedEntries(entries);
+    deduped._templateDetected = deduped.length >= 20;
+    deduped._templateName = deduped._templateDetected ? `hematology-${monthPad}-${detectedYr}` : '';
+    deduped._serverExtracted = true;
+    return deduped;
+  }
+
+  // ── Legacy client-side text parsing fallback ──
+  const rotasContacts = dept.contacts || {};
   const contactMap = buildHematologyContactMap(text);
-  // DEBUG — remove after confirming name normalization works
-  console.warn('[HEMA contactMap.byFull keys]', Object.keys(contactMap.byFull));
-  console.warn('[HEMA contactMap.byPart keys]', Object.keys(contactMap.byPart));
-  console.warn('[HEMA contactMap.byFull full]', JSON.stringify(contactMap.byFull, null, 2));
 
   const lines = String(text || '').split(/\n/).map(l => l.trim()).filter(Boolean);
 
   const dayStartRe = /^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)/i;
-  // Detect month/year from the PDF (any year, not just 2026)
-  const { year: hemaDetectedYr } = detectPdfMonthYear(text);
+  const hemaDetectedYr = detectedYr;
   const hemaYr2 = hemaDetectedYr % 100; // 2-digit year for "01 - 04 - 26" style
   const dateTokRe  = new RegExp(`^(\\d{1,2})\\s*[-\\/]\\s*(\\d{1,2})\\s*[-\\/]\\s*(?:20)?${String(hemaYr2).padStart(2,'0')}$`);
 

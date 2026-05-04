@@ -2145,6 +2145,63 @@ async function parseUploadedPdf(file, deptKey) {
     } catch (err) {
       console.warn('[PALLIATIVE] Server schedule extraction failed, using client-side:', err.message);
     }
+  } else if (deptKey === 'hematology') {
+    try {
+      const buffer = await file.arrayBuffer();
+      const b64 = btoa(new Uint8Array(buffer).reduce((s, b) => s + String.fromCharCode(b), ''));
+      const resp = await fetch('/api/extract-table', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pdf_base64: b64, specialty: 'hematology' }),
+      });
+      if (resp.ok) {
+        const result = await resp.json();
+        if (result.rows && result.rows.length) {
+          console.log(`[HEMATOLOGY] Server extracted ${result.rows.length} schedule rows`);
+          parseHematologyPdfEntries._serverSchedule = result.rows;
+        }
+      }
+    } catch (err) {
+      console.warn('[HEMATOLOGY] Server schedule extraction failed, using client-side:', err.message);
+    }
+  } else if (deptKey === 'kptx') {
+    try {
+      const buffer = await file.arrayBuffer();
+      const b64 = btoa(new Uint8Array(buffer).reduce((s, b) => s + String.fromCharCode(b), ''));
+      const resp = await fetch('/api/extract-table', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pdf_base64: b64, specialty: 'kptx' }),
+      });
+      if (resp.ok) {
+        const result = await resp.json();
+        if (result.rows && result.rows.length) {
+          console.log(`[KPTX] Server extracted ${result.rows.length} schedule rows`);
+          parseKptxPdfEntries._serverSchedule = result.rows;
+        }
+      }
+    } catch (err) {
+      console.warn('[KPTX] Server schedule extraction failed, using client-side:', err.message);
+    }
+  } else if (deptKey === 'liver') {
+    try {
+      const buffer = await file.arrayBuffer();
+      const b64 = btoa(new Uint8Array(buffer).reduce((s, b) => s + String.fromCharCode(b), ''));
+      const resp = await fetch('/api/extract-table', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pdf_base64: b64, specialty: 'liver' }),
+      });
+      if (resp.ok) {
+        const result = await resp.json();
+        if (result.rows && result.rows.length) {
+          console.log(`[LIVER] Server extracted ${result.rows.length} schedule rows`);
+          parseLiverPdfEntries._serverSchedule = result.rows;
+        }
+      }
+    } catch (err) {
+      console.warn('[LIVER] Server schedule extraction failed, using client-side:', err.message);
+    }
   } else if (deptKey === 'pediatrics') {
     // Use server-side pdfplumber table extraction + Claude API for name resolution
     try {
@@ -2425,6 +2482,15 @@ async function parseUploadedPdf(file, deptKey) {
   }
   if (deptKey === 'ent' && typeof parseEntPdfEntries !== 'undefined') {
     delete parseEntPdfEntries._serverSchedule;
+  }
+  if (deptKey === 'hematology' && typeof parseHematologyPdfEntries !== 'undefined') {
+    delete parseHematologyPdfEntries._serverSchedule;
+  }
+  if (deptKey === 'kptx' && typeof parseKptxPdfEntries !== 'undefined') {
+    delete parseKptxPdfEntries._serverSchedule;
+  }
+  if (deptKey === 'liver' && typeof parseLiverPdfEntries !== 'undefined') {
+    delete parseLiverPdfEntries._serverSchedule;
   }
   if (deptKey === 'palliative' && typeof parsePalliativePdfEntries !== 'undefined') {
     delete parsePalliativePdfEntries._serverSchedule;
