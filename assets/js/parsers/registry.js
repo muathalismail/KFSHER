@@ -183,6 +183,10 @@ PARSER_REGISTRY['hematology'] = templateFallbackStrategy(parseHematologyPdfEntri
   templatePrefix: 'hematology',
 });
 
+PARSER_REGISTRY['palliative'] = templateFallbackStrategy(parsePalliativePdfEntries, {
+  templatePrefix: 'palliative',
+});
+
 PARSER_REGISTRY['ent'] = templateFallbackStrategy(parseEntPdfEntries, {
   templatePrefix: 'ent',
 });

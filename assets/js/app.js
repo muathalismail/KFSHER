@@ -2126,6 +2126,25 @@ async function parseUploadedPdf(file, deptKey) {
     } catch (err) {
       console.warn('[GYNECOLOGY] Server schedule extraction failed, using client-side:', err.message);
     }
+  } else if (deptKey === 'palliative') {
+    try {
+      const buffer = await file.arrayBuffer();
+      const b64 = btoa(new Uint8Array(buffer).reduce((s, b) => s + String.fromCharCode(b), ''));
+      const resp = await fetch('/api/extract-table', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pdf_base64: b64, specialty: 'palliative' }),
+      });
+      if (resp.ok) {
+        const result = await resp.json();
+        if (result.rows && result.rows.length) {
+          console.log(`[PALLIATIVE] Server extracted ${result.rows.length} schedule rows`);
+          parsePalliativePdfEntries._serverSchedule = result.rows;
+        }
+      }
+    } catch (err) {
+      console.warn('[PALLIATIVE] Server schedule extraction failed, using client-side:', err.message);
+    }
   } else if (deptKey === 'pediatrics') {
     // Use server-side pdfplumber table extraction + Claude API for name resolution
     try {
@@ -2406,6 +2425,9 @@ async function parseUploadedPdf(file, deptKey) {
   }
   if (deptKey === 'ent' && typeof parseEntPdfEntries !== 'undefined') {
     delete parseEntPdfEntries._serverSchedule;
+  }
+  if (deptKey === 'palliative' && typeof parsePalliativePdfEntries !== 'undefined') {
+    delete parsePalliativePdfEntries._serverSchedule;
   }
   if (deptKey === 'gynecology' && typeof parseGynecologyPdfEntries !== 'undefined') {
     delete parseGynecologyPdfEntries._serverSchedule;

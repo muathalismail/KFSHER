@@ -159,6 +159,18 @@ SPECIALTY_CONFIGS = {
         'fallback_cols': [2, 3, 4, 5],
         'min_headers': 2,
     },
+    'palliative': {
+        'columns': ['first_oncall', 'second_oncall', 'consultant'],
+        'headers': {
+            'first_oncall': re.compile(r'1st\s*on.?call', re.I),
+            'second_oncall': re.compile(r'2nd\s*on.?call', re.I),
+            'consultant': re.compile(r'consultant\s*on.?call', re.I),
+        },
+        'date_pattern': re.compile(r'(\d{1,2})/(\d{1,2})/(\d{4})'),
+        'day_pattern': re.compile(r'^(Sun|Mon|Tue|Wed|Thu|Fri|Sat)', re.I),
+        'fallback_cols': [2, 3, 4],
+        'min_headers': 2,
+    },
     # Psychiatry: 16 cols — Adults: IP Consult(2), Resident(3), 2nd On-Duty(4), CL(5), Consultant(6)
     # Children: Resident IP(7), Resident On-Duty(8), Consultant(9)
     # Date format: D-Mon-YY (1-Apr-26). Merged headers row 0.

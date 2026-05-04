@@ -1815,3 +1815,46 @@ function parseEntPdfEntries(text='', deptKey='ent') {
   return parseGenericPdfEntries(text, deptKey);
 }
 
+
+function parsePalliativePdfEntries(text='', deptKey='palliative') {
+  const entries = [];
+  const contactResult = buildContactMapFromText(text);
+  const dept = ROTAS[deptKey] || { contacts:{} };
+  const { monthPad, year: detectedYr } = detectPdfMonthYear(text);
+
+  const serverSchedule = parsePalliativePdfEntries._serverSchedule;
+  if (Array.isArray(serverSchedule) && serverSchedule.length) {
+    console.log(`[PALLIATIVE] Using server-extracted schedule (${serverSchedule.length} rows)`);
+    const FIELD_TO_ROLE = [
+      { field: 'first_oncall',  role: '1st On-Call' },
+      { field: 'second_oncall', role: '2nd On-Call' },
+      { field: 'consultant',    role: 'Consultant On-Call' },
+    ];
+    for (const row of serverSchedule) {
+      const dateKey = row.date || '';
+      if (!dateKey) continue;
+      for (const { field, role } of FIELD_TO_ROLE) {
+        const rawName = (row[field] || '').trim();
+        if (!rawName) continue;
+        const phoneMeta = resolvePhoneFromContactMap(rawName, contactResult)
+          || resolvePhone(dept, { name: rawName, phone: '' })
+          || { phone: '', uncertain: true };
+        entries.push({
+          specialty: deptKey, date: dateKey, role, name: rawName,
+          phone: phoneMeta.phone || '',
+          phoneUncertain: !phoneMeta.phone || !!phoneMeta.uncertain,
+          shiftType: '24h', startTime: '07:30', endTime: '07:30',
+          parsedFromPdf: true,
+        });
+      }
+    }
+    const deduped = dedupeParsedEntries(entries);
+    deduped._templateDetected = deduped.length >= 20;
+    deduped._templateName = deduped._templateDetected ? `palliative-${monthPad}-${detectedYr}` : '';
+    deduped._serverExtracted = true;
+    return deduped;
+  }
+
+  return parseGenericPdfEntries(text, deptKey);
+}
+
