@@ -2164,6 +2164,25 @@ async function parseUploadedPdf(file, deptKey) {
     } catch (err) {
       console.warn('[HEMATOLOGY] Server schedule extraction failed, using client-side:', err.message);
     }
+  } else if (deptKey === 'ophthalmology') {
+    try {
+      const buffer = await file.arrayBuffer();
+      const b64 = btoa(new Uint8Array(buffer).reduce((s, b) => s + String.fromCharCode(b), ''));
+      const resp = await fetch('/api/extract-table', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pdf_base64: b64, specialty: 'ophthalmology' }),
+      });
+      if (resp.ok) {
+        const result = await resp.json();
+        if (result.rows && result.rows.length) {
+          console.log(`[OPHTHALMOLOGY] Server extracted ${result.rows.length} schedule rows`);
+          parseOphthalmologyPdfEntries._serverSchedule = result.rows;
+        }
+      }
+    } catch (err) {
+      console.warn('[OPHTHALMOLOGY] Server schedule extraction failed, using client-side:', err.message);
+    }
   } else if (deptKey === 'kptx') {
     try {
       const buffer = await file.arrayBuffer();
@@ -2520,6 +2539,9 @@ async function parseUploadedPdf(file, deptKey) {
   }
   if (deptKey === 'picu' && typeof parsePicuPdfEntries !== 'undefined') {
     delete parsePicuPdfEntries._serverSchedule;
+  }
+  if (deptKey === 'ophthalmology' && typeof parseOphthalmologyPdfEntries !== 'undefined') {
+    delete parseOphthalmologyPdfEntries._serverSchedule;
   }
   if (deptKey === 'palliative' && typeof parsePalliativePdfEntries !== 'undefined') {
     delete parsePalliativePdfEntries._serverSchedule;

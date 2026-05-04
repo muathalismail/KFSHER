@@ -159,6 +159,18 @@ SPECIALTY_CONFIGS = {
         'fallback_cols': [2, 3, 4, 5],
         'min_headers': 2,
     },
+    'ophthalmology': {
+        'columns': ['first_oncall', 'oncall'],
+        'headers': {
+            'first_oncall': re.compile(r'1st\s*on\s*call', re.I),
+            'oncall': re.compile(r'^on\s*call$', re.I),
+        },
+        'date_pattern': re.compile(r'(\d{1,2})\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{4})', re.I),
+        'date_format': 'dMONTHyyyy',
+        'day_pattern': re.compile(r'^(Sun|Mon|Tue|Wed|Thu|Fri|Sat)', re.I),
+        'fallback_cols': [4, 5],
+        'min_headers': 1,
+    },
     'palliative': {
         'columns': ['first_oncall', 'second_oncall', 'consultant'],
         'headers': {
@@ -284,6 +296,13 @@ def parse_date_key(match, config):
     """Convert a regex match to DD/MM date key."""
     fmt = config.get('date_format', '')
     if fmt == 'dMONyy':
+        day = int(match.group(1))
+        mon_str = match.group(2).lower()[:3]
+        month = MONTH_MAP.get(mon_str, 0)
+        if not month:
+            return None
+        return f'{day:02d}/{month:02d}'
+    elif fmt == 'dMONTHyyyy':
         day = int(match.group(1))
         mon_str = match.group(2).lower()[:3]
         month = MONTH_MAP.get(mon_str, 0)

@@ -98,15 +98,10 @@ PARSER_REGISTRY['medicine'] = function(text, deptKey) {
 
 // ── Merge-with-generic parsers ────────────────────────────────
 
-PARSER_REGISTRY['ophthalmology'] = function(text, deptKey) {
-  const seqParsed = parseDaySequence(text, deptKey); // auto-detects month/year
-  const genericParsed = parseGenericPdfEntries(text, deptKey);
-  return {
-    entries: dedupeParsedEntries([...seqParsed, ...genericParsed]),
-    parserMode: 'generic',
-    meta: { templateDetected: false },
-  };
-};
+PARSER_REGISTRY['ophthalmology'] = templateFallbackStrategy(parseOphthalmologyPdfEntries, {
+  templatePrefix: 'ophthalmology',
+  extraFallbacks: [(text, dk) => parseDaySequence(text, dk)],
+});
 
 PARSER_REGISTRY['nephrology'] = function(text, deptKey) {
   const inlineParsed = parseSingleLineDateSplit(text, deptKey);
