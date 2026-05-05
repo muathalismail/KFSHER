@@ -51,6 +51,7 @@
     <button class="tab active" data-tab="dashboard">📊 Dashboard</button>
     <button class="tab" data-tab="editor">✏️ Editor</button>
     <button class="tab" data-tab="phones">📞 Phones</button>
+    <button class="tab" data-tab="uploads">📤 Uploads</button>
     <button class="tab" data-tab="audit">📋 Audit</button>
     <button class="tab tab-logout" id="logout-btn">🚪 Logout</button>
   </nav>
@@ -135,6 +136,13 @@
     <div id="phone-table-wrap" class="ed-table-wrap"></div>
   </div>
 
+  <!-- ── Uploads Panel ── -->
+  <div class="panel" id="panel-uploads">
+    <div class="stats-bar" id="upload-stats" style="margin-bottom:16px"></div>
+    <div id="upload-filters" class="audit-filters"></div>
+    <div id="upload-list" class="upload-list"></div>
+  </div>
+
   <!-- ── Audit Panel ── -->
   <div class="panel" id="panel-audit">
     <div class="panel-loading" id="audit-loading">
@@ -153,6 +161,7 @@
 <script src="assets/js/admin/dashboard.js"></script>
 <script src="assets/js/admin/editor.js"></script>
 <script src="assets/js/admin/phones.js"></script>
+<script src="assets/js/admin/uploads.js"></script>
 <script src="assets/js/admin/audit.js"></script>
 <script src="assets/js/admin/app.js"></script>
 </body>

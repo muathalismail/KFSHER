@@ -3533,17 +3533,84 @@ document.addEventListener('DOMContentLoaded', () => {
       const detected = await detectDeptKeyFromPdf(file);
       let { deptKey, source, uncertain } = detected;
       let specialtyLabel = '';
+      let detectionStage = deptKey ? 'filename' : 'none';
       if (!deptKey && isAnesthesiaLike(file.name)) {
         deptKey = 'anesthesia';
         source = 'filename';
         uncertain = false;
+        detectionStage = 'filename';
       }
+
+      // Stage 2: Claude header detection (if filename failed)
+      if (!deptKey) {
+        try {
+          const buf = await file.arrayBuffer();
+          const b64 = btoa(new Uint8Array(buf).reduce((s, b) => s + String.fromCharCode(b), ''));
+          const hdResp = await Promise.race([
+            fetch('/api/monitoring?action=detect-header', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ pdf_base64: b64 }),
+            }),
+            new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 8000)),
+          ]);
+          if (hdResp.ok) {
+            const hdResult = await hdResp.json();
+            if (hdResult.specialty && (hdResult.confidence === 'high' || hdResult.confidence === 'medium')) {
+              deptKey = hdResult.specialty;
+              source = 'header_claude';
+              uncertain = hdResult.confidence !== 'high';
+              detectionStage = 'header';
+              console.log(`[DETECT] Header → ${deptKey} (${hdResult.confidence})`);
+            }
+          }
+        } catch (err) {
+          console.warn('[DETECT] Header detection skipped:', err.message);
+        }
+      }
+
+      // Stage 3: Manual modal (if all auto-detection failed)
+      if (!deptKey) {
+        const manualResult = await showSpecialtyDetectionModal(file);
+        if (manualResult.cancelled) {
+          // Log cancellation silently
+          try {
+            await fetch('/api/monitoring?action=save-log', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ filename: file.name, file_size_bytes: file.size, detection_stage: 'manual', status: 'cancelled_at_specialty_selection' }),
+            });
+          } catch {}
+          skipped.push(`${file.name} (cancelled by user)`);
+          continue;
+        }
+        deptKey = manualResult.key;
+        source = 'manual';
+        uncertain = !!manualResult.isCustom;
+        detectionStage = 'manual';
+        if (manualResult.isCustom) {
+          debug.status = 'pdf_only_no_parser';
+        }
+      }
+
       if (!deptKey) {
         deptKey = uploadedDeptKeyFromFilename(file.name);
         source = 'filename';
         uncertain = true;
         specialtyLabel = titleFromUploadedFilename(file.name);
+        detectionStage = 'fallback';
       }
+
+      // Log upload start (fire-and-forget)
+      let uploadLogId = null;
+      try {
+        const logResp = await fetch('/api/monitoring?action=save-log', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename: file.name, file_size_bytes: file.size, detection_stage: detectionStage, detected_specialty: deptKey, status: 'processing' }),
+        });
+        if (logResp.ok) { const logData = await logResp.json(); uploadLogId = logData.id; }
+      } catch {}
       const review = { specialty: !!uncertain };
       let parsed = { entries: [], textSample: '' };
       try {
@@ -3734,6 +3801,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
       debug.saved = true;
       debug.searchable = !!ROTAS[deptKey] && !!uploadedRecordForDept(deptKey) && uploadedRecordForDept(deptKey).parsedActive;
+
+      // Update upload log (fire-and-forget)
+      if (uploadLogId) {
+        try {
+          fetch('/api/monitoring?action=update-log', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              log_id: uploadLogId,
+              status: publishToLive ? 'success' : (entries.length ? 'partial' : 'error'),
+              entries_count: entries.length,
+              detected_specialty: deptKey,
+              match_method: source,
+              pipeline_trace: { parserMode: parsed.debug?.parserMode, templateDetected: debug.templateDetected, entries: entries.length, publishToLive },
+            }),
+          }).catch(() => {});
+        } catch {}
+      }
       // Cache status badge for medicine_on_call
       if (deptKey === 'medicine_on_call' && typeof parseMedicineOnCallPdfEntries !== 'undefined') {
         debug.cacheStatus = parseMedicineOnCallPdfEntries._lastCacheStatus || '';
@@ -3779,6 +3864,107 @@ document.addEventListener('DOMContentLoaded', () => {
     const q = document.getElementById('search').value;
     if (q) await search(q);
     if (latestDeptKey) showPdfPreview(latestDeptKey);
+  }
+
+  // ── Specialty Detection Modal (Stage 3 fallback) ──
+  function showSpecialtyDetectionModal(file) {
+    return new Promise((resolve) => {
+      const overlay = document.createElement('div');
+      overlay.className = 'detect-modal-overlay';
+      const pdfUrl = URL.createObjectURL(file);
+      overlay.innerHTML = `<div class="detect-modal">
+        <h3>Could not detect specialty for this file</h3>
+        <div class="detect-modal-preview"><iframe src="${pdfUrl}#page=1" title="PDF preview"></iframe></div>
+        <p style="font-size:13px;color:var(--muted,#999);margin-bottom:8px">Please enter the specialty name:</p>
+        <input type="text" id="detect-spec-input" placeholder="e.g. Cardiology, ENT, Neurology..." autocomplete="off">
+        <div id="detect-error" style="color:var(--critical,#f44);font-size:12px;min-height:16px;margin-bottom:8px"></div>
+        <div id="detect-disambig" style="display:none;margin-bottom:12px"></div>
+        <div class="detect-modal-actions">
+          <button id="detect-cancel">Cancel</button>
+          <button id="detect-submit" class="detect-submit">Submit</button>
+        </div>
+      </div>`;
+      document.body.appendChild(overlay);
+      const inp = overlay.querySelector('#detect-spec-input');
+      setTimeout(() => inp.focus(), 100);
+
+      function cleanup() { URL.revokeObjectURL(pdfUrl); overlay.remove(); }
+
+      overlay.querySelector('#detect-cancel').addEventListener('click', () => {
+        cleanup();
+        resolve({ cancelled: true });
+      });
+
+      overlay.querySelector('#detect-submit').addEventListener('click', async () => {
+        const val = inp.value.trim();
+        if (!val) { overlay.querySelector('#detect-error').textContent = 'Please enter a specialty name'; return; }
+
+        // Use client-side matcher
+        const result = typeof matchSpecialty === 'function' ? matchSpecialty(val) : { matched: false, isNew: true, customName: val };
+
+        if (result.ambiguous && result.candidates) {
+          // Show disambiguation
+          const disambig = overlay.querySelector('#detect-disambig');
+          disambig.style.display = 'block';
+          const displayNames = typeof SPECIALTY_DISPLAY_NAMES !== 'undefined' ? SPECIALTY_DISPLAY_NAMES : {};
+          disambig.innerHTML = '<p style="font-size:13px;margin-bottom:8px">Did you mean:</p>' +
+            result.candidates.map(k => `<div class="disambig-option" data-key="${k}">${displayNames[k] || k}</div>`).join('') +
+            `<div class="disambig-option" data-key="__other__">Other (keep as "${val}")</div>`;
+          disambig.querySelectorAll('.disambig-option').forEach(opt => {
+            opt.addEventListener('click', () => {
+              disambig.querySelectorAll('.disambig-option').forEach(o => o.classList.remove('selected'));
+              opt.classList.add('selected');
+            });
+          });
+          // Replace submit handler
+          const submitBtn = overlay.querySelector('#detect-submit');
+          const newSubmit = submitBtn.cloneNode(true);
+          submitBtn.parentNode.replaceChild(newSubmit, submitBtn);
+          newSubmit.addEventListener('click', async () => {
+            const sel = disambig.querySelector('.disambig-option.selected');
+            if (!sel) { overlay.querySelector('#detect-error').textContent = 'Please select an option'; return; }
+            const chosenKey = sel.dataset.key;
+            if (chosenKey === '__other__') {
+              // Finalize as custom
+              try {
+                const resp = await fetch('/api/monitoring?action=finalize-upload', {
+                  method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ log_id: 0, specialty_input: val, action: 'submit' }),
+                });
+                if (resp.ok) { const data = await resp.json(); cleanup(); resolve({ key: data.key, isCustom: true }); return; }
+              } catch {}
+              cleanup(); resolve({ key: 'custom_' + val.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, ''), isCustom: true });
+            } else {
+              cleanup(); resolve({ key: chosenKey, method: 'manual_pick' });
+            }
+          });
+          return;
+        }
+
+        if (result.matched) {
+          cleanup();
+          resolve({ key: result.key, method: result.method });
+          return;
+        }
+
+        if (result.isNew) {
+          // Create custom specialty via server
+          try {
+            const resp = await fetch('/api/monitoring?action=finalize-upload', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ log_id: 0, specialty_input: val, action: 'submit' }),
+            });
+            if (resp.ok) { const data = await resp.json(); cleanup(); resolve({ key: data.key || result.customName, isCustom: data.isCustom }); return; }
+          } catch {}
+          cleanup(); resolve({ key: 'custom_' + val.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, ''), isCustom: true });
+          return;
+        }
+
+        cleanup(); resolve({ key: val, method: 'manual' });
+      });
+
+      inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') overlay.querySelector('#detect-submit').click(); });
+    });
   }
 
   // Password-gated upload: modal first, confirm button is a <label for="pdfUploadInline">

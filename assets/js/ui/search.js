@@ -342,36 +342,76 @@ function sortDeptEntriesForHome(entries=[]) {
   });
 }
 
+const HIDDEN_BY_DEFAULT_KEYS = new Set([
+  'clinical_lab','physical_medicine_rehabilitation','endocrinology',
+  'rheumatology','radonc','neuro_ir','pediatric_neurology',
+  'pediatric_cardiology','pulmonary',
+]);
+
+let _expanderOpen = false;
+
 function renderTags() {
   ensureCoreAggregateSpecialties();
   const tagsEl = document.getElementById('tags');
   tagsEl.innerHTML = '';
-  TAG_LIST.filter(([k]) => ROTAS[k]).forEach(([k,lbl]) => {
+
+  const makeTag = (k, lbl, extraClass) => {
     const t = document.createElement('span');
-    t.className = 'tag'; t.textContent = lbl;
+    t.className = 'tag' + (extraClass ? ' ' + extraClass : '');
+    t.textContent = lbl;
     t.onclick = () => {
       document.getElementById('search').value = k;
-      document.querySelectorAll('.tag').forEach(x=>x.classList.remove('on'));
+      document.querySelectorAll('.tag').forEach(x => x.classList.remove('on'));
       t.classList.add('on');
       showExactDept(k);
     };
-    tagsEl.appendChild(t);
+    return t;
+  };
+
+  // Always-visible tags
+  TAG_LIST.filter(([k]) => ROTAS[k] && !HIDDEN_BY_DEFAULT_KEYS.has(k)).forEach(([k, lbl]) => {
+    tagsEl.appendChild(makeTag(k, lbl));
   });
-  activeDeptEntries()
-    .filter(([k, dept]) => dept.uploadedOnly && !TAG_LIST.some(([tagKey]) => tagKey === k))
-    .sort((a,b) => (a[1].label || '').localeCompare(b[1].label || ''))
-    .forEach(([k,d]) => {
-      const t = document.createElement('span');
-      t.className = 'tag'; t.textContent = d.label;
-      t.onclick = () => {
-        document.getElementById('search').value = k;
-        document.querySelectorAll('.tag').forEach(x=>x.classList.remove('on'));
-        t.classList.add('on');
-        showExactDept(k);
-      };
-      tagsEl.appendChild(t);
+
+  // Expander button
+  const expander = document.createElement('span');
+  expander.className = 'tag tag-expander';
+  expander.textContent = _expanderOpen ? '−' : '+';
+  expander.title = _expanderOpen ? 'Show less' : 'Show more specialties';
+  expander.onclick = () => { _expanderOpen = !_expanderOpen; renderTags(); };
+  tagsEl.appendChild(expander);
+
+  // Hidden tags (only when expanded)
+  if (_expanderOpen) {
+    TAG_LIST.filter(([k]) => ROTAS[k] && HIDDEN_BY_DEFAULT_KEYS.has(k)).forEach(([k, lbl]) => {
+      tagsEl.appendChild(makeTag(k, lbl));
     });
+
+    // Uploaded-only specialties
+    activeDeptEntries()
+      .filter(([k, dept]) => dept.uploadedOnly && !TAG_LIST.some(([tagKey]) => tagKey === k))
+      .sort((a, b) => (a[1].label || '').localeCompare(b[1].label || ''))
+      .forEach(([k, d]) => {
+        tagsEl.appendChild(makeTag(k, d.label));
+      });
+
+    // Custom specialties (fetched from server)
+    if (window._customSpecialties && window._customSpecialties.length) {
+      window._customSpecialties.forEach(cs => {
+        const t = makeTag(cs.key, cs.display_name);
+        t.style.borderStyle = 'dashed';
+        tagsEl.appendChild(t);
+      });
+    }
+  }
 }
+
+// Fetch custom specialties on load
+(function fetchCustomSpecialties() {
+  fetch('/api/monitoring?action=custom-specialties').then(r => r.ok ? r.json() : []).then(data => {
+    window._customSpecialties = data || [];
+  }).catch(() => { window._customSpecialties = []; });
+})();
 
 function renderWelcomeGrid() {
   const wgrid = document.getElementById('wgrid');
