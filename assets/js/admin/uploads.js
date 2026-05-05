@@ -21,8 +21,8 @@ function timeAgo(iso) {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
-const STATUS_ICONS = { success: '✅', partial: '⚠️', error: '❌', cancelled: '⊘', cancelled: '⊘', processing: '⏳', pdf_only_no_parser: '📄' };
-const STATUS_COLORS = { success: 'var(--success)', partial: 'var(--warn)', error: 'var(--critical)', cancelled: 'var(--muted)', cancelled: 'var(--muted)', processing: 'var(--accent)', pdf_only_no_parser: '#60a5fa' };
+const STATUS_ICONS = { success: '✅', partial: '⚠️', error: '❌', cancelled: '⊘', processing: '⏳', pdf_only_no_parser: '📄' };
+const STATUS_COLORS = { success: 'var(--success)', partial: 'var(--warn)', error: 'var(--critical)', cancelled: 'var(--muted)', processing: 'var(--accent)', pdf_only_no_parser: '#60a5fa' };
 
 async function fetchLogs() {
   let url = `/api/monitoring?action=list-logs&limit=${PAGE_SIZE}&offset=${(page - 1) * PAGE_SIZE}`;
