@@ -16,7 +16,7 @@ let _supabaseConfig = null;
 async function _getSupabaseConfig() {
   if (_supabaseConfig) return _supabaseConfig;
   try {
-    const resp = await fetch('/api/config');
+    const resp = await fetch('/api/admin?action=config');
     if (!resp.ok) return null;
     const cfg = await resp.json();
     if (cfg.supabaseUrl && cfg.supabaseKey) {

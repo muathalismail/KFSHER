@@ -32,7 +32,7 @@ function formatDate(iso) {
 }
 
 async function fetchAuditLog(specialty) {
-  const resp = await fetch('/api/admin-save', {
+  const resp = await fetch('/api/admin', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ action: 'fetch_audit', specialty: specialty || '', limit: 500, offset: 0 }),

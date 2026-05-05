@@ -55,7 +55,7 @@ function iconFor(key) {
 }
 
 async function fetchAllRecords() {
-  const resp = await fetch('/api/records');
+  const resp = await fetch('/api/admin');
   if (!resp.ok) throw new Error(`API error: ${resp.status}`);
   return resp.json();
 }
@@ -269,7 +269,7 @@ async function loadClickStats() {
   if (!container) return;
 
   try {
-    const resp = await fetch(`/api/click-stats?range=${_clickStatsRange}&_t=${Date.now()}`);
+    const resp = await fetch(`/api/analytics?range=${_clickStatsRange}&_t=${Date.now()}`);
     if (!resp.ok) return;
     const stats = await resp.json();
     renderClickStats(stats);

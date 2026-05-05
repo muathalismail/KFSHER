@@ -40,7 +40,7 @@ function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTi
 // ── Data Loading ──
 async function loadAllRecords() {
   // Cache-bust: records.js has max-age=300, must bypass after save
-  const resp = await fetch(`/api/records?_t=${Date.now()}`);
+  const resp = await fetch(`/api/admin?_t=${Date.now()}`);
   if (!resp.ok) throw new Error('Failed to fetch records');
   state.allRecords = await resp.json();
   buildSpecialtyList();
@@ -455,7 +455,7 @@ async function saveChanges() {
       lastEditedAt: new Date().toISOString(),
     };
 
-    const resp = await fetch('/api/admin-save', {
+    const resp = await fetch('/api/admin', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

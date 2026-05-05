@@ -32,7 +32,7 @@
     saveQueue(queue);
 
     try {
-      const resp = await fetch('/api/track-clicks', {
+      const resp = await fetch('/api/analytics', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ clicks: batch }),
@@ -69,7 +69,7 @@
     const batch = queue.splice(0, 1000);
     saveQueue(queue);
     try {
-      navigator.sendBeacon('/api/track-clicks', new Blob([JSON.stringify({ clicks: batch })], { type: 'application/json' }));
+      navigator.sendBeacon('/api/analytics', new Blob([JSON.stringify({ clicks: batch })], { type: 'application/json' }));
     } catch {}
   });
 
