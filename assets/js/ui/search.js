@@ -429,17 +429,50 @@ function renderTags() {
   }).catch(() => { window._customSpecialties = []; });
 })();
 
+let _gridExpanded = false;
+
 function renderWelcomeGrid() {
   const wgrid = document.getElementById('wgrid');
   wgrid.innerHTML = '';
-  sortDeptEntriesForHome(activeDeptEntries()).forEach(([k,d]) => {
+  const allListedKeys = new Set([...VISIBLE_TAG_KEYS, ...EXPANDED_TAG_KEYS]);
+
+  const makePill = (k, d) => {
     const p = document.createElement('div');
     p.className = 'dpill';
-    const nm = homepageLabel(d.label);
+    const nm = HOMEPAGE_LABEL_OVERRIDES[k] || homepageLabel(d.label);
     p.innerHTML = `<span>${d.icon}</span><span class="dpill-name">${nm}</span>`;
     p.onclick = () => { showExactDept(k); };
-    wgrid.appendChild(p);
-  });
+    return p;
+  };
+
+  // Visible group (in VISIBLE_TAG_KEYS order)
+  for (const k of VISIBLE_TAG_KEYS) {
+    const d = ROTAS[k];
+    if (!d) continue;
+    wgrid.appendChild(makePill(k, d));
+  }
+
+  // Expander pill
+  const expPill = document.createElement('div');
+  expPill.className = 'dpill';
+  expPill.style.cursor = 'pointer';
+  expPill.innerHTML = `<span>${_gridExpanded ? '−' : '+'}</span><span class="dpill-name">${_gridExpanded ? 'Show less' : 'More'}</span>`;
+  expPill.onclick = () => { _gridExpanded = !_gridExpanded; renderWelcomeGrid(); };
+  wgrid.appendChild(expPill);
+
+  // Expanded group
+  if (_gridExpanded) {
+    for (const k of EXPANDED_TAG_KEYS) {
+      const d = ROTAS[k];
+      if (!d) continue;
+      wgrid.appendChild(makePill(k, d));
+    }
+    // Unlisted specialties
+    activeDeptEntries()
+      .filter(([k]) => !allListedKeys.has(k))
+      .sort((a, b) => (a[1].label || '').localeCompare(b[1].label || ''))
+      .forEach(([k, d]) => { wgrid.appendChild(makePill(k, d)); });
+  }
 }
 
 async function search(q) {
