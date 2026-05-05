@@ -191,9 +191,14 @@ function buildMedicineOnCallRow(dateKey='', roleMeta={}, rawName='', contactResu
   // never reached because the truthy uncertain result blocks the || chain.
   const pdfPhone   = resolvePhoneFromContactMap(name, contactResult);
   const rotasPhone = resolvePhone(ROTAS[deptKey] || { contacts:{} }, { name, phone:'' });
-  // Prefer certain over uncertain; among equals prefer PDF (more current).
-  const phoneMeta = (pdfPhone   && !pdfPhone.uncertain   ? pdfPhone   : null)
-                 || (rotasPhone  && !rotasPhone.uncertain  ? rotasPhone  : null)
+  // Prefer ROTAS exact match over PDF fuzzy match to avoid wrong-Hassan scenarios.
+  // If ROTAS found a certain match AND its matchRule is 'exact', prefer it.
+  // Otherwise, prefer certain over uncertain; among equals prefer PDF.
+  const rotasExact = rotasPhone && !rotasPhone.uncertain && rotasPhone.matchRule === 'exact';
+  const pdfExact   = pdfPhone && !pdfPhone.uncertain;
+  const phoneMeta = (rotasExact ? rotasPhone : null)
+                 || (pdfExact   ? pdfPhone   : null)
+                 || (rotasPhone && !rotasPhone.uncertain ? rotasPhone : null)
                  || pdfPhone || rotasPhone
                  || { phone:'', uncertain:true };
   // If phone resolution found a fuller name (e.g. "Dr. Sara Alaboud" for "S.Alaboud"),
