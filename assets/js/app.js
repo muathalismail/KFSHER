@@ -3614,7 +3614,7 @@ document.addEventListener('DOMContentLoaded', () => {
               await fetch('/api/monitoring?action=save-log', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ filename: file.name, file_size_bytes: file.size, detection_stage: 'manual', status: 'cancelled', pdf_storage_path: cancelledPdfPath, pdf_url: cancelledPdfUrl }),
+                body: JSON.stringify({ filename: file.name, file_size_bytes: file.size, detection_stage: 'manual', status: 'review', pdf_storage_path: cancelledPdfPath, pdf_url: cancelledPdfUrl }),
               });
             } catch {}
           }

@@ -146,9 +146,9 @@ async function handleFinalizeUpload(req, res) {
     await fetch(`${url}/rest/v1/upload_logs?id=eq.${log_id}`, {
       method: 'PATCH',
       headers: { ...headers, 'Prefer': 'return=minimal' },
-      body: JSON.stringify({ status: 'cancelled' }),
+      body: JSON.stringify({ status: 'review' }),
     }).catch(() => {});
-    return res.status(200).json({ ok: true, status: 'cancelled' });
+    return res.status(200).json({ ok: true, status: 'review' });
   }
 
   // Run smart matching server-side
