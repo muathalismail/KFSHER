@@ -144,3 +144,14 @@ function matchSpecialty(input) {
 
   return { matched: false, ambiguous: true, candidates: winners.map(w => w.key) };
 }
+
+// Expose globals for browser (project uses <script> tags, not ES modules)
+if (typeof window !== 'undefined') {
+  window.SPECIALTY_ALIASES = SPECIALTY_ALIASES;
+  window.SPECIALTY_DISPLAY_NAMES = SPECIALTY_DISPLAY_NAMES;
+  window.matchSpecialty = matchSpecialty;
+}
+// CommonJS for server (monitoring.js)
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { SPECIALTY_ALIASES, SPECIALTY_DISPLAY_NAMES, matchSpecialty };
+}

@@ -21,8 +21,8 @@ function timeAgo(iso) {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
-const STATUS_ICONS = { success: '✅', partial: '⚠️', error: '❌', cancelled: '⊘', cancelled_at_specialty_selection: '⊘', processing: '⏳', pdf_only_no_parser: '📄' };
-const STATUS_COLORS = { success: 'var(--success)', partial: 'var(--warn)', error: 'var(--critical)', cancelled: 'var(--muted)', cancelled_at_specialty_selection: 'var(--muted)', processing: 'var(--accent)', pdf_only_no_parser: '#60a5fa' };
+const STATUS_ICONS = { success: '✅', partial: '⚠️', error: '❌', cancelled: '⊘', cancelled: '⊘', processing: '⏳', pdf_only_no_parser: '📄' };
+const STATUS_COLORS = { success: 'var(--success)', partial: 'var(--warn)', error: 'var(--critical)', cancelled: 'var(--muted)', cancelled: 'var(--muted)', processing: 'var(--accent)', pdf_only_no_parser: '#60a5fa' };
 
 async function fetchLogs() {
   let url = `/api/monitoring?action=list-logs&limit=${PAGE_SIZE}&offset=${(page - 1) * PAGE_SIZE}`;
@@ -61,7 +61,7 @@ function renderFilters() {
       <option value="success">✅ Success</option>
       <option value="partial">⚠️ Partial</option>
       <option value="error">❌ Error</option>
-      <option value="cancelled_at_specialty_selection">⊘ Cancelled</option>
+      <option value="cancelled">⊘ Cancelled</option>
       <option value="pdf_only_no_parser">📄 PDF Only</option>
     </select>
     <button id="upload-refresh" class="refresh-btn" style="width:36px;height:36px;font-size:16px" title="Refresh">⟳</button>

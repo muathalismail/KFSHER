@@ -3541,27 +3541,38 @@ document.addEventListener('DOMContentLoaded', () => {
         detectionStage = 'filename';
       }
 
-      // Stage 2: Claude header detection (if filename failed)
+      // Stage 2: Claude header detection (extract text client-side, send text to server)
       if (!deptKey) {
         try {
-          const buf = await file.arrayBuffer();
-          const b64 = btoa(new Uint8Array(buf).reduce((s, b) => s + String.fromCharCode(b), ''));
-          const hdResp = await Promise.race([
-            fetch('/api/monitoring?action=detect-header', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ pdf_base64: b64 }),
-            }),
-            new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 8000)),
-          ]);
-          if (hdResp.ok) {
-            const hdResult = await hdResp.json();
-            if (hdResult.specialty && (hdResult.confidence === 'high' || hdResult.confidence === 'medium')) {
-              deptKey = hdResult.specialty;
-              source = 'header_claude';
-              uncertain = hdResult.confidence !== 'high';
-              detectionStage = 'header';
-              console.log(`[DETECT] Header → ${deptKey} (${hdResult.confidence})`);
+          let headerText = '';
+          if (typeof loadPdfJs === 'function') await loadPdfJs();
+          if (window.pdfjsLib) {
+            const buf = await file.arrayBuffer();
+            const pdf = await window.pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
+            const pg = await pdf.getPage(1);
+            const tc = await pg.getTextContent();
+            const vp = pg.getViewport({ scale: 1 });
+            const topThreshold = vp.height * 0.7;
+            headerText = tc.items.filter(it => it.transform[5] >= topThreshold).map(it => it.str).join(' ').slice(0, 800);
+          }
+          if (headerText && headerText.trim().length > 5) {
+            const hdResp = await Promise.race([
+              fetch('/api/monitoring?action=detect-header', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ header_text: headerText }),
+              }),
+              new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 4000)),
+            ]);
+            if (hdResp.ok) {
+              const hdResult = await hdResp.json();
+              if (hdResult.specialty && (hdResult.confidence === 'high' || hdResult.confidence === 'medium')) {
+                deptKey = hdResult.specialty;
+                source = 'header_claude';
+                uncertain = hdResult.confidence !== 'high';
+                detectionStage = 'header';
+                console.log(`[DETECT] Header → ${deptKey} (${hdResult.confidence})`);
+              }
             }
           }
         } catch (err) {
@@ -3578,7 +3589,7 @@ document.addEventListener('DOMContentLoaded', () => {
             await fetch('/api/monitoring?action=save-log', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ filename: file.name, file_size_bytes: file.size, detection_stage: 'manual', status: 'cancelled_at_specialty_selection' }),
+              body: JSON.stringify({ filename: file.name, file_size_bytes: file.size, detection_stage: 'manual', status: 'cancelled' }),
             });
           } catch {}
           skipped.push(`${file.name} (cancelled by user)`);

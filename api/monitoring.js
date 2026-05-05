@@ -1,6 +1,17 @@
 const base64 = require('buffer').Buffer;
+let _matcherLoaded = false;
+let matchSpecialty = null;
+function ensureMatcher() {
+  if (_matcherLoaded) return;
+  _matcherLoaded = true;
+  try {
+    const m = require('../assets/js/data/specialty-aliases.js');
+    matchSpecialty = m.matchSpecialty;
+  } catch { matchSpecialty = null; }
+}
 
 module.exports = async function handler(req, res) {
+  ensureMatcher();
   const action = req.query.action || (req.method === 'GET' ? 'list-logs' : '');
 
   try {
@@ -82,13 +93,13 @@ async function handleFinalizeUpload(req, res) {
     await fetch(`${url}/rest/v1/upload_logs?id=eq.${log_id}`, {
       method: 'PATCH',
       headers: { ...headers, 'Prefer': 'return=minimal' },
-      body: JSON.stringify({ status: 'cancelled_at_specialty_selection' }),
+      body: JSON.stringify({ status: 'cancelled' }),
     }).catch(() => {});
     return res.status(200).json({ ok: true, status: 'cancelled' });
   }
 
   // Run smart matching server-side
-  const matchResult = runSmartMatch(specialty_input || '');
+  const matchResult = _smartMatch(specialty_input || '');
 
   if (matchResult.ambiguous) {
     return res.status(200).json({ ambiguous: true, candidates: matchResult.candidates });
@@ -139,15 +150,35 @@ async function handleFinalizeUpload(req, res) {
   return res.status(200).json({ ok: true, key: matchResult.key, method: matchResult.method });
 }
 
-// ── Detect specialty from PDF header (Claude API) ──
+// ── Detect specialty from header text (Claude API) ──
 async function handleDetectHeader(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST required' });
-  const { pdf_base64 } = req.body;
-  if (!pdf_base64) return res.status(200).json({ specialty: null, confidence: 'low' });
-
+  const { header_text } = req.body || {};
+  if (!header_text || typeof header_text !== 'string' || header_text.length < 5) {
+    return res.status(200).json({ specialty: null, confidence: 'low' });
+  }
   try {
-    const result = await detectSpecialtyFromHeader(base64.from(pdf_base64, 'base64'));
-    return res.status(200).json(result);
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) return res.status(200).json({ specialty: null, confidence: 'low' });
+
+    const apiResp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 100,
+        messages: [{ role: 'user', content: `You are analyzing the header of a hospital on-call schedule PDF.\nExtract ONLY the specialty/department name from this header text.\nReturn strict JSON: {"specialty": "<name>", "confidence": "high"|"medium"|"low"}\nIf no specialty is identifiable, return {"specialty": null, "confidence": "low"}.\n\nHeader text:\n${header_text.slice(0, 800)}` }],
+      }),
+    });
+    if (!apiResp.ok) return res.status(200).json({ specialty: null, confidence: 'low' });
+    const data = await apiResp.json();
+    const text = (data?.content?.[0]?.text || '').trim().replace(/```json|```/g, '').trim();
+    const parsed = JSON.parse(text);
+    if (parsed?.specialty) {
+      const matched = _smartMatch(parsed.specialty);
+      if (matched.matched) return res.status(200).json({ specialty: matched.key, confidence: parsed.confidence || 'medium', raw: parsed.specialty });
+    }
+    return res.status(200).json({ specialty: null, confidence: 'low', raw: parsed?.specialty });
   } catch (err) {
     return res.status(200).json({ specialty: null, confidence: 'low', error: err.message });
   }
@@ -219,58 +250,17 @@ async function handleStats(req, res) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Internal helpers (NOT exposed as endpoints)
+// Internal helpers
 // ═══════════════════════════════════════════════════════════════
 
-// ── Claude API header detection ──
-async function detectSpecialtyFromHeader(pdfBuffer) {
-  const apiKey = process.env.ANTHROPIC_API_KEY || '';
-  if (!apiKey) return { specialty: null, confidence: 'low' };
-
-  let headerText = '';
-  try {
-    const pdfplumber = require('pdfplumber');
-    // This runs in Node.js — use pdfplumber if available, else extract raw text
-  } catch {
-    // pdfplumber not available in JS — extract first page text via basic parsing
-  }
-
-  // Fallback: use Claude directly with PDF
-  try {
-    const anthropic = require('@anthropic-ai/sdk');
-    const client = new anthropic.default({ apiKey });
-    const pdfB64 = pdfBuffer.toString('base64');
-
-    const message = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 200,
-      messages: [{
-        role: 'user',
-        content: [
-          { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: pdfB64 } },
-          { type: 'text', text: 'You are analyzing the header of a hospital on-call schedule PDF. Extract ONLY the specialty/department name from the first page header. Return JSON: {"specialty": "<name>", "confidence": "high"|"medium"|"low"}. If no specialty is identifiable, return {"specialty": null, "confidence": "low"}. Return ONLY the JSON, no explanation.' },
-        ],
-      }],
-    });
-
-    const text = message.content[0].text.trim();
-    const cleaned = text.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
-    const parsed = JSON.parse(cleaned);
-    if (parsed.specialty) {
-      const matchResult = runSmartMatch(parsed.specialty);
-      if (matchResult.matched) {
-        return { specialty: matchResult.key, confidence: parsed.confidence || 'medium', method: matchResult.method, raw: parsed.specialty };
-      }
-    }
-    return { specialty: null, confidence: 'low', raw: parsed.specialty };
-  } catch (err) {
-    console.warn('[detect-header] Claude API failed:', err.message);
-    return { specialty: null, confidence: 'low', error: err.message };
-  }
-}
+// ── Smart Matching (server-side — uses shared module or inline fallback) ──
+// NOTE: old detectSpecialtyFromHeader removed — header text now extracted client-side
+//       and sent as plain text to handleDetectHeader above.
 
 // ── Smart Matching (server-side mirror of client) ──
-function runSmartMatch(input) {
+function _smartMatch(input) {
+  // Use shared matcher if loaded, else inline fallback
+  if (matchSpecialty) return matchSpecialty(input);
   if (!input || !input.trim()) return { matched: false, isNew: false };
   const norm = input.toLowerCase().replace(/[^a-z0-9\u0600-\u06FF\s-]/g, '').replace(/\s+/g, ' ').trim();
   if (!norm) return { matched: false, isNew: false };
