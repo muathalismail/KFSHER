@@ -5,7 +5,7 @@
 
 (function () {
   const QUEUE_KEY = 'kfshd_click_queue';
-  const FLUSH_SIZE = 10;
+  const FLUSH_SIZE = 3;
   const FLUSH_INTERVAL = 5 * 60 * 1000; // 5 minutes
   const MAX_RETRIES = 3;
 
@@ -69,7 +69,7 @@
     const batch = queue.splice(0, 1000);
     saveQueue(queue);
     try {
-      navigator.sendBeacon('/api/track-clicks', JSON.stringify({ clicks: batch }));
+      navigator.sendBeacon('/api/track-clicks', new Blob([JSON.stringify({ clicks: batch })], { type: 'application/json' }));
     } catch {}
   });
 
