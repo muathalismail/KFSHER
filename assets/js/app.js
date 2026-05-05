@@ -3368,6 +3368,14 @@ async function loadUploadedSpecialties() {
   return uploaded;
 }
 
+let _monitoringEnabled = false;
+(async function checkMonitoringFlag() {
+  try {
+    const r = await fetch('/api/monitoring?action=health-check');
+    _monitoringEnabled = r.ok;
+  } catch { _monitoringEnabled = false; }
+})();
+
 document.addEventListener('DOMContentLoaded', () => {
   tick(); setInterval(tick,1000);
   // Ensure no stale server contacts persist from previous session
@@ -3541,8 +3549,8 @@ document.addEventListener('DOMContentLoaded', () => {
         detectionStage = 'filename';
       }
 
-      // Stage 2: Claude header detection (extract text client-side, send text to server)
-      if (!deptKey) {
+      // Stage 2: Claude header detection (only when monitoring enabled)
+      if (!deptKey && _monitoringEnabled) {
         try {
           let headerText = '';
           if (typeof loadPdfJs === 'function') await loadPdfJs();
@@ -3580,18 +3588,35 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
 
-      // Stage 3: Manual modal (if all auto-detection failed)
-      if (!deptKey) {
+      // Stage 3: Manual modal (only when monitoring enabled)
+      if (!deptKey && _monitoringEnabled) {
         const manualResult = await showSpecialtyDetectionModal(file);
         if (manualResult.cancelled) {
-          // Log cancellation silently
-          try {
-            await fetch('/api/monitoring?action=save-log', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ filename: file.name, file_size_bytes: file.size, detection_stage: 'manual', status: 'cancelled' }),
-            });
-          } catch {}
+          if (_monitoringEnabled) {
+            let cancelledPdfUrl = null;
+            let cancelledPdfPath = null;
+            try {
+              const buf = await file.arrayBuffer();
+              const b64 = btoa(new Uint8Array(buf).reduce((s, b) => s + String.fromCharCode(b), ''));
+              const upResp = await fetch('/api/monitoring?action=save-cancelled-pdf', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ pdf_base64: b64, pdf_name: file.name }),
+              });
+              if (upResp.ok) {
+                const upData = await upResp.json();
+                cancelledPdfUrl = upData.pdf_url || null;
+                cancelledPdfPath = upData.path || null;
+              }
+            } catch (err) { console.warn('[CANCEL] PDF storage failed:', err); }
+            try {
+              await fetch('/api/monitoring?action=save-log', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ filename: file.name, file_size_bytes: file.size, detection_stage: 'manual', status: 'cancelled', pdf_storage_path: cancelledPdfPath, pdf_url: cancelledPdfUrl }),
+              });
+            } catch {}
+          }
           skipped.push(`${file.name} (cancelled by user)`);
           continue;
         }
@@ -3612,16 +3637,18 @@ document.addEventListener('DOMContentLoaded', () => {
         detectionStage = 'fallback';
       }
 
-      // Log upload start (fire-and-forget)
+      // Log upload start (only when monitoring enabled)
       let uploadLogId = null;
-      try {
-        const logResp = await fetch('/api/monitoring?action=save-log', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ filename: file.name, file_size_bytes: file.size, detection_stage: detectionStage, detected_specialty: deptKey, status: 'processing' }),
-        });
-        if (logResp.ok) { const logData = await logResp.json(); uploadLogId = logData.id; }
-      } catch {}
+      if (_monitoringEnabled) {
+        try {
+          const logResp = await fetch('/api/monitoring?action=save-log', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filename: file.name, file_size_bytes: file.size, detection_stage: detectionStage, detected_specialty: deptKey, status: 'processing' }),
+          });
+          if (logResp.ok) { const logData = await logResp.json(); uploadLogId = logData.id; }
+        } catch {}
+      }
       const review = { specialty: !!uncertain };
       let parsed = { entries: [], textSample: '' };
       try {
@@ -3804,10 +3831,25 @@ document.addEventListener('DOMContentLoaded', () => {
       } else {
         await saveRejectedPdfRecord(uploadRecord);
       }
-      // Always sync PDF to Supabase Storage — even if extraction failed,
-      // so the PDF is viewable on all devices
+      // Always sync PDF to Supabase Storage — even if extraction failed
+      let syncedPdfUrl = null;
+      let syncedPdfPath = null;
       if (typeof syncRecordToSupabase === 'function') {
-        syncRecordToSupabase(uploadRecord, file).catch(() => {});
+        if (_monitoringEnabled) {
+          try {
+            const syncResult = await Promise.race([
+              syncRecordToSupabase(uploadRecord, file),
+              new Promise(resolve => setTimeout(() => resolve({ __timeout: true }), 6000)),
+            ]);
+            if (syncResult && !syncResult.__timeout && syncResult.pdf_url) {
+              syncedPdfUrl = syncResult.pdf_url;
+              const m = syncedPdfUrl.match(/\/rota-pdfs\/(.+)$/);
+              if (m) syncedPdfPath = m[1];
+            }
+          } catch (err) { console.warn('[SYNC] failed:', err); }
+        } else {
+          syncRecordToSupabase(uploadRecord, file).catch(() => {});
+        }
       }
 
       debug.saved = true;
@@ -3826,6 +3868,8 @@ document.addEventListener('DOMContentLoaded', () => {
               detected_specialty: deptKey,
               match_method: source,
               pipeline_trace: { parserMode: parsed.debug?.parserMode, templateDetected: debug.templateDetected, entries: entries.length, publishToLive },
+              ...(syncedPdfPath ? { pdf_storage_path: syncedPdfPath } : {}),
+              ...(syncedPdfUrl ? { pdf_url: syncedPdfUrl } : {}),
             }),
           }).catch(() => {});
         } catch {}

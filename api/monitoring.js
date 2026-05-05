@@ -1,4 +1,5 @@
 const base64 = require('buffer').Buffer;
+const MONITORING_ENABLED = process.env.ENABLE_UPLOAD_MONITORING === 'true';
 let _matcherLoaded = false;
 let matchSpecialty = null;
 function ensureMatcher() {
@@ -14,6 +15,15 @@ module.exports = async function handler(req, res) {
   ensureMatcher();
   const action = req.query.action || (req.method === 'GET' ? 'list-logs' : '');
 
+  // Health check — always responds (even when disabled)
+  if (action === 'health-check') {
+    return res.status(MONITORING_ENABLED ? 200 : 503).json({ enabled: MONITORING_ENABLED });
+  }
+
+  if (!MONITORING_ENABLED) {
+    return res.status(503).json({ error: 'monitoring_disabled' });
+  }
+
   try {
     switch (action) {
       case 'save-log':            return handleSaveLog(req, res);
@@ -25,6 +35,7 @@ module.exports = async function handler(req, res) {
       case 'delete-log':          return handleDeleteLog(req, res);
       case 'stats':               return handleStats(req, res);
       case 'detect-header':       return handleDetectHeader(req, res);
+      case 'save-cancelled-pdf':  return handleSaveCancelledPdf(req, res);
       default: return res.status(400).json({ error: `Unknown action: ${action}` });
     }
   } catch (err) {
@@ -67,20 +78,62 @@ async function handleSaveLog(req, res) {
   return res.status(200).json(rows[0] || { ok: true });
 }
 
-// ── Update existing log ──
+// ── Update existing log (conditional spread — never overwrites pdf_url with null) ──
 async function handleUpdateLog(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST required' });
   const { url, headers } = getSupabase();
-  const { log_id, ...updates } = req.body;
+  const { log_id } = req.body;
   if (!log_id) return res.status(400).json({ error: 'Missing log_id' });
+
+  const patchBody = {
+    ...(req.body.status !== undefined ? { status: req.body.status } : {}),
+    ...(req.body.entries_count !== undefined ? { entries_count: req.body.entries_count } : {}),
+    ...(req.body.detected_specialty ? { detected_specialty: req.body.detected_specialty } : {}),
+    ...(req.body.match_method ? { match_method: req.body.match_method } : {}),
+    ...(req.body.error_code ? { error_code: req.body.error_code } : {}),
+    ...(req.body.error_message ? { error_message: req.body.error_message } : {}),
+    ...(req.body.pipeline_trace ? { pipeline_trace: req.body.pipeline_trace } : {}),
+    ...(req.body.pdf_storage_path ? { pdf_storage_path: req.body.pdf_storage_path } : {}),
+    ...(req.body.pdf_url ? { pdf_url: req.body.pdf_url } : {}),
+  };
 
   const resp = await fetch(`${url}/rest/v1/upload_logs?id=eq.${log_id}`, {
     method: 'PATCH',
     headers: { ...headers, 'Prefer': 'return=minimal' },
-    body: JSON.stringify(updates),
+    body: JSON.stringify(patchBody),
   });
   if (!resp.ok) return res.status(500).json({ error: await resp.text() });
   return res.status(200).json({ ok: true });
+}
+
+// ── Save cancelled PDF to Storage only (no kfsher row) ──
+async function handleSaveCancelledPdf(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'POST required' });
+  const { pdf_base64, pdf_name } = req.body || {};
+  if (!pdf_base64 || !pdf_name) return res.status(400).json({ error: 'Missing pdf_base64 or pdf_name' });
+
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_KEY;
+  if (!url || !key) return res.status(500).json({ error: 'no supabase config' });
+
+  try {
+    const safeName = pdf_name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const path = `cancelled/${Date.now()}_${safeName}`;
+    const buf = base64.from(pdf_base64, 'base64');
+
+    const upResp = await fetch(`${url}/storage/v1/object/rota-pdfs/${path}`, {
+      method: 'POST',
+      headers: { 'apikey': key, 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/pdf', 'x-upsert': 'false' },
+      body: buf,
+    });
+
+    if (!upResp.ok) return res.status(500).json({ error: 'storage upload failed', detail: await upResp.text() });
+
+    const pdf_url = `${url}/storage/v1/object/public/rota-pdfs/${path}`;
+    return res.status(200).json({ ok: true, path, pdf_url });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
 }
 
 // ── Finalize upload (after manual specialty selection) ──
