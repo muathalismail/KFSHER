@@ -264,48 +264,57 @@ async function showExactDept(deptKey) {
   return renderDeptList([[deptKey, dept]], deptKey, true);
 }
 
-const TAG_LIST = [
-  ['medicine_on_call','Medicine On-Call'],
-  ['hospitalist','Hospitalist'],
-  ['surgery','Surgery'],
-  ['pediatrics','Pediatrics'],
-  ['ent','ENT'],
-  ['orthopedics','Orthopedics'],
-  ['radiology_oncall','Imaging On-Call'],
-  ['radiology_duty','Imaging On-Duty'],
-  ['palliative','Palliative'],
-  ['neurology','Neurology'],
-  ['neurosurgery','Neurosurgery'],
-  ['spine','Spine'],
-  ['gynecology','Gynecology'],
-  ['critical_care','ICU'],
-  ['picu','PICU'],
-  ['anesthesia','Anesthesia'],
-  ['psychiatry','Psychiatry'],
-  ['pediatric_neurology','Ped Neuro'],
-  ['pediatric_cardiology','Ped Cardio'],
-  ['pediatric_heme_onc','Ped Heme-Onc'],
-  ['neuro_ir','Neuro IR'],
-  ['urology','Urology'],
-  ['ophthalmology','Eye'],
-  ['oncology','Oncology'],
-  ['hematology','Heme-Onco'],
-  ['radonc','Rad-Onc'],
-  ['nephrology','Nephrology'],
-  ['kptx','Kidney-Tx'],
-  ['liver','Liver-Tx'],
-  ['adult_cardiology','Cardiology'],
-  ['medicine','Medicine'],
-  ['dental','Dental'],
-  ['clinical_lab','Clinical Lab'],
-  ['physical_medicine_rehabilitation','PMR'],
-  ['endocrinology','Endocrinology'],
-  ['dermatology','Dermatology'],
-  ['rheumatology','Rheumatology'],
-  ['gastroenterology','GI'],
-  ['pulmonary','Pulmonary'],
-  ['infectious','Infectious Disease'],
+// Homepage display name overrides (internal keys stay identical everywhere else)
+const HOMEPAGE_LABEL_OVERRIDES = {
+  hematology: 'Hematology',
+  ophthalmology: 'Ophthalmology',
+  pediatric_heme_onc: 'Pediatric Hematology',
+  gynecology: 'OBGYN',
+};
+
+// Visible by default (positions 1-26)
+const VISIBLE_TAG_KEYS = [
+  'medicine_on_call','hospitalist','surgery','ent','urology','orthopedics',
+  'radiology_oncall','radiology_duty','neurology','neurosurgery','spine',
+  'critical_care','picu','anesthesia','oncology','hematology','palliative',
+  'nephrology','kptx','liver','medicine','adult_cardiology','infectious',
+  'dermatology','pediatrics','pediatric_heme_onc',
 ];
+
+// Revealed on "+" click (positions 27-40)
+const EXPANDED_TAG_KEYS = [
+  'ophthalmology','dental','gynecology','psychiatry','gastroenterology',
+  'endocrinology','rheumatology','pulmonary','pediatric_neurology',
+  'pediatric_cardiology','neuro_ir','radonc','clinical_lab',
+  'physical_medicine_rehabilitation',
+];
+
+// Original labels (used by TAG_LIST for non-homepage surfaces)
+const TAG_LIST = [
+  ...VISIBLE_TAG_KEYS.map(k => [k, HOMEPAGE_LABEL_OVERRIDES[k] || _originalTagLabel(k)]),
+  ...EXPANDED_TAG_KEYS.map(k => [k, HOMEPAGE_LABEL_OVERRIDES[k] || _originalTagLabel(k)]),
+];
+
+function _originalTagLabel(key) {
+  const map = {
+    medicine_on_call:'Medicine On-Call', hospitalist:'Hospitalist', surgery:'Surgery',
+    pediatrics:'Pediatrics', ent:'ENT', orthopedics:'Orthopedics',
+    radiology_oncall:'Imaging On-Call', radiology_duty:'Imaging On-Duty',
+    palliative:'Palliative', neurology:'Neurology', neurosurgery:'Neurosurgery',
+    spine:'Spine', critical_care:'ICU', picu:'PICU', anesthesia:'Anesthesia',
+    psychiatry:'Psychiatry', pediatric_neurology:'Ped Neuro',
+    pediatric_cardiology:'Ped Cardio', neuro_ir:'Neuro IR', urology:'Urology',
+    oncology:'Oncology', radonc:'Rad-Onc', nephrology:'Nephrology',
+    kptx:'Kidney-Tx', liver:'Liver-Tx', adult_cardiology:'Cardiology',
+    medicine:'Medicine', dental:'Dental', clinical_lab:'Clinical Lab',
+    physical_medicine_rehabilitation:'PMR', endocrinology:'Endocrinology',
+    dermatology:'Dermatology', rheumatology:'Rheumatology',
+    gastroenterology:'GI', pulmonary:'Pulmonary', infectious:'Infectious Disease',
+    hematology:'Heme-Onco', ophthalmology:'Eye', pediatric_heme_onc:'Ped Heme-Onc',
+    gynecology:'Gynecology',
+  };
+  return map[key] || key;
+}
 
 function ensureCoreAggregateSpecialties() {
   if (!ROTAS.medicine) {
@@ -342,11 +351,7 @@ function sortDeptEntriesForHome(entries=[]) {
   });
 }
 
-const HIDDEN_BY_DEFAULT_KEYS = new Set([
-  'clinical_lab','physical_medicine_rehabilitation','endocrinology',
-  'rheumatology','radonc','neuro_ir','pediatric_neurology',
-  'pediatric_cardiology','pulmonary',
-]);
+const HIDDEN_BY_DEFAULT_KEYS = new Set(EXPANDED_TAG_KEYS);
 
 let _expanderOpen = false;
 
@@ -354,6 +359,7 @@ function renderTags() {
   ensureCoreAggregateSpecialties();
   const tagsEl = document.getElementById('tags');
   tagsEl.innerHTML = '';
+  const allListedKeys = new Set([...VISIBLE_TAG_KEYS, ...EXPANDED_TAG_KEYS]);
 
   const makeTag = (k, lbl, extraClass) => {
     const t = document.createElement('span');
@@ -368,10 +374,11 @@ function renderTags() {
     return t;
   };
 
-  // Always-visible tags
-  TAG_LIST.filter(([k]) => ROTAS[k] && !HIDDEN_BY_DEFAULT_KEYS.has(k)).forEach(([k, lbl]) => {
-    tagsEl.appendChild(makeTag(k, lbl));
-  });
+  // Always-visible tags (in VISIBLE_TAG_KEYS order)
+  for (const k of VISIBLE_TAG_KEYS) {
+    if (!ROTAS[k]) continue;
+    tagsEl.appendChild(makeTag(k, HOMEPAGE_LABEL_OVERRIDES[k] || _originalTagLabel(k)));
+  }
 
   // Expander button
   const expander = document.createElement('span');
@@ -381,15 +388,24 @@ function renderTags() {
   expander.onclick = () => { _expanderOpen = !_expanderOpen; renderTags(); };
   tagsEl.appendChild(expander);
 
-  // Hidden tags (only when expanded)
+  // Expanded tags (only when open)
   if (_expanderOpen) {
-    TAG_LIST.filter(([k]) => ROTAS[k] && HIDDEN_BY_DEFAULT_KEYS.has(k)).forEach(([k, lbl]) => {
-      tagsEl.appendChild(makeTag(k, lbl));
-    });
+    for (const k of EXPANDED_TAG_KEYS) {
+      if (!ROTAS[k]) continue;
+      tagsEl.appendChild(makeTag(k, HOMEPAGE_LABEL_OVERRIDES[k] || _originalTagLabel(k)));
+    }
+
+    // Any specialty in ROTAS not in either list (unlisted → append to expanded)
+    activeDeptEntries()
+      .filter(([k, dept]) => !allListedKeys.has(k) && !dept.uploadedOnly)
+      .sort((a, b) => (a[1].label || '').localeCompare(b[1].label || ''))
+      .forEach(([k, d]) => {
+        tagsEl.appendChild(makeTag(k, d.label));
+      });
 
     // Uploaded-only specialties
     activeDeptEntries()
-      .filter(([k, dept]) => dept.uploadedOnly && !TAG_LIST.some(([tagKey]) => tagKey === k))
+      .filter(([k, dept]) => dept.uploadedOnly && !allListedKeys.has(k))
       .sort((a, b) => (a[1].label || '').localeCompare(b[1].label || ''))
       .forEach(([k, d]) => {
         tagsEl.appendChild(makeTag(k, d.label));
