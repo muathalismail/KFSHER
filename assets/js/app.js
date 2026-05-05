@@ -4064,9 +4064,16 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Original upload handler — processes files after picker closes
+  let _uploadInProgress = false;
   document.getElementById('pdfUploadInline').addEventListener('change', async (e) => {
-    await handlePdfUpload(e.target.files);
-    e.target.value = '';
+    if (_uploadInProgress) return;
+    _uploadInProgress = true;
+    try {
+      await handlePdfUpload(e.target.files);
+    } finally {
+      e.target.value = '';
+      _uploadInProgress = false;
+    }
   });
 
   refreshPdfListAsync();
