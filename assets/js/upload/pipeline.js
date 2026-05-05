@@ -470,7 +470,8 @@ function mapValidationReasonCodes({ deptKey='', parseDebug={}, auditResult=null,
   if ((auditResult?.overallConfidence === 'low' || trustProfile.trustScore < 60) && !(deptKey === 'medicine_on_call' && medicineStructurallyUsable) && !hasAutoActivate) {
     reasonCodes.add(UPLOAD_REASON_CODES.LOW_PARSE_CONFIDENCE);
   }
-  if ((issueTypes.has('row-mapping') || issueTypes.has('data-loss')) && !hasAutoActivate) {
+  if ((issueTypes.has('row-mapping') || issueTypes.has('data-loss')) && !hasAutoActivate
+      && deptKey !== 'medicine_on_call') {
     reasonCodes.add(UPLOAD_REASON_CODES.BLOCK_DATE_MISMATCH);
   }
   if (requiredRoles.missing.length) {
@@ -533,6 +534,8 @@ function buildUploadPipelineDiagnostics({ deptKey='', detectedSpecialty='', pars
       UPLOAD_REASON_CODES.BLOCK_DATE_MISMATCH,
       UPLOAD_REASON_CODES.FAILED_SPECIALTY_VALIDATION,
     ]
+    : (hasAutoActivate && deptKey === 'medicine_on_call')
+    ? [] // medicine_on_call is block-based (spans 2 months) — no date-mismatch blocking
     : hasAutoActivate
     ? [
       UPLOAD_REASON_CODES.BLOCK_DATE_MISMATCH,
