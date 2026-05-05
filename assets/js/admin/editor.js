@@ -820,8 +820,57 @@ function commitEdit(idx, field, newVal) {
         recordEdit(idx, 'phone', '', phone);
       }
     }
+    // Phone edit: offer bulk apply + memory save
+    if (field === 'phone' && newVal && state.entries[idx].doctor) {
+      setTimeout(() => offerBulkPhoneApply(idx, state.entries[idx].doctor, newVal), 100);
+    }
   }
   render();
+}
+
+async function offerBulkPhoneApply(editedIdx, doctorName, phone) {
+  // Find other entries with same name and empty phone
+  const others = [];
+  state.entries.forEach((e, i) => {
+    if (i === editedIdx) return;
+    if (state.changes.has(i) && state.changes.get(i).type === 'delete') return;
+    if (e.doctor === doctorName && (!e.phone || e.phone !== phone)) others.push(i);
+  });
+
+  if (!others.length) {
+    // No duplicates — just offer memory save
+    if (confirm(`حفظ رقم ${phone} لـ ${doctorName} في الذاكرة?\nسيُطبّق تلقائياً على الرفعات المستقبلية.`)) {
+      saveToPhoneMemory(doctorName, phone);
+    }
+    return;
+  }
+
+  // Show dialog with options
+  const msg = `${doctorName} يظهر في ${others.length} موقع آخر بدون هذا الرقم.\n\nتطبيق ${phone} على الكل؟\n\n[OK] = تطبيق على الكل + حفظ في الذاكرة\n[Cancel] = هذا الموقع فقط`;
+  if (confirm(msg)) {
+    // Apply to all matching entries
+    let applied = 0;
+    for (const i of others) {
+      const oldPhone = state.entries[i].phone || '';
+      state.entries[i].phone = phone;
+      recordEdit(i, 'phone', oldPhone, phone);
+      applied++;
+    }
+    // Save to phone memory
+    saveToPhoneMemory(doctorName, phone);
+    showToast(`تم تحديث ${applied + 1} موقع + حفظ في الذاكرة`, 'success');
+    render();
+  }
+}
+
+async function saveToPhoneMemory(name, phone) {
+  try {
+    await fetch('/api/manual-phone', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'upsert', full_name: name, phone }),
+    });
+  } catch {}
 }
 
 function handleEditKey(e, idx, field, inp) {

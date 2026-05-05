@@ -3559,6 +3559,31 @@ document.addEventListener('DOMContentLoaded', () => {
       debug.parserMode = (parsed.debug && parsed.debug.parserMode) || '';
       let entries = parsed.entries || [];
 
+      // ── AUTO-FILL: apply phone memory to entries with empty phones ──
+      try {
+        const needPhones = entries.filter(e => !e.phone && e.name).map(e => e.name);
+        if (needPhones.length) {
+          const phoneResp = await fetch('/api/manual-phone', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'lookup', names: [...new Set(needPhones)] }),
+          });
+          if (phoneResp.ok) {
+            const phoneMap = await phoneResp.json();
+            let filled = 0;
+            entries = entries.map(e => {
+              if (e.phone || !e.name) return e;
+              const found = phoneMap[e.name];
+              if (found) { filled++; return { ...e, phone: found, phoneUncertain: false, phoneSource: 'manual_memory' }; }
+              return e;
+            });
+            if (filled) console.log(`[PHONE_MEMORY] Auto-filled ${filled} entries from manual phones`);
+          }
+        }
+      } catch (err) {
+        console.warn('[PHONE_MEMORY] Lookup failed:', err.message);
+      }
+
       // ── AUDITOR: validate before activating ──────────────────
       const prevRecord = await getPdfRecord(deptKey).catch(() => null);
       const auditResult = await Auditor.auditParsedRecord(

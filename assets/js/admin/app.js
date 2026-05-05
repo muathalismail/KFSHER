@@ -13,6 +13,7 @@
 
   let editorLoaded = false;
   let auditLoaded = false;
+  let phonesLoaded = false;
 
   function showLogin() {
     loginScreen.classList.remove('hidden');
@@ -41,6 +42,10 @@
     if (tabName === 'editor' && !editorLoaded) {
       editorLoaded = true;
       Editor.initEditor();
+    }
+    if (tabName === 'phones' && !phonesLoaded) {
+      phonesLoaded = true;
+      Phones.initPhones();
     }
     if (tabName === 'audit' && !auditLoaded) {
       auditLoaded = true;
@@ -84,6 +89,7 @@
     loginError.textContent = '';
     editorLoaded = false;
     auditLoaded = false;
+    phonesLoaded = false;
   });
 
   // Tabs
