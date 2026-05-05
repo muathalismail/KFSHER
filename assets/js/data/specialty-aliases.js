@@ -145,13 +145,40 @@ function matchSpecialty(input) {
   return { matched: false, ambiguous: true, candidates: winners.map(w => w.key) };
 }
 
-// Expose globals for browser (project uses <script> tags, not ES modules)
+function rankSpecialtySuggestions(input, limit) {
+  limit = limit || 5;
+  const val = (input || '').toLowerCase().trim();
+  if (val.length < 2) return [];
+  const scored = [];
+  for (const [key, name] of Object.entries(SPECIALTY_DISPLAY_NAMES)) {
+    const nLow = name.toLowerCase(), kLow = key.toLowerCase();
+    let score = 0;
+    if (nLow === val || kLow === val) score = 100;
+    else if (nLow.startsWith(val)) score = 80;
+    else if (kLow.startsWith(val)) score = 70;
+    else if (nLow.includes(val)) score = 50;
+    else if (kLow.includes(val)) score = 40;
+    const aliases = SPECIALTY_ALIASES[key] || [];
+    for (const a of aliases) {
+      const aLow = a.toLowerCase();
+      if (aLow === val) { score = Math.max(score, 90); break; }
+      else if (aLow.startsWith(val)) score = Math.max(score, 60);
+      else if (aLow.includes(val)) score = Math.max(score, 30);
+    }
+    if (score > 0) scored.push({ key, name, score });
+  }
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, limit);
+}
+
+// Expose globals for browser
 if (typeof window !== 'undefined') {
   window.SPECIALTY_ALIASES = SPECIALTY_ALIASES;
   window.SPECIALTY_DISPLAY_NAMES = SPECIALTY_DISPLAY_NAMES;
   window.matchSpecialty = matchSpecialty;
+  window.rankSpecialtySuggestions = rankSpecialtySuggestions;
 }
-// CommonJS for server (monitoring.js)
+// CommonJS for server
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { SPECIALTY_ALIASES, SPECIALTY_DISPLAY_NAMES, matchSpecialty };
+  module.exports = { SPECIALTY_ALIASES, SPECIALTY_DISPLAY_NAMES, matchSpecialty, rankSpecialtySuggestions };
 }

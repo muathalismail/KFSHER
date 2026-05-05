@@ -3539,103 +3539,73 @@ document.addEventListener('DOMContentLoaded', () => {
         templateDetected:false,
         coreSectionsFound:[],
       };
-      const detected = await detectDeptKeyFromPdf(file);
-      let { deptKey, source, uncertain } = detected;
+      let deptKey = null;
+      let source = '';
+      let uncertain = false;
       let specialtyLabel = '';
-      let detectionStage = deptKey ? 'filename' : 'none';
-      if (!deptKey && isAnesthesiaLike(file.name)) {
-        deptKey = 'anesthesia';
-        source = 'filename';
-        uncertain = false;
-        detectionStage = 'filename';
-      }
+      let detectionStage = 'pending';
+      let suggestedKey = null;
 
-      // Stage 2: Claude header detection (only when monitoring enabled)
-      if (!deptKey && _monitoringEnabled) {
+      if (_monitoringEnabled) {
+        // Step 1: filename match as SUGGESTION only
         try {
-          let headerText = '';
-          if (typeof loadPdfJs === 'function') await loadPdfJs();
-          if (window.pdfjsLib) {
-            const buf = await file.arrayBuffer();
-            const pdf = await window.pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
-            const pg = await pdf.getPage(1);
-            const tc = await pg.getTextContent();
-            const vp = pg.getViewport({ scale: 1 });
-            const topThreshold = vp.height * 0.7;
-            headerText = tc.items.filter(it => it.transform[5] >= topThreshold).map(it => it.str).join(' ').slice(0, 800);
-          }
-          if (headerText && headerText.trim().length > 5) {
-            const hdResp = await Promise.race([
-              fetch('/api/monitoring?action=detect-header', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ header_text: headerText }),
-              }),
-              new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 4000)),
-            ]);
-            if (hdResp.ok) {
-              const hdResult = await hdResp.json();
-              if (hdResult.specialty && (hdResult.confidence === 'high' || hdResult.confidence === 'medium')) {
-                deptKey = hdResult.specialty;
-                source = 'header_claude';
-                uncertain = hdResult.confidence !== 'high';
-                detectionStage = 'header';
-                console.log(`[DETECT] Header → ${deptKey} (${hdResult.confidence})`);
-              }
-            }
-          }
-        } catch (err) {
-          console.warn('[DETECT] Header detection skipped:', err.message);
-        }
-      }
+          const detected = await detectDeptKeyFromPdf(file);
+          if (detected && detected.deptKey && !detected.uncertain) suggestedKey = detected.deptKey;
+        } catch {}
+        if (!suggestedKey && isAnesthesiaLike(file.name)) suggestedKey = 'anesthesia';
 
-      // Stage 3: Manual modal (only when monitoring enabled)
-      if (!deptKey && _monitoringEnabled) {
-        const manualResult = await showSpecialtyDetectionModal(file);
-        if (manualResult.cancelled) {
-          if (_monitoringEnabled) {
-            let cancelledPdfUrl = null;
-            let cancelledPdfPath = null;
-            try {
-              const buf = await file.arrayBuffer();
-              const b64 = btoa(new Uint8Array(buf).reduce((s, b) => s + String.fromCharCode(b), ''));
-              const upResp = await fetch('/api/monitoring?action=save-cancelled-pdf', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ pdf_base64: b64, pdf_name: file.name }),
-              });
-              if (upResp.ok) {
-                const upData = await upResp.json();
-                cancelledPdfUrl = upData.pdf_url || null;
-                cancelledPdfPath = upData.path || null;
-              }
-            } catch (err) { console.warn('[CANCEL] PDF storage failed:', err); }
-            try {
-              await fetch('/api/monitoring?action=save-log', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ filename: file.name, file_size_bytes: file.size, detection_stage: 'manual', status: 'review', pdf_storage_path: cancelledPdfPath, pdf_url: cancelledPdfUrl }),
-              });
-            } catch {}
-          }
-          skipped.push(`${file.name} (cancelled by user)`);
+        // Step 2: ALWAYS show Confirm/Edit modal
+        const modalResult = await showSpecialtyDetectionModal(file, suggestedKey);
+
+        if (modalResult.cancelled) {
+          let cancelledPdfUrl = null;
+          let cancelledPdfPath = null;
+          try {
+            const buf = await file.arrayBuffer();
+            const b64 = btoa(new Uint8Array(buf).reduce((s, b) => s + String.fromCharCode(b), ''));
+            const upResp = await fetch('/api/monitoring?action=save-cancelled-pdf', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ pdf_base64: b64, pdf_name: file.name }),
+            });
+            if (upResp.ok) {
+              const upData = await upResp.json();
+              cancelledPdfUrl = upData.pdf_url || null;
+              cancelledPdfPath = upData.path || null;
+            }
+          } catch (err) { console.warn('[CANCEL] PDF storage failed:', err); }
+          try {
+            await fetch('/api/monitoring?action=save-log', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ filename: file.name, file_size_bytes: file.size, detection_stage: 'manual', status: 'review', pdf_storage_path: cancelledPdfPath, pdf_url: cancelledPdfUrl }),
+            });
+          } catch {}
+          showEmployeeToast('review', { filename: file.name });
+          skipped.push(`${file.name} (sent to review)`);
           continue;
         }
-        deptKey = manualResult.key;
-        source = 'manual';
-        uncertain = !!manualResult.isCustom;
-        detectionStage = 'manual';
-        if (manualResult.isCustom) {
-          debug.status = 'pdf_only_no_parser';
+
+        deptKey = modalResult.key;
+        source = modalResult.method || 'manual';
+        uncertain = !!modalResult.isCustom;
+        detectionStage = modalResult.method === 'confirm' ? 'confirmed' : 'manual';
+        if (modalResult.isCustom) {
+          showEmployeeToast('new-specialty', { displayName: modalResult.displayName || modalResult.key });
         }
+      } else {
+        // Legacy: feature flag OFF
+        const detected = await detectDeptKeyFromPdf(file);
+        ({ deptKey, source, uncertain } = detected);
+        if (!deptKey && isAnesthesiaLike(file.name)) { deptKey = 'anesthesia'; source = 'filename'; uncertain = false; }
+        if (!deptKey) { deptKey = uploadedDeptKeyFromFilename(file.name); source = 'filename'; uncertain = true; specialtyLabel = titleFromUploadedFilename(file.name); }
+        detectionStage = 'legacy';
       }
 
       if (!deptKey) {
-        deptKey = uploadedDeptKeyFromFilename(file.name);
-        source = 'filename';
-        uncertain = true;
-        specialtyLabel = titleFromUploadedFilename(file.name);
-        detectionStage = 'fallback';
+        showUploadWarning(`Could not determine specialty for ${file.name}. Please try again.`);
+        skipped.push(`${file.name} (specialty resolution failed)`);
+        continue;
       }
 
       // Log upload start (only when monitoring enabled)
@@ -3875,6 +3845,9 @@ document.addEventListener('DOMContentLoaded', () => {
           }).catch(() => {});
         } catch {}
       }
+      if (publishToLive && _monitoringEnabled) {
+        showEmployeeToast('success', { specialty: (window.SPECIALTY_DISPLAY_NAMES && window.SPECIALTY_DISPLAY_NAMES[deptKey]) || deptKey, entries: entries.length });
+      }
       // Cache status badge for medicine_on_call
       if (deptKey === 'medicine_on_call' && typeof parseMedicineOnCallPdfEntries !== 'undefined') {
         debug.cacheStatus = parseMedicineOnCallPdfEntries._lastCacheStatus || '';
@@ -3922,104 +3895,132 @@ document.addEventListener('DOMContentLoaded', () => {
     if (latestDeptKey) showPdfPreview(latestDeptKey);
   }
 
-  // ── Specialty Detection Modal (Stage 3 fallback) ──
-  function showSpecialtyDetectionModal(file) {
+  // ── Employee Toast ──
+  function showEmployeeToast(type, payload) {
+    if (!_monitoringEnabled) return;
+    const config = {
+      success: { icon: '✅', color: '#22c55e', bg: 'rgba(34,197,94,0.12)', text: `Done · ${payload.specialty || ''} · ${payload.entries || 0} entries` },
+      review: { icon: '⊘', color: '#eab308', bg: 'rgba(234,179,8,0.12)', text: `Review · ${payload.filename || ''}` },
+      'new-specialty': { icon: '✅', color: '#3b82f6', bg: 'rgba(59,130,246,0.12)', text: `New specialty added: ${payload.displayName || ''}` },
+    };
+    const c = config[type]; if (!c) return;
+    const toast = document.createElement('div');
+    toast.style.cssText = `background:${c.bg};border:1px solid ${c.color};color:${c.color};padding:10px 16px;border-radius:10px;font-size:13px;font-weight:500;display:inline-flex;align-items:center;gap:8px;margin:8px 0;animation:toastSlideIn 200ms ease-out;box-shadow:0 2px 8px rgba(0,0,0,0.15)`;
+    toast.innerHTML = `<span style="font-size:16px">${c.icon}</span><span>${escapeHtml(c.text)}</span>`;
+    const statusEl = document.getElementById('uploadStatus');
+    if (statusEl && statusEl.parentNode) statusEl.parentNode.insertBefore(toast, statusEl.nextSibling);
+    else { toast.style.cssText += ';position:fixed;top:20px;right:20px;z-index:1000'; document.body.appendChild(toast); }
+    setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 200); }, 3000);
+  }
+
+  // ── Specialty Detection Modal (Confirm/Edit for every upload) ──
+  function showSpecialtyDetectionModal(file, suggestedKey) {
     return new Promise((resolve) => {
       const overlay = document.createElement('div');
       overlay.className = 'detect-modal-overlay';
       const pdfUrl = URL.createObjectURL(file);
+      const suggestedName = suggestedKey && window.SPECIALTY_DISPLAY_NAMES ? (window.SPECIALTY_DISPLAY_NAMES[suggestedKey] || suggestedKey) : null;
+      const initialMode = suggestedKey ? 'confirm' : 'edit';
+
       overlay.innerHTML = `<div class="detect-modal">
-        <h3>Could not detect specialty for this file</h3>
+        <h3 id="modal-title">${suggestedKey ? 'Confirm Specialty' : 'Select Specialty'}</h3>
         <div class="detect-modal-preview"><iframe src="${pdfUrl}#page=1" title="PDF preview"></iframe></div>
-        <p style="font-size:13px;color:var(--muted,#999);margin-bottom:8px">Please enter the specialty name:</p>
-        <input type="text" id="detect-spec-input" placeholder="e.g. Cardiology, ENT, Neurology..." autocomplete="off">
-        <div id="detect-error" style="color:var(--critical,#f44);font-size:12px;min-height:16px;margin-bottom:8px"></div>
-        <div id="detect-disambig" style="display:none;margin-bottom:12px"></div>
+        <div id="confirm-section" style="display:${initialMode === 'confirm' ? 'block' : 'none'}">
+          <div style="font-size:13px;color:var(--muted);margin-bottom:6px">Detected:</div>
+          <div style="font-size:18px;font-weight:600;color:var(--text);margin-bottom:14px">${escapeHtml(suggestedName || '')}</div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:14px">Please verify by checking the PDF preview above.</div>
+        </div>
+        <div id="edit-section" style="display:${initialMode === 'edit' ? 'block' : 'none'}">
+          <div style="font-size:13px;color:var(--muted);margin-bottom:8px">${suggestedKey ? 'Type the correct specialty:' : 'Could not detect specialty. Please enter:'}</div>
+          <input type="text" id="detect-spec-input" placeholder="e.g. Cardiology, ENT, Neurology..." autocomplete="off">
+          <div id="detect-suggestions" class="detect-suggestions" style="display:none"></div>
+          <div id="detect-preview" class="detect-preview"></div>
+        </div>
         <div class="detect-modal-actions">
-          <button id="detect-cancel">Cancel</button>
-          <button id="detect-submit" class="detect-submit">Submit</button>
+          <button id="detect-cancel" class="detect-cancel">Cancel</button>
+          <div style="flex:1"></div>
+          <button id="detect-edit" class="detect-edit" style="display:${initialMode === 'confirm' ? 'inline-flex' : 'none'}">Edit</button>
+          <button id="detect-confirm" class="detect-confirm" style="display:${initialMode === 'confirm' ? 'inline-flex' : 'none'}">Confirm</button>
+          <button id="detect-save" class="detect-confirm" style="display:${initialMode === 'edit' ? 'inline-flex' : 'none'}" disabled>Save</button>
         </div>
       </div>`;
       document.body.appendChild(overlay);
+
+      let currentMatch = null;
       const inp = overlay.querySelector('#detect-spec-input');
-      setTimeout(() => inp.focus(), 100);
+      const suggestions = overlay.querySelector('#detect-suggestions');
+      const preview = overlay.querySelector('#detect-preview');
+      const editBtn = overlay.querySelector('#detect-edit');
+      const confirmBtn = overlay.querySelector('#detect-confirm');
+      const saveBtn = overlay.querySelector('#detect-save');
+      const cancelBtn = overlay.querySelector('#detect-cancel');
+      const titleEl = overlay.querySelector('#modal-title');
 
       function cleanup() { URL.revokeObjectURL(pdfUrl); overlay.remove(); }
+      function switchToEdit() {
+        overlay.querySelector('#confirm-section').style.display = 'none';
+        overlay.querySelector('#edit-section').style.display = 'block';
+        editBtn.style.display = 'none'; confirmBtn.style.display = 'none';
+        saveBtn.style.display = 'inline-flex';
+        titleEl.textContent = 'Edit Specialty';
+        setTimeout(() => inp.focus(), 50);
+      }
 
-      overlay.querySelector('#detect-cancel').addEventListener('click', () => {
-        cleanup();
-        resolve({ cancelled: true });
-      });
+      cancelBtn.addEventListener('click', () => { cleanup(); resolve({ cancelled: true }); });
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) { cleanup(); resolve({ cancelled: true }); } });
+      overlay.addEventListener('keydown', (e) => { if (e.key === 'Escape') { cleanup(); resolve({ cancelled: true }); } });
+      editBtn.addEventListener('click', switchToEdit);
+      confirmBtn.addEventListener('click', () => { cleanup(); resolve({ key: suggestedKey, method: 'confirm', isCustom: false }); });
 
-      overlay.querySelector('#detect-submit').addEventListener('click', async () => {
+      // Edit mode: autocomplete + live preview
+      inp.addEventListener('input', () => {
         const val = inp.value.trim();
-        if (!val) { overlay.querySelector('#detect-error').textContent = 'Please enter a specialty name'; return; }
-
-        // Use client-side matcher
-        const result = typeof matchSpecialty === 'function' ? matchSpecialty(val) : { matched: false, isNew: true, customName: val };
-
-        if (result.ambiguous && result.candidates) {
-          // Show disambiguation
-          const disambig = overlay.querySelector('#detect-disambig');
-          disambig.style.display = 'block';
-          const displayNames = typeof SPECIALTY_DISPLAY_NAMES !== 'undefined' ? SPECIALTY_DISPLAY_NAMES : {};
-          disambig.innerHTML = '<p style="font-size:13px;margin-bottom:8px">Did you mean:</p>' +
-            result.candidates.map(k => `<div class="disambig-option" data-key="${k}">${displayNames[k] || k}</div>`).join('') +
-            `<div class="disambig-option" data-key="__other__">Other (keep as "${val}")</div>`;
-          disambig.querySelectorAll('.disambig-option').forEach(opt => {
-            opt.addEventListener('click', () => {
-              disambig.querySelectorAll('.disambig-option').forEach(o => o.classList.remove('selected'));
-              opt.classList.add('selected');
-            });
-          });
-          // Replace submit handler
-          const submitBtn = overlay.querySelector('#detect-submit');
-          const newSubmit = submitBtn.cloneNode(true);
-          submitBtn.parentNode.replaceChild(newSubmit, submitBtn);
-          newSubmit.addEventListener('click', async () => {
-            const sel = disambig.querySelector('.disambig-option.selected');
-            if (!sel) { overlay.querySelector('#detect-error').textContent = 'Please select an option'; return; }
-            const chosenKey = sel.dataset.key;
-            if (chosenKey === '__other__') {
-              // Finalize as custom
-              try {
-                const resp = await fetch('/api/monitoring?action=finalize-upload', {
-                  method: 'POST', headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ log_id: 0, specialty_input: val, action: 'submit' }),
-                });
-                if (resp.ok) { const data = await resp.json(); cleanup(); resolve({ key: data.key, isCustom: true }); return; }
-              } catch {}
-              cleanup(); resolve({ key: 'custom_' + val.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, ''), isCustom: true });
-            } else {
-              cleanup(); resolve({ key: chosenKey, method: 'manual_pick' });
-            }
-          });
-          return;
-        }
-
+        if (val.length < 2) { suggestions.style.display = 'none'; preview.innerHTML = ''; saveBtn.disabled = true; currentMatch = null; return; }
+        if (typeof window.matchSpecialty !== 'function') { preview.innerHTML = '<span style="color:#ef4444">Smart matching not loaded</span>'; saveBtn.disabled = true; return; }
+        const result = window.matchSpecialty(val);
+        currentMatch = result;
         if (result.matched) {
-          cleanup();
-          resolve({ key: result.key, method: result.method });
-          return;
+          const name = (window.SPECIALTY_DISPLAY_NAMES && window.SPECIALTY_DISPLAY_NAMES[result.key]) || result.key;
+          preview.innerHTML = `<span style="color:#22c55e">\u2713 Will be saved as: ${escapeHtml(name)}</span>`;
+          saveBtn.disabled = false;
+        } else if (result.ambiguous) {
+          preview.innerHTML = `<span style="color:#eab308">\u26A0 Multiple matches \u2014 please be more specific</span>`;
+          saveBtn.disabled = true;
+        } else if (result.isNew) {
+          preview.innerHTML = `<span style="color:#3b82f6">\u2713 Will be added as new specialty: ${escapeHtml(val)}</span>`;
+          saveBtn.disabled = false;
+        } else { preview.innerHTML = ''; saveBtn.disabled = true; }
+        // Ranked autocomplete
+        const matches = typeof window.rankSpecialtySuggestions === 'function' ? window.rankSpecialtySuggestions(val, 5) : [];
+        if (!matches.length) { suggestions.style.display = 'none'; }
+        else {
+          suggestions.style.display = 'block';
+          suggestions.innerHTML = matches.map(m => `<div class="suggest-item" data-name="${escapeHtml(m.name)}">${escapeHtml(m.name)}</div>`).join('');
+          suggestions.querySelectorAll('.suggest-item').forEach(item => {
+            item.addEventListener('click', () => { inp.value = item.dataset.name; suggestions.style.display = 'none'; inp.dispatchEvent(new Event('input')); inp.focus(); });
+          });
         }
-
-        if (result.isNew) {
-          // Create custom specialty via server
-          try {
-            const resp = await fetch('/api/monitoring?action=finalize-upload', {
-              method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ log_id: 0, specialty_input: val, action: 'submit' }),
-            });
-            if (resp.ok) { const data = await resp.json(); cleanup(); resolve({ key: data.key || result.customName, isCustom: data.isCustom }); return; }
-          } catch {}
-          cleanup(); resolve({ key: 'custom_' + val.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, ''), isCustom: true });
-          return;
-        }
-
-        cleanup(); resolve({ key: val, method: 'manual' });
       });
 
-      inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') overlay.querySelector('#detect-submit').click(); });
+      // Save button
+      saveBtn.addEventListener('click', async () => {
+        const val = inp.value.trim();
+        if (!val || !currentMatch) return;
+        saveBtn.disabled = true; saveBtn.textContent = 'Saving...';
+        try {
+          if (currentMatch.matched) { cleanup(); resolve({ key: currentMatch.key, method: 'manual_pick', isCustom: false }); return; }
+          if (currentMatch.isNew) {
+            try {
+              const resp = await fetch('/api/monitoring?action=finalize-upload', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ log_id: null, specialty_input: val, action: 'submit' }) });
+              if (resp.ok) { const data = await resp.json(); cleanup(); resolve({ key: data.key, method: 'manual_pick', isCustom: !!data.isCustom, displayName: val }); return; }
+            } catch {}
+            cleanup(); resolve({ key: 'custom_' + val.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, ''), method: 'manual_pick', isCustom: true, displayName: val }); return;
+          }
+          if (currentMatch.ambiguous) { preview.innerHTML = '<span style="color:#eab308">Please pick from suggestions above</span>'; saveBtn.disabled = false; saveBtn.textContent = 'Save'; return; }
+        } catch { preview.innerHTML = '<span style="color:#ef4444">Network error</span>'; saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
+      });
+      inp.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !saveBtn.disabled) { e.preventDefault(); saveBtn.click(); } });
+      if (initialMode === 'edit') setTimeout(() => inp.focus(), 100);
     });
   }
 

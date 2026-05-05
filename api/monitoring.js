@@ -204,6 +204,7 @@ async function handleFinalizeUpload(req, res) {
 }
 
 // ── Detect specialty from header text (Claude API) ──
+// DEPRECATED (P1B): Client no longer calls this. Confirm/Edit modal replaced header detection.
 async function handleDetectHeader(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST required' });
   const { header_text } = req.body || {};
