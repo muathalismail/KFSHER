@@ -1055,7 +1055,7 @@ const SPECIALTY_ICON_OVERRIDES = {
 const SPECIALTY_FILENAME_INTERPRETERS = [
   { key:'anesthesia', icon:'💤', label:'Anesthesia / التخدير', terms:['anesthesia','anaesthesia','anesthesiology','anaesthesiology','taam'] },
   { key:'physical_medicine_rehabilitation', icon:'♿', label:'Physical Medicine & Rehabilitation / الطب الطبيعي والتأهيل', terms:['physical medicine rehabilitation','physical medicine rehabilitaion','pm r','pmr','rehabilitation','rehabilitaion'] },
-  { key:'pediatric_neurology', icon:'🧠', label:'Pediatric Neurology / أعصاب الأطفال', terms:['ped neuro','pediatric neuro','paediatric neuro','child neurology','pediatric neurology','ped neurology'] },
+  { key:'pediatric_neurology', icon:'🧠', label:'Pediatric Neurology / أعصاب الأطفال', terms:['pnd','ped neuro','pediatric neuro','paediatric neuro','child neurology','pediatric neurology','ped neurology','pediatric neuro disability'] },
   { key:'pediatric_cardiology', icon:'🫀', label:'Pediatric Cardiology / قلب الأطفال', terms:['pediatric cardiology','ped cardiology','ped card','pediatric cardiac'] },
   { key:'oncology', icon:'🎗️', label:'Adult Medical Oncology / أورام', terms:['adult medical oncology','medical oncology department','medical oncology on-call','medical oncology duty'] },
   { key:'pediatric_heme_onc', icon:'🩸', label:'Pediatric Heme-Onc & SCT / دم وأورام الأطفال', terms:['pediatric hematology','pediaric hematology','ped heme','ped oncology','pediatric oncology','sct pediatric','pediatric hematology oncology'] },
@@ -1156,7 +1156,7 @@ const PDF_DETECTION_RULES = [
   { key:'clinical_lab', terms:['clinical laboratory','clinical lab','pathology on-call','lab pathology'] },
   { key:'orthopedics', terms:['orthopedics','orthopedic duty','department of orthopedics'] },
   { key:'surgery', terms:['department of surgery','surgery april','general surgery'] },
-  { key:'neurology', terms:['neurology','neurology duty','neurology department','neurology rota','neurology main'] },
+  { key:'neurology', terms:['neurology','neurology duty','neurology department','neurology rota','neurology main','adult neurology'], exclude:['ped','pediatric','paediatric','pnd','child'] },
   { key:'hospitalist', terms:['hospitalist department','hospitalist duty'] },
   { key:'medicine', terms:['department of medicine','medicine rota','medical department','im resident rota'] },
   { key:'ent', terms:['ent','ear nose throat','أنف وأذن وحنجرة'] },
@@ -1245,6 +1245,8 @@ function interpretSpecialtyFromText(text='') {
   }
   let best = null;
   SPECIALTY_FILENAME_INTERPRETERS.forEach(item => {
+    // Exclusion check: if any exclude term appears → skip this specialty
+    if (item.exclude && item.exclude.some(ex => hasSpecialtyTerm(raw, normalizeText(ex)) || hasSpecialtyTerm(cleaned, normalizeText(ex)))) return;
     const score = item.terms.reduce((sum, term) => {
       const t = normalizeText(term);
       return hasSpecialtyTerm(raw, t) || hasSpecialtyTerm(cleaned, t) ? sum + t.length : sum;
