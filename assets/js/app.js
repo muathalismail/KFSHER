@@ -3285,6 +3285,11 @@ async function getPdfHref(deptKey) {
     if (anyRecord && (anyRecord.blob || anyRecord._cloudPdfUrl)) uploaded = anyRecord;
   }
   const renderKey = uploaded ? (uploaded.deptKey || deptKey) : (DEFAULT_PDF_MAP[deptKey] ? deptKey : fallbackKey);
+  // Prefer persistent Supabase Storage URL over blob (blob dies on refresh)
+  if (uploaded && uploaded._cloudPdfUrl) {
+    return { href: uploaded._cloudPdfUrl, name: uploaded.name || 'rota.pdf', uploadedAt: uploaded.uploadedAt || 0 };
+  }
+  // Fallback: blob URL for locally-uploaded PDFs not yet synced to cloud
   if (uploaded && uploaded.blob) {
     if (runtimePdfUrls[renderKey]) URL.revokeObjectURL(runtimePdfUrls[renderKey]);
     runtimePdfUrls[renderKey] = URL.createObjectURL(uploaded.blob);
@@ -3298,10 +3303,6 @@ async function getPdfHref(deptKey) {
       };
     }
     return { href: runtimePdfUrls[renderKey], name: uploaded.name || 'rota.pdf', uploadedAt: uploaded.uploadedAt || 0 };
-  }
-  // Cloud-synced record: use Supabase Storage URL for PDF viewing
-  if (uploaded && uploaded._cloudPdfUrl) {
-    return { href: uploaded._cloudPdfUrl, name: uploaded.name || 'rota.pdf', uploadedAt: uploaded.uploadedAt || 0 };
   }
   if (deptKey === 'radiology_duty') {
     const fallbackMeta = DEFAULT_PDF_MAP[deptKey] || DEFAULT_PDF_MAP[fallbackKey] || null;
