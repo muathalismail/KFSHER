@@ -143,3 +143,24 @@ footer .mono{letter-spacing:.6px;font-size:12px;color:var(--muted)}
 .ext-num{font-size:20px;font-weight:700;color:var(--accent,#00d4ff);letter-spacing:1px}
 @media(max-width:600px){.drow{align-items:flex-start;flex-direction:column}.dmeta{width:100%;align-items:flex-start}.row-actions{justify-content:flex-start}.tbar{gap:10px;padding:10px}.admin-toggle{right:12px;bottom:12px}.admin-panel{right:12px;bottom:58px}#pdfFrame{height:100dvh}.ext-grid{grid-template-columns:repeat(2,1fr)}}
 @keyframes toastSlideIn{from{transform:translateY(-10px);opacity:0}to{transform:translateY(0);opacity:1}}
+
+/* P1B: Confirm/Edit modal */
+.detect-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px}
+.detect-modal{background:#1a1a2e;border:1px solid #2a2a3e;border-radius:16px;padding:24px;max-width:560px;width:90%;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.5);color:#fff}
+.detect-modal h3{margin:0 0 16px;font-size:18px;font-weight:600}
+.detect-modal-preview{width:100%;height:320px;border:1px solid #2a2a3e;border-radius:10px;background:#fff;margin-bottom:16px;overflow:hidden}
+.detect-modal-preview iframe{width:100%;height:100%;border:none;border-radius:10px}
+.detect-modal input[type="text"]{width:100%;background:#0a0a1a;border:2px solid #2a2a3e;border-radius:10px;padding:11px 14px;font-size:14px;color:#fff;outline:none;font-family:inherit;box-sizing:border-box}
+.detect-modal input[type="text"]:focus{border-color:#00e5a0}
+.detect-suggestions{background:#1f1f2f;border:1px solid #2a2a3e;border-radius:10px;margin-top:6px;max-height:200px;overflow-y:auto}
+.suggest-item{padding:10px 14px;cursor:pointer;font-size:14px;border-bottom:1px solid #2a2a3e;color:#fff}
+.suggest-item:last-child{border-bottom:none}
+.suggest-item:hover{background:#00e5a0;color:#000}
+.detect-preview{margin-top:8px;font-size:12px;min-height:18px;font-weight:500}
+.detect-modal-actions{display:flex;align-items:center;gap:8px;margin-top:18px}
+.detect-modal-actions button{padding:9px 18px;border-radius:10px;font-size:13px;font-weight:500;cursor:pointer;border:1px solid #2a2a3e;background:#1f1f2f;color:#fff;transition:all 150ms}
+.detect-modal-actions button:hover:not(:disabled){border-color:#00e5a0}
+.detect-modal-actions button:disabled{opacity:0.4;cursor:not-allowed}
+.detect-modal-actions .detect-confirm{background:#00e5a0;color:#000;border:none;font-weight:600}
+.detect-modal-actions .detect-edit{background:transparent}
+.detect-modal-actions .detect-cancel{color:#6b7a96}
