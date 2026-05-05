@@ -13,7 +13,7 @@ import json, os, re, urllib.request, urllib.error
 # CACHE (medicine_on_call only)
 # ═══════════════════════════════════════════════════════════════
 
-CACHE_VERSION = 'v1.1'
+CACHE_VERSION = 'v1.2'
 CACHE_TTL_DAYS = 30
 
 def _cache_enabled():
@@ -103,6 +103,7 @@ Seniority mapping (use the Resident level shown in the contact list to disambigu
 - Junior columns (jer_day, jer_night, jw_day, jw_night) are staffed by Resident 1 or Resident 2 level doctors
 - Example: "Lama" in sr_night → must be a Resident 3 (Lama Almubarak), NOT Resident 1 (Lama Alkunaizi)
 - Example: "H.Barbari" → Dr. Hassan Sh. Albarbari (phone 0569021663). Do NOT confuse with Hassan Buhmood (different person, different phone).
+- Example: "A.Almajid" → Dr. Ali Nizar Almajid (0549283986). Do NOT confuse with Dr. Ali Alsughir (0561215077) or Dr. Ali Abdulgani Bin Abdi (0536555977). Match by LAST NAME, not just initial.
 
 Data:
 {schedule_lines}
