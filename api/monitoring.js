@@ -36,6 +36,8 @@ module.exports = async function handler(req, res) {
       case 'stats':               return handleStats(req, res);
       case 'detect-header':       return handleDetectHeader(req, res);
       case 'save-cancelled-pdf':  return handleSaveCancelledPdf(req, res);
+      case 'correct-specialty':  return handleCorrectSpecialty(req, res);
+      case 'delete-upload':      return handleDeleteUpload(req, res);
       default: return res.status(400).json({ error: `Unknown action: ${action}` });
     }
   } catch (err) {
@@ -393,4 +395,107 @@ function _smartMatch(input) {
   if (winners.length === 1) return { matched: true, key: winners[0].key, method: 'fuzzy' };
 
   return { matched: false, ambiguous: true, candidates: winners.map(w => w.key) };
+}
+
+// ── Correct specialty (Move + Replace, safe) ──
+async function handleCorrectSpecialty(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'POST required' });
+  const { log_id, new_specialty_input } = req.body || {};
+  if (!log_id || !new_specialty_input) return res.status(400).json({ error: 'Missing log_id or new_specialty_input' });
+
+  ensureMatcher();
+  const matchResult = matchSpecialty ? matchSpecialty(new_specialty_input) : { matched: false };
+  let newKey, isCustom = false;
+  if (matchResult.matched) { newKey = matchResult.key; }
+  else if (matchResult.isNew) {
+    newKey = 'custom_' + new_specialty_input.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+    isCustom = true;
+    await upsertCustomSpecialty(newKey, new_specialty_input);
+  } else if (matchResult.ambiguous) {
+    return res.status(400).json({ error: 'ambiguous', candidates: matchResult.candidates });
+  } else { return res.status(400).json({ error: 'no_match' }); }
+
+  const { url, headers } = getSupabase();
+  const logResp = await fetch(`${url}/rest/v1/upload_logs?id=eq.${log_id}&select=*`, { headers });
+  const logRows = await logResp.json();
+  const logRow = Array.isArray(logRows) ? logRows[0] : null;
+  if (!logRow) return res.status(404).json({ error: 'log not found' });
+
+  const oldKey = logRow.detected_specialty;
+  if (oldKey === newKey) return res.status(200).json({ ok: true, unchanged: true });
+
+  let kfRow = null;
+  if (logRow.pdf_url) {
+    const r = await fetch(`${url}/rest/v1/kfsher?pdf_url=eq.${encodeURIComponent(logRow.pdf_url)}&select=*`, { headers });
+    const rows = await r.json();
+    kfRow = Array.isArray(rows) ? rows[0] : null;
+  }
+
+  let movedRow = false;
+  if (kfRow) {
+    await fetch(`${url}/rest/v1/kfsher?specialty=eq.${newKey}&id=neq.${kfRow.id}`, { method: 'DELETE', headers: { ...headers, 'Prefer': 'return=minimal' } }).catch(() => {});
+    const patchResp = await fetch(`${url}/rest/v1/kfsher?id=eq.${kfRow.id}`, { method: 'PATCH', headers: { ...headers, 'Prefer': 'return=minimal' }, body: JSON.stringify({ specialty: newKey }) });
+    movedRow = patchResp.ok;
+  }
+
+  await fetch(`${url}/rest/v1/upload_logs?id=eq.${log_id}`, { method: 'PATCH', headers: { ...headers, 'Prefer': 'return=minimal' }, body: JSON.stringify({ original_specialty: logRow.original_specialty || oldKey, corrected_specialty: newKey, corrected_at: new Date().toISOString(), detected_specialty: newKey, is_custom_specialty: isCustom }) });
+
+  try { await fetch(`${url}/rest/v1/audit_log`, { method: 'POST', headers: { ...headers, 'Prefer': 'return=minimal' }, body: JSON.stringify({ action: 'specialty_corrected', specialty: newKey, entry_id: kfRow ? String(kfRow.id) : `log_${log_id}`, old_value: oldKey, new_value: newKey }) }); } catch {}
+
+  return res.status(200).json({ ok: true, new_key: newKey, isCustom, moved_kfsher_row: movedRow });
+}
+
+// ── Delete upload (with smart custom cleanup) ──
+async function handleDeleteUpload(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'POST required' });
+  const { log_id } = req.body || {};
+  if (!log_id) return res.status(400).json({ error: 'Missing log_id' });
+
+  const { url, headers } = getSupabase();
+  const logResp = await fetch(`${url}/rest/v1/upload_logs?id=eq.${log_id}&select=*`, { headers });
+  const logRows = await logResp.json();
+  const logRow = Array.isArray(logRows) ? logRows[0] : null;
+  if (!logRow) return res.status(404).json({ error: 'log not found' });
+
+  const specialtyKey = logRow.detected_specialty;
+
+  let kfsherDeleted = false;
+  if (logRow.pdf_url) {
+    const r = await fetch(`${url}/rest/v1/kfsher?pdf_url=eq.${encodeURIComponent(logRow.pdf_url)}`, { method: 'DELETE', headers: { ...headers, 'Prefer': 'return=minimal' } }).catch(() => null);
+    kfsherDeleted = !!(r && r.ok);
+  }
+
+  let storageDeleted = false;
+  if (logRow.pdf_storage_path) {
+    const r = await fetch(`${url}/storage/v1/object/rota-pdfs/${logRow.pdf_storage_path}`, { method: 'DELETE', headers }).catch(() => null);
+    storageDeleted = !!(r && r.ok);
+  }
+
+  let isLastUpload = false;
+  if (specialtyKey) {
+    const remResp = await fetch(`${url}/rest/v1/upload_logs?detected_specialty=eq.${specialtyKey}&id=neq.${log_id}&select=id&limit=1`, { headers });
+    const remaining = await remResp.json();
+    isLastUpload = Array.isArray(remaining) && remaining.length === 0;
+  }
+
+  let customSpecialtyRemoved = false;
+  if (isLastUpload && specialtyKey && specialtyKey.startsWith('custom_')) {
+    const r = await fetch(`${url}/rest/v1/custom_specialties?key=eq.${specialtyKey}`, { method: 'DELETE', headers: { ...headers, 'Prefer': 'return=minimal' } }).catch(() => null);
+    customSpecialtyRemoved = !!(r && r.ok);
+  }
+
+  const logDelResp = await fetch(`${url}/rest/v1/upload_logs?id=eq.${log_id}`, { method: 'DELETE', headers: { ...headers, 'Prefer': 'return=minimal' } });
+
+  try { await fetch(`${url}/rest/v1/audit_log`, { method: 'POST', headers: { ...headers, 'Prefer': 'return=minimal' }, body: JSON.stringify({ action: customSpecialtyRemoved ? 'upload_and_specialty_deleted' : 'upload_deleted', specialty: specialtyKey, entry_id: `log_${log_id}`, old_value: logRow.filename, new_value: 'DELETED' }) }); } catch {}
+
+  return res.status(200).json({ ok: true, kfsher_deleted: kfsherDeleted, storage_deleted: storageDeleted, log_deleted: logDelResp.ok, custom_specialty_removed: customSpecialtyRemoved, was_last_upload: isLastUpload });
+}
+
+// ── Helper: upsert custom specialty ──
+async function upsertCustomSpecialty(key, displayName) {
+  const { url, headers } = getSupabase();
+  const r = await fetch(`${url}/rest/v1/custom_specialties?key=eq.${key}&select=id`, { headers });
+  const existing = await r.json();
+  if (Array.isArray(existing) && existing.length > 0) return;
+  await fetch(`${url}/rest/v1/custom_specialties`, { method: 'POST', headers: { ...headers, 'Prefer': 'return=minimal' }, body: JSON.stringify({ key, display_name: displayName }) }).catch(() => {});
 }

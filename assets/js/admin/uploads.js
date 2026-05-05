@@ -112,7 +112,8 @@ function renderLogs() {
 
     html += `<div class="upload-card-actions">`;
     if (log.pdf_url) html += `<a href="${escHtml(log.pdf_url)}" target="_blank" class="ed-action-btn">View PDF</a>`;
-    html += `<button class="ed-action-btn ed-act-del" onclick="Uploads.deleteLog(${log.id})">Delete</button>`;
+    html += `<button class="ed-action-btn upload-change-btn" data-id="${log.id}">Change</button>`;
+    html += `<button class="ed-action-btn ed-act-del upload-delete-btn" data-id="${log.id}">Delete</button>`;
     html += `</div></div>`;
   }
   el.innerHTML = html;
@@ -148,6 +149,117 @@ async function initUploads() {
   // Auto-refresh every 30s
   setInterval(loadUploads, 30000);
 }
+
+// ── Change Specialty modal ──
+function showChangeSpecialtyModal(log) {
+  const overlay = document.createElement('div');
+  overlay.className = 'detect-modal-overlay';
+  const uploadedAt = new Date(log.created_at).toLocaleString('en-GB', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+  const currentName = (window.SPECIALTY_DISPLAY_NAMES && window.SPECIALTY_DISPLAY_NAMES[log.detected_specialty]) || log.detected_specialty || 'Unknown';
+
+  overlay.innerHTML = `<div class="detect-modal">
+    <h3>Change Specialty</h3>
+    <div style="font-size:12px;color:#6b7a96;margin-bottom:12px;line-height:1.6">
+      Uploaded: <strong>${escHtml(uploadedAt)}</strong><br>Currently: <strong>${escHtml(currentName)}</strong>
+    </div>
+    <div class="detect-modal-preview">
+      ${log.pdf_url ? `<iframe src="${escHtml(log.pdf_url)}#page=1" title="PDF preview"></iframe>` : '<p style="text-align:center;padding:40px;color:#6b7a96">PDF unavailable</p>'}
+    </div>
+    <p style="font-size:13px;margin-bottom:8px;color:#fff">Change to:</p>
+    <input type="text" id="change-spec-input" placeholder="e.g. Cardiology, ENT..." autocomplete="off">
+    <div id="change-suggestions" class="detect-suggestions" style="display:none"></div>
+    <div id="change-preview" class="detect-preview"></div>
+    <div class="detect-modal-actions">
+      <button id="change-cancel" class="detect-cancel">Cancel</button>
+      <div style="flex:1"></div>
+      <button id="change-confirm" class="detect-confirm" disabled>Confirm Change</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+
+  const inp = overlay.querySelector('#change-spec-input');
+  const suggestions = overlay.querySelector('#change-suggestions');
+  const preview = overlay.querySelector('#change-preview');
+  const confirmBtn = overlay.querySelector('#change-confirm');
+  let currentMatch = null;
+  setTimeout(() => inp.focus(), 100);
+
+  inp.addEventListener('input', () => {
+    const val = inp.value.trim();
+    if (val.length < 2) { suggestions.style.display = 'none'; preview.innerHTML = ''; confirmBtn.disabled = true; currentMatch = null; return; }
+    if (typeof window.matchSpecialty !== 'function') return;
+    const result = window.matchSpecialty(val);
+    currentMatch = result;
+    if (result.matched) {
+      const name = (window.SPECIALTY_DISPLAY_NAMES && window.SPECIALTY_DISPLAY_NAMES[result.key]) || result.key;
+      preview.innerHTML = `<span style="color:#22c55e">\u2713 Will be saved as: ${escHtml(name)}</span>`;
+      confirmBtn.disabled = false;
+    } else if (result.ambiguous) {
+      preview.innerHTML = `<span style="color:#eab308">\u26A0 Multiple matches</span>`;
+      confirmBtn.disabled = true;
+    } else if (result.isNew) {
+      preview.innerHTML = `<span style="color:#3b82f6">\u2713 Will add as new: ${escHtml(val)}</span>`;
+      confirmBtn.disabled = false;
+    } else { preview.innerHTML = ''; confirmBtn.disabled = true; }
+    const matches = window.rankSpecialtySuggestions ? window.rankSpecialtySuggestions(val, 5) : [];
+    if (!matches.length) { suggestions.style.display = 'none'; }
+    else {
+      suggestions.style.display = 'block';
+      suggestions.innerHTML = matches.map(m => `<div class="suggest-item" data-name="${escHtml(m.name)}">${escHtml(m.name)}</div>`).join('');
+      suggestions.querySelectorAll('.suggest-item').forEach(item => {
+        item.addEventListener('click', () => { inp.value = item.dataset.name; suggestions.style.display = 'none'; inp.dispatchEvent(new Event('input')); inp.focus(); });
+      });
+    }
+  });
+  inp.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !confirmBtn.disabled) confirmBtn.click(); });
+  overlay.querySelector('#change-cancel').addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+  confirmBtn.addEventListener('click', async () => {
+    const val = inp.value.trim();
+    if (!val) return;
+    confirmBtn.disabled = true; confirmBtn.textContent = 'Saving...';
+    try {
+      const resp = await fetch('/api/monitoring?action=correct-specialty', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ log_id: log.id, new_specialty_input: val }),
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        preview.innerHTML = `<span style="color:#ef4444">Error: ${escHtml(err.error || 'failed')}</span>`;
+        confirmBtn.disabled = false; confirmBtn.textContent = 'Confirm Change'; return;
+      }
+      overlay.remove();
+      loadUploads();
+    } catch { preview.innerHTML = `<span style="color:#ef4444">Network error</span>`; confirmBtn.disabled = false; confirmBtn.textContent = 'Confirm Change'; }
+  });
+}
+
+// ── Smart Delete ──
+async function confirmDeleteUpload(log) {
+  const specialty = (window.SPECIALTY_DISPLAY_NAMES && window.SPECIALTY_DISPLAY_NAMES[log.detected_specialty]) || log.detected_specialty || 'Unknown';
+  const isCustom = String(log.detected_specialty || '').startsWith('custom_');
+  const willRemoveIcon = isCustom ? '\n• If this is the last upload for this specialty, the icon will be removed from the homepage' : '';
+  if (!window.confirm(`Delete this upload?\n\nFile: ${log.filename}\nSpecialty: ${specialty}\n\nThis will remove:\n• The kfsher record\n• The upload log\n• The PDF file from storage${willRemoveIcon}\n\nThis cannot be undone.`)) return;
+  try {
+    const resp = await fetch('/api/monitoring?action=delete-upload', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ log_id: log.id }),
+    });
+    if (!resp.ok) { alert('Delete failed.'); return; }
+    const data = await resp.json().catch(() => ({}));
+    if (data.custom_specialty_removed) console.log('[DELETE] Custom specialty removed from homepage');
+    loadUploads();
+  } catch (err) { alert('Network error: ' + err.message); }
+}
+
+// ── Delegated click handlers for Change/Delete ──
+document.addEventListener('click', (e) => {
+  const changeBtn = e.target.closest('.upload-change-btn');
+  if (changeBtn) { e.preventDefault(); const log = logs.find(l => String(l.id) === changeBtn.dataset.id); if (log) showChangeSpecialtyModal(log); return; }
+  const delBtn = e.target.closest('.upload-delete-btn');
+  if (delBtn) { e.preventDefault(); const log = logs.find(l => String(l.id) === delBtn.dataset.id); if (log) confirmDeleteUpload(log); return; }
+});
 
 return { initUploads, deleteLog };
 
