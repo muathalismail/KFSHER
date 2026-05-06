@@ -135,7 +135,7 @@ SPECIALTY_CONFIGS = {
         'date_pattern': re.compile(r'(\d{1,2})/(\d{1,2})/(\d{4})'),
         'day_pattern': re.compile(r'^(Sun|Mon|Tue|Wed|Thu|Fri|Sat|Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday)', re.I),
         'fallback_cols': [2, 3, 4, 5, 6, 7],
-        'min_headers': 3,
+        'min_headers': 99,  # headers span 2 rows — always use fallback
     },
     'liver': {
         'columns': ['day_coverage', 'after_duty', 'second_oncall',
