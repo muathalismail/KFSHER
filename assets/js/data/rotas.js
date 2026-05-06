@@ -1663,7 +1663,7 @@ medicine_on_call:{
     'Dr. Mahdi Alahmad':'0548377141','Mahdi Alahmad':'0548377141',
     'Marwa':'0542332175',
     'Mujtaba':'0568443393',
-    'Nasser':'0552221982',
+    'Nasser':'0552221982','Naseer':'0552221982','N.Alenezi':'0552221982','Naseer Alenezi':'0552221982',
     'Razi':'0536796768',
     'S.Alaboud':'0593122843',
     'S.Alsafar':'0549320564',
