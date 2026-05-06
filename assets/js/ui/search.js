@@ -274,8 +274,8 @@ const HOMEPAGE_LABEL_OVERRIDES = {
 
 // Visible by default (positions 1-26)
 const VISIBLE_TAG_KEYS = [
-  'medicine_on_call','hospitalist','surgery','ent','urology','orthopedics',
-  'radiology_oncall','radiology_duty','neurology','neurosurgery','spine',
+  'medicine_on_call','hospitalist','surgery','ent','urology','radiology_duty',
+  'radiology_oncall','orthopedics','neurology','neurosurgery','spine',
   'critical_care','picu','anesthesia','oncology','hematology','palliative',
   'nephrology','kptx','liver','medicine','adult_cardiology','infectious',
   'dermatology','pediatrics','pediatric_heme_onc',
