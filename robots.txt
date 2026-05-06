@@ -1,0 +1,3 @@
+User-agent: *
+Disallow: /x.html
+Disallow: /admin.html
