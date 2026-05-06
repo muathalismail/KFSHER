@@ -276,8 +276,9 @@ function resolvePhone(dept, entry) {
       }
     }
 
-    // ── Rule 5: Initial + last name pattern ("H. Barbari", "K.Albuainin") ──
-    const initialLastMatch = targetName.match(/^([A-Za-z])[\.\s]+([A-Za-z]{3,})$/);
+    // ── Rule 5: Initial + last name pattern ("H. Barbari", "Dr. A. Aldhakeel") ──
+    const drStripped = targetName.replace(/^Dr\.?\s*/i, '').trim();
+    const initialLastMatch = drStripped.match(/^([A-Za-z])[\.\s]+([A-Za-z]{3,})$/);
     if (initialLastMatch) {
       const initial = initialLastMatch[1].toLowerCase();
       const lastRaw = canonicalName(initialLastMatch[2]);

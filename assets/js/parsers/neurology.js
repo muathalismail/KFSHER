@@ -129,9 +129,20 @@ function parseNeurologyPdfEntries(text='', deptKey='neurology') {
 
     pushEntry(junior, '1st On-Call Resident');
     pushEntry(senior, '2nd On-Call Senior Resident');
-    pushEntry(doctorSegments[0] || '', 'Associate Consultant On-Call');
-    pushEntry(doctorSegments[1] || doctorSegments[0] || '', 'Consultant On-Call');
-    pushEntry(doctorSegments[2] || '', 'Stroke On-Call Consultant');
+    // Assign doctor segments by count to prevent drift when Associate cell is empty:
+    // 3 segments: Associate, Consultant, Stroke
+    // 2 segments: (no Associate), Consultant, Stroke
+    // 1 segment:  (no Associate), Consultant, (no Stroke)
+    if (doctorSegments.length >= 3) {
+      pushEntry(doctorSegments[0], 'Associate Consultant On-Call');
+      pushEntry(doctorSegments[1], 'Consultant On-Call');
+      pushEntry(doctorSegments[2], 'Stroke On-Call Consultant');
+    } else if (doctorSegments.length === 2) {
+      pushEntry(doctorSegments[0], 'Consultant On-Call');
+      pushEntry(doctorSegments[1], 'Stroke On-Call Consultant');
+    } else if (doctorSegments.length === 1) {
+      pushEntry(doctorSegments[0], 'Consultant On-Call');
+    }
   });
 
   const deduped = dedupeParsedEntries(entries);
