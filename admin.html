@@ -52,6 +52,7 @@
     <button class="tab" data-tab="editor">✏️ Editor</button>
     <button class="tab" data-tab="phones">📞 Phones</button>
     <button class="tab" data-tab="uploads">📤 Uploads</button>
+    <button class="tab" data-tab="visitors">👥 Visitors</button>
     <button class="tab" data-tab="audit">📋 Audit</button>
     <button class="tab tab-logout" id="logout-btn">🚪 Logout</button>
   </nav>
@@ -143,6 +144,16 @@
     <div id="upload-list" class="upload-list"></div>
   </div>
 
+  <!-- ── Visitors Panel ── -->
+  <div class="panel" id="panel-visitors">
+    <div class="ed-header">
+      <h3 style="margin:0">👥 Visitor Log</h3>
+      <button id="visitors-refresh" class="refresh-btn" style="width:36px;height:36px;font-size:16px" title="Refresh">⟳</button>
+    </div>
+    <div id="visitors-stats" style="font-size:13px;color:var(--muted);margin-bottom:12px"></div>
+    <div id="visitors-list" class="ed-table-wrap"></div>
+  </div>
+
   <!-- ── Audit Panel ── -->
   <div class="panel" id="panel-audit">
     <div class="panel-loading" id="audit-loading">
@@ -162,6 +173,7 @@
 <script src="assets/js/admin/editor.js"></script>
 <script src="assets/js/admin/phones.js"></script>
 <script src="assets/js/admin/uploads.js"></script>
+<script src="assets/js/admin/visitors.js"></script>
 <script src="assets/js/admin/audit.js"></script>
 <script src="assets/js/admin/app.js"></script>
 <script defer src="/_vercel/insights/script.js"></script>

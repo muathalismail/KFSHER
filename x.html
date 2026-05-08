@@ -79,12 +79,18 @@
 </div>
 <script>
 (function(){
+  function logVisit(remembered){
+    try{fetch('/api/admin?action=config').then(function(r){return r.json()}).then(function(cfg){
+      if(!cfg.supabaseUrl||!cfg.supabaseKey)return;
+      fetch(cfg.supabaseUrl+'/rest/v1/visitor_log',{method:'POST',headers:{'Content-Type':'application/json','apikey':cfg.supabaseKey,'Authorization':'Bearer '+cfg.supabaseKey,'Prefer':'return=minimal'},body:JSON.stringify({user_agent:navigator.userAgent.slice(0,200),screen_width:window.screen.width,remembered:!!remembered})});
+    });}catch(e){}
+  }
   var g=document.getElementById('site-gate');
-  if(localStorage.getItem('site_remembered')==='1'||sessionStorage.getItem('site_unlocked')==='1'){g.remove();return;}
+  if(localStorage.getItem('site_remembered')==='1'||sessionStorage.getItem('site_unlocked')==='1'){g.remove();logVisit(true);return;}
   document.getElementById('gate-submit').onclick=function(){
     var u=document.getElementById('gate-user').value.toLowerCase().trim();
     var p=document.getElementById('gate-pass').value.toLowerCase().trim();
-    if(u==='x'&&p==='x'){sessionStorage.setItem('site_unlocked','1');if(document.getElementById('gate-remember').checked)localStorage.setItem('site_remembered','1');g.remove();}
+    if(u==='x'&&p==='x'){sessionStorage.setItem('site_unlocked','1');var rem=document.getElementById('gate-remember').checked;if(rem)localStorage.setItem('site_remembered','1');g.remove();logVisit(rem);}
     else{document.getElementById('gate-error').textContent='Invalid credentials';document.getElementById('gate-pass').value='';document.getElementById('gate-pass').focus();}
   };
   document.getElementById('gate-pass').onkeydown=function(e){if(e.key==='Enter')document.getElementById('gate-submit').click();};
