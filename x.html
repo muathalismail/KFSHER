@@ -69,9 +69,10 @@
 <!-- Site access gate -->
 <div id="site-gate" style="position:fixed;inset:0;background:#0a0e1a;z-index:99999;display:flex;align-items:center;justify-content:center">
   <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:36px 32px;max-width:340px;width:90%;text-align:center">
-    <div style="font-size:13px;color:rgba(255,255,255,0.4);margin-bottom:20px;letter-spacing:2px;font-family:monospace">ACCESS</div>
+    <div style="font-size:13px;color:rgba(255,255,255,0.4);margin-bottom:20px;letter-spacing:2px;font-family:monospace">Login</div>
     <input id="gate-user" type="text" placeholder="Username" autocomplete="off" style="width:100%;padding:11px 14px;margin-bottom:10px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:#e0e8f0;font-size:15px;outline:none;font-family:inherit;box-sizing:border-box;text-align:center">
-    <input id="gate-pass" type="password" placeholder="Password" autocomplete="off" style="width:100%;padding:11px 14px;margin-bottom:14px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:#e0e8f0;font-size:15px;outline:none;font-family:inherit;box-sizing:border-box;text-align:center">
+    <input id="gate-pass" type="password" placeholder="Password" autocomplete="off" style="width:100%;padding:11px 14px;margin-bottom:10px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:#e0e8f0;font-size:15px;outline:none;font-family:inherit;box-sizing:border-box;text-align:center">
+    <label style="display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:14px;cursor:pointer;font-size:12px;color:rgba(255,255,255,0.35)"><input id="gate-remember" type="checkbox" style="accent-color:#00e5a0;cursor:pointer"> Remember me</label>
     <div id="gate-error" style="color:#ef4444;font-size:12px;min-height:18px;margin-bottom:8px"></div>
     <button id="gate-submit" style="width:100%;padding:11px;border-radius:10px;border:none;background:#00e5a0;color:#000;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit">Enter</button>
   </div>
@@ -79,11 +80,11 @@
 <script>
 (function(){
   var g=document.getElementById('site-gate');
-  if(sessionStorage.getItem('site_unlocked')==='1'){g.remove();return;}
+  if(localStorage.getItem('site_remembered')==='1'||sessionStorage.getItem('site_unlocked')==='1'){g.remove();return;}
   document.getElementById('gate-submit').onclick=function(){
     var u=document.getElementById('gate-user').value.toLowerCase().trim();
     var p=document.getElementById('gate-pass').value.toLowerCase().trim();
-    if(u==='x'&&p==='x'){sessionStorage.setItem('site_unlocked','1');g.remove();}
+    if(u==='x'&&p==='x'){sessionStorage.setItem('site_unlocked','1');if(document.getElementById('gate-remember').checked)localStorage.setItem('site_remembered','1');g.remove();}
     else{document.getElementById('gate-error').textContent='Invalid credentials';document.getElementById('gate-pass').value='';document.getElementById('gate-pass').focus();}
   };
   document.getElementById('gate-pass').onkeydown=function(e){if(e.key==='Enter')document.getElementById('gate-submit').click();};
