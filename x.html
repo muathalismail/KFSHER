@@ -90,7 +90,7 @@
   document.getElementById('gate-submit').onclick=function(){
     var u=document.getElementById('gate-user').value.toLowerCase().trim();
     var p=document.getElementById('gate-pass').value.toLowerCase().trim();
-    if(u==='x'&&p==='x'){sessionStorage.setItem('site_unlocked','1');var rem=document.getElementById('gate-remember').checked;if(rem)localStorage.setItem('site_remembered','1');g.remove();logVisit(rem);}
+    if((u==='x'&&p==='x')||(u==='a'&&p==='a')){sessionStorage.setItem('site_unlocked','1');var rem=document.getElementById('gate-remember').checked;if(rem)localStorage.setItem('site_remembered','1');g.remove();logVisit(rem);}
     else{document.getElementById('gate-error').textContent='Invalid credentials';document.getElementById('gate-pass').value='';document.getElementById('gate-pass').focus();}
   };
   document.getElementById('gate-pass').onkeydown=function(e){if(e.key==='Enter')document.getElementById('gate-submit').click();};
