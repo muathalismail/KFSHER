@@ -68,33 +68,106 @@
 <body>
 <!-- Site access gate -->
 <div id="site-gate" style="position:fixed;inset:0;background:#0a0e1a;z-index:99999;display:flex;align-items:center;justify-content:center">
-  <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:36px 32px;max-width:340px;width:90%;text-align:center">
-    <div style="font-size:13px;color:rgba(255,255,255,0.4);margin-bottom:20px;letter-spacing:2px;font-family:monospace">Login</div>
-    <input id="gate-user" type="text" placeholder="Username" autocomplete="off" style="width:100%;padding:11px 14px;margin-bottom:10px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:#e0e8f0;font-size:15px;outline:none;font-family:inherit;box-sizing:border-box;text-align:center">
-    <input id="gate-pass" type="password" placeholder="Password" autocomplete="off" style="width:100%;padding:11px 14px;margin-bottom:10px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:#e0e8f0;font-size:15px;outline:none;font-family:inherit;box-sizing:border-box;text-align:center">
-    <label style="display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:14px;cursor:pointer;font-size:12px;color:rgba(255,255,255,0.35)"><input id="gate-remember" type="checkbox" style="accent-color:#00e5a0;cursor:pointer"> Remember me</label>
-    <div id="gate-error" style="color:#ef4444;font-size:12px;min-height:18px;margin-bottom:8px"></div>
-    <button id="gate-submit" style="width:100%;padding:11px;border-radius:10px;border:none;background:#00e5a0;color:#000;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit">Enter</button>
+  <div id="gate-box" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:36px 32px;max-width:340px;width:90%;text-align:center">
+    <div id="gate-title" style="font-size:13px;color:rgba(255,255,255,0.4);margin-bottom:20px;letter-spacing:2px;font-family:monospace">Login</div>
+    <!-- Login form -->
+    <div id="login-form">
+      <input id="gate-user" type="text" placeholder="Username" autocomplete="off" style="width:100%;padding:11px 14px;margin-bottom:10px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:#e0e8f0;font-size:15px;outline:none;font-family:inherit;box-sizing:border-box;text-align:center">
+      <input id="gate-pass" type="password" placeholder="Password" autocomplete="off" style="width:100%;padding:11px 14px;margin-bottom:10px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:#e0e8f0;font-size:15px;outline:none;font-family:inherit;box-sizing:border-box;text-align:center">
+      <label style="display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:14px;cursor:pointer;font-size:12px;color:rgba(255,255,255,0.35)"><input id="gate-remember" type="checkbox" style="accent-color:#00e5a0;cursor:pointer"> Remember me</label>
+      <div id="gate-error" style="color:#ef4444;font-size:12px;min-height:18px;margin-bottom:8px"></div>
+      <button id="gate-submit" style="width:100%;padding:11px;border-radius:10px;border:none;background:#00e5a0;color:#000;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit">Enter</button>
+      <div style="margin-top:14px"><a id="show-register" href="#" style="font-size:12px;color:rgba(255,255,255,0.35);text-decoration:none">Create Account</a></div>
+    </div>
+    <!-- Register form (hidden) -->
+    <div id="register-form" style="display:none">
+      <input id="reg-email" type="email" placeholder="Email" autocomplete="off" style="width:100%;padding:11px 14px;margin-bottom:10px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:#e0e8f0;font-size:15px;outline:none;font-family:inherit;box-sizing:border-box;text-align:center">
+      <input id="reg-user" type="text" placeholder="Username" autocomplete="off" style="width:100%;padding:11px 14px;margin-bottom:10px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:#e0e8f0;font-size:15px;outline:none;font-family:inherit;box-sizing:border-box;text-align:center">
+      <input id="reg-pass" type="password" placeholder="Password" autocomplete="off" style="width:100%;padding:11px 14px;margin-bottom:10px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:#e0e8f0;font-size:15px;outline:none;font-family:inherit;box-sizing:border-box;text-align:center">
+      <input id="reg-pass2" type="password" placeholder="Confirm Password" autocomplete="off" style="width:100%;padding:11px 14px;margin-bottom:10px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:#e0e8f0;font-size:15px;outline:none;font-family:inherit;box-sizing:border-box;text-align:center">
+      <div id="reg-error" style="color:#ef4444;font-size:12px;min-height:18px;margin-bottom:8px"></div>
+      <button id="reg-submit" style="width:100%;padding:11px;border-radius:10px;border:none;background:#00e5a0;color:#000;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit">Create Account</button>
+      <div style="margin-top:14px"><a id="show-login" href="#" style="font-size:12px;color:rgba(255,255,255,0.35);text-decoration:none">Back to Login</a></div>
+    </div>
+    <!-- Pending message (hidden) -->
+    <div id="pending-msg" style="display:none">
+      <div style="font-size:40px;margin-bottom:16px">⏳</div>
+      <div style="font-size:15px;color:#e0e8f0;margin-bottom:8px">Account created successfully</div>
+      <div style="font-size:13px;color:rgba(255,255,255,0.4);line-height:1.6">Your account is waiting for admin approval.<br>You'll be able to login once approved.</div>
+      <div style="margin-top:20px"><a id="back-to-login" href="#" style="font-size:12px;color:rgba(255,255,255,0.35);text-decoration:none">Back to Login</a></div>
+    </div>
   </div>
 </div>
 <script>
 (function(){
-  function logVisit(remembered){
-    try{fetch('/api/admin?action=config').then(function(r){return r.json()}).then(function(cfg){
+  var _cfg = null;
+  function getCfg(cb){
+    if(_cfg) return cb(_cfg);
+    fetch('/api/admin?action=config').then(function(r){return r.json()}).then(function(c){_cfg=c;cb(c);}).catch(function(){});
+  }
+  function logVisit(remembered, username){
+    try{getCfg(function(cfg){
       if(!cfg.supabaseUrl||!cfg.supabaseKey)return;
-      fetch(cfg.supabaseUrl+'/rest/v1/visitor_log',{method:'POST',headers:{'Content-Type':'application/json','apikey':cfg.supabaseKey,'Authorization':'Bearer '+cfg.supabaseKey,'Prefer':'return=minimal'},body:JSON.stringify({user_agent:navigator.userAgent.slice(0,200),screen_width:window.screen.width,remembered:!!remembered})});
+      fetch(cfg.supabaseUrl+'/rest/v1/visitor_log',{method:'POST',headers:{'Content-Type':'application/json','apikey':cfg.supabaseKey,'Authorization':'Bearer '+cfg.supabaseKey,'Prefer':'return=minimal'},body:JSON.stringify({user_agent:navigator.userAgent.slice(0,200),screen_width:window.screen.width,remembered:!!remembered,username:username||null})});
     });}catch(e){}
   }
   var g=document.getElementById('site-gate');
-  if(localStorage.getItem('site_remembered')==='1'||sessionStorage.getItem('site_unlocked')==='1'){g.remove();logVisit(true);return;}
+  var savedUser=localStorage.getItem('site_remembered_user');
+  if((localStorage.getItem('site_remembered')==='1'&&savedUser)||sessionStorage.getItem('site_unlocked')==='1'){g.remove();logVisit(true,savedUser||sessionStorage.getItem('site_user'));return;}
+
+  // Toggle login/register
+  document.getElementById('show-register').onclick=function(e){e.preventDefault();document.getElementById('login-form').style.display='none';document.getElementById('register-form').style.display='block';document.getElementById('gate-title').textContent='Create Account';document.getElementById('reg-email').focus();};
+  document.getElementById('show-login').onclick=function(e){e.preventDefault();document.getElementById('register-form').style.display='none';document.getElementById('login-form').style.display='block';document.getElementById('gate-title').textContent='Login';};
+  document.getElementById('back-to-login').onclick=function(e){e.preventDefault();document.getElementById('pending-msg').style.display='none';document.getElementById('login-form').style.display='block';document.getElementById('gate-title').textContent='Login';};
+
+  // Login
   document.getElementById('gate-submit').onclick=function(){
     var u=document.getElementById('gate-user').value.toLowerCase().trim();
     var p=document.getElementById('gate-pass').value.toLowerCase().trim();
-    if((u==='x'&&p==='x')||(u==='a'&&p==='a')){sessionStorage.setItem('site_unlocked','1');var rem=document.getElementById('gate-remember').checked;if(rem)localStorage.setItem('site_remembered','1');g.remove();logVisit(rem);}
-    else{document.getElementById('gate-error').textContent='Invalid credentials';document.getElementById('gate-pass').value='';document.getElementById('gate-pass').focus();}
+    var err=document.getElementById('gate-error');
+    if(!u||!p){err.textContent='Enter username and password';return;}
+    err.textContent='';
+    getCfg(function(cfg){
+      if(!cfg.supabaseUrl||!cfg.supabaseKey){err.textContent='System error';return;}
+      fetch(cfg.supabaseUrl+'/rest/v1/site_users?username=eq.'+encodeURIComponent(u)+'&password=eq.'+encodeURIComponent(p)+'&is_active=eq.true&select=username,is_approved',{headers:{'apikey':cfg.supabaseKey,'Authorization':'Bearer '+cfg.supabaseKey}})
+      .then(function(r){return r.json()}).then(function(rows){
+        if(!rows||!rows.length){err.textContent='Invalid credentials';document.getElementById('gate-pass').value='';document.getElementById('gate-pass').focus();return;}
+        if(!rows[0].is_approved){err.textContent='Account pending approval';return;}
+        sessionStorage.setItem('site_unlocked','1');sessionStorage.setItem('site_user',u);
+        var rem=document.getElementById('gate-remember').checked;
+        if(rem){localStorage.setItem('site_remembered','1');localStorage.setItem('site_remembered_user',u);}
+        g.remove();logVisit(rem,u);
+      }).catch(function(){err.textContent='Connection error';});
+    });
   };
+
+  // Register
+  document.getElementById('reg-submit').onclick=function(){
+    var email=document.getElementById('reg-email').value.trim();
+    var u=document.getElementById('reg-user').value.toLowerCase().trim();
+    var p=document.getElementById('reg-pass').value.trim();
+    var p2=document.getElementById('reg-pass2').value.trim();
+    var err=document.getElementById('reg-error');
+    if(!email||!u||!p){err.textContent='All fields are required';return;}
+    if(!/^[^@]+@[^@]+\.[^@]+$/.test(email)){err.textContent='Invalid email';return;}
+    if(u.length<2){err.textContent='Username must be at least 2 characters';return;}
+    if(p.length<1){err.textContent='Password is required';return;}
+    if(p!==p2){err.textContent='Passwords do not match';return;}
+    err.textContent='';
+    getCfg(function(cfg){
+      if(!cfg.supabaseUrl||!cfg.supabaseKey){err.textContent='System error';return;}
+      fetch(cfg.supabaseUrl+'/rest/v1/site_users',{method:'POST',headers:{'Content-Type':'application/json','apikey':cfg.supabaseKey,'Authorization':'Bearer '+cfg.supabaseKey,'Prefer':'return=minimal'},body:JSON.stringify({username:u,password:p.toLowerCase(),email:email,is_approved:false})})
+      .then(function(r){
+        if(r.status===409||r.status===400){err.textContent='Username already taken';return;}
+        if(!r.ok){err.textContent='Error creating account';return;}
+        document.getElementById('register-form').style.display='none';document.getElementById('pending-msg').style.display='block';document.getElementById('gate-title').textContent='';
+      }).catch(function(){err.textContent='Connection error';});
+    });
+  };
+
   document.getElementById('gate-pass').onkeydown=function(e){if(e.key==='Enter')document.getElementById('gate-submit').click();};
   document.getElementById('gate-user').onkeydown=function(e){if(e.key==='Enter')document.getElementById('gate-pass').focus();};
+  document.getElementById('reg-pass2').onkeydown=function(e){if(e.key==='Enter')document.getElementById('reg-submit').click();};
   setTimeout(function(){document.getElementById('gate-user').focus();},100);
 })();
 </script>
