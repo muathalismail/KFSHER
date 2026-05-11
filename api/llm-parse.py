@@ -334,12 +334,14 @@ def resolve_names(specialty, schedule_rows, contacts, positions=None):
         return None
 
     # For medicine_on_call: enrich contact lines with position (Resident 3, etc.)
+    print(f'[LLM-DEBUG] specialty={specialty}, positions_received={positions is not None}, positions_count={len(positions) if positions else 0}')
     if specialty == 'medicine_on_call' and positions:
+        print(f'[LLM-DEBUG] ENRICHING contact_lines with {len(positions)} positions')
         lines = []
+        matched_count = 0
         for name, phone in contacts.items():
             if not phone:
                 continue
-            # Find position by matching contact name against positions keys
             pos = None
             name_lower = name.lower().strip()
             for pos_name, pos_level in positions.items():
@@ -347,11 +349,18 @@ def resolve_names(specialty, schedule_rows, contacts, positions=None):
                     pos = pos_level
                     break
             if pos:
+                matched_count += 1
                 lines.append(f'- {name} ({pos}): {phone}')
             else:
                 lines.append(f'- {name}: {phone}')
         contact_lines = '\n'.join(lines) or '(no contacts extracted)'
+        # Log Sara specifically
+        sara_lines = [l for l in lines if 'sara' in l.lower()]
+        print(f'[LLM-DEBUG] Matched {matched_count}/{len(contacts)} contacts with positions')
+        print(f'[LLM-DEBUG] Sara lines: {sara_lines}')
     else:
+        if specialty == 'medicine_on_call':
+            print(f'[LLM-DEBUG] WARNING: medicine_on_call but positions is {type(positions).__name__}: {positions}')
         contact_lines = '\n'.join(
             f'- {name}: {phone}' for name, phone in contacts.items() if phone
         ) or '(no contacts extracted)'
