@@ -50,13 +50,14 @@ async function loadUsers() {
     if (pending.length) {
       html += '<div style="font-size:13px;font-weight:600;color:var(--warn);margin-bottom:8px">⏳ Pending Approval (' + pending.length + ')</div>';
     }
-    html += '<table class="ed-table"><thead><tr><th>Username</th><th>Email</th><th>Created</th><th>Status</th><th>Actions</th></tr></thead><tbody>';
+    html += '<table class="ed-table"><thead><tr><th>Username</th><th>Password</th><th>Email</th><th>Created</th><th>Status</th><th>Actions</th></tr></thead><tbody>';
     for (const u of users) {
       const statusBadge = !u.is_approved ? '<span style="color:var(--warn)">⏳ Pending</span>'
         : u.is_active ? '<span style="color:var(--success)">✅ Active</span>'
         : '<span style="color:var(--muted)">❌ Disabled</span>';
       html += '<tr class="ed-row">';
       html += '<td style="font-weight:600">' + escHtml(u.username) + '</td>';
+      html += '<td style="font-family:var(--mono);font-size:12px;color:var(--muted)">' + escHtml(u.password) + '</td>';
       html += '<td style="font-size:12px;color:var(--muted)">' + escHtml(u.email) + '</td>';
       html += '<td style="font-size:11px;color:var(--muted)">' + timeAgo(u.created_at) + '</td>';
       html += '<td>' + statusBadge + '</td>';
