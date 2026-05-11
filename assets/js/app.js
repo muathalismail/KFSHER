@@ -1959,18 +1959,26 @@ async function parseUploadedPdf(file, deptKey) {
   // so we can overlap the two operations to save 200-800ms.
   // Only extract contacts for specialties that use Claude API for name resolution
   const _needsContacts = ['medicine_on_call','surgery','pediatrics','radiology_oncall','hospitalist'].includes(deptKey);
+  let _positionsMap = null; // medicine_on_call only: {name: "Resident 3"}
   const serverContactsPromise = _needsContacts ? (async () => {
     try {
       const buffer = await file.arrayBuffer();
       const b64 = btoa(new Uint8Array(buffer).reduce((s, b) => s + String.fromCharCode(b), ''));
+      const includePositions = deptKey === 'medicine_on_call';
       const resp = await fetch('/api/extract-contacts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pdf_base64: b64 }),
+        body: JSON.stringify({ pdf_base64: b64, include_positions: includePositions }),
       });
       if (resp.ok) {
-        const serverContacts = await resp.json();
-        if (serverContacts && !serverContacts.error) return serverContacts;
+        const result = await resp.json();
+        if (result && !result.error) {
+          if (includePositions && result.contacts) {
+            _positionsMap = result.positions || null;
+            return result.contacts;
+          }
+          return result;
+        }
       }
     } catch (err) {
       console.warn('[SERVER] Contact extraction failed, using client-side:', err.message);
@@ -2012,7 +2020,7 @@ async function parseUploadedPdf(file, deptKey) {
               const llmResp = await fetch('/api/llm-parse', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ specialty: 'medicine_on_call', schedule_rows: rows, contacts, pdf_hash: pdfHash }),
+                body: JSON.stringify({ specialty: 'medicine_on_call', schedule_rows: rows, contacts, positions: _positionsMap, pdf_hash: pdfHash }),
               });
               if (llmResp.ok) {
                 const llmData = await llmResp.json();

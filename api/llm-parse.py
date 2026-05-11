@@ -13,7 +13,7 @@ import json, os, re, urllib.request, urllib.error
 # CACHE (medicine_on_call only)
 # ═══════════════════════════════════════════════════════════════
 
-CACHE_VERSION = 'v1.3'
+CACHE_VERSION = 'v1.4'
 CACHE_TTL_DAYS = 30
 
 def _cache_enabled():
@@ -320,7 +320,7 @@ SPECIALTY_CONFIGS['hospitalist'] = {
 # CORE: resolve names via Claude
 # ═══════════════════════════════════════════════════════════════
 
-def resolve_names(specialty, schedule_rows, contacts):
+def resolve_names(specialty, schedule_rows, contacts, positions=None):
     """Call Claude Haiku to resolve abbreviated names. Routes by specialty."""
     import anthropic
 
@@ -333,9 +333,28 @@ def resolve_names(specialty, schedule_rows, contacts):
         print(f'[LLM] Unknown specialty: {specialty}')
         return None
 
-    contact_lines = '\n'.join(
-        f'- {name}: {phone}' for name, phone in contacts.items() if phone
-    ) or '(no contacts extracted)'
+    # For medicine_on_call: enrich contact lines with position (Resident 3, etc.)
+    if specialty == 'medicine_on_call' and positions:
+        lines = []
+        for name, phone in contacts.items():
+            if not phone:
+                continue
+            # Find position by matching contact name against positions keys
+            pos = None
+            name_lower = name.lower().strip()
+            for pos_name, pos_level in positions.items():
+                if pos_name.lower().strip() == name_lower or name_lower.endswith(pos_name.lower().strip()):
+                    pos = pos_level
+                    break
+            if pos:
+                lines.append(f'- {name} ({pos}): {phone}')
+            else:
+                lines.append(f'- {name}: {phone}')
+        contact_lines = '\n'.join(lines) or '(no contacts extracted)'
+    else:
+        contact_lines = '\n'.join(
+            f'- {name}: {phone}' for name, phone in contacts.items() if phone
+        ) or '(no contacts extracted)'
 
     client = anthropic.Anthropic(api_key=api_key)
     all_resolved = []
@@ -381,6 +400,7 @@ class handler(BaseHTTPRequestHandler):
             specialty = body.get('specialty', '')
             schedule_rows = body.get('schedule_rows', [])
             contacts = body.get('contacts', {})
+            positions = body.get('positions', None)
             file_hash = body.get('pdf_hash', '')
             force = body.get('force', False)
 
@@ -404,7 +424,7 @@ class handler(BaseHTTPRequestHandler):
                     self.wfile.write(json.dumps({'rows': cached, '_fromCache': True}).encode())
                     return
 
-            result = resolve_names(specialty, schedule_rows, contacts)
+            result = resolve_names(specialty, schedule_rows, contacts, positions=positions)
 
             if result is None:
                 self.send_response(503)

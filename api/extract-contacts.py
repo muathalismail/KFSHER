@@ -130,12 +130,38 @@ def extract_contacts(pdf_bytes):
     return contacts
 
 
+def extract_positions(pdf_bytes):
+    """Extract name→position map (e.g., 'Sara Alaboud' → 'Resident 3').
+    Used by medicine_on_call LLM prompt to disambiguate bare first names by seniority."""
+    import pdfplumber
+    positions = {}
+    position_re = re.compile(r'\b(Resident|Consultant|Fellow)\s*(\d?)\b', re.I)
+    with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+        for page in pdf.pages:
+            text = page.extract_text() or ''
+            for line in text.split('\n'):
+                pos_match = position_re.search(line)
+                if not pos_match:
+                    continue
+                name_part = line[:pos_match.start()].strip()
+                name_part = re.sub(r'^\d+\s*', '', name_part)  # strip leading number
+                name_part = re.sub(r'^\s*Dr\.?\s*', '', name_part).strip()
+                name_part = re.sub(r'\s*\([^)]*\)\s*', ' ', name_part).strip()  # strip (N) or (R)
+                name_part = re.sub(r'\s+', ' ', name_part).strip()
+                if not name_part or len(name_part) < 3:
+                    continue
+                level = pos_match.group(0).strip()
+                positions[name_part] = level
+    return positions
+
+
 class handler(BaseHTTPRequestHandler):
     def do_POST(self):
         try:
             content_length = int(self.headers.get('Content-Length', 0))
             body = json.loads(self.rfile.read(content_length))
             pdf_base64 = body.get('pdf_base64', '')
+            include_positions = body.get('include_positions', False)
 
             if not pdf_base64:
                 self.send_response(400)
@@ -147,11 +173,16 @@ class handler(BaseHTTPRequestHandler):
             pdf_bytes = base64.b64decode(pdf_base64)
             contacts = extract_contacts(pdf_bytes)
 
+            result = contacts
+            if include_positions:
+                positions = extract_positions(pdf_bytes)
+                result = {'contacts': contacts, 'positions': positions}
+
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
             self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
-            self.wfile.write(json.dumps(contacts).encode())
+            self.wfile.write(json.dumps(result).encode())
         except Exception as e:
             self.send_response(500)
             self.send_header('Content-Type', 'application/json')
