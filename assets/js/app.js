@@ -2015,11 +2015,8 @@ async function parseUploadedPdf(file, deptKey) {
           console.log(`[MEDICINE_ONCALL] Server extracted ${rows.length} schedule rows`);
           // Use Claude API to resolve abbreviated names against the contact list
           const contacts = await serverContactsPromise.catch(() => null);
-          console.log('[DEBUG] _positionsMap:', _positionsMap ? Object.keys(_positionsMap).length + ' entries' : 'NULL');
-          if (_positionsMap) { const saraPos = Object.entries(_positionsMap).filter(([k]) => k.toLowerCase().includes('sara')); console.log('[DEBUG] Sara positions:', JSON.stringify(saraPos)); }
           if (contacts && Object.keys(contacts).length && !window._skipLlmCalls) {
             try {
-              console.log('[DEBUG] Sending to LLM with positions:', _positionsMap ? 'YES (' + Object.keys(_positionsMap).length + ')' : 'NO (null)');
               const llmResp = await fetch('/api/llm-parse', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

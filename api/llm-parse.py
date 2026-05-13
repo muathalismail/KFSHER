@@ -105,6 +105,9 @@ Seniority mapping (use the Resident level shown in the contact list to disambigu
 - Example: "H.Barbari" → Dr. Hassan Sh. Albarbari (phone 0569021663). Do NOT confuse with Hassan Buhmood (different person, different phone).
 - Example: "A.Almajid" → Dr. Ali Nizar Almajid (0549283986). Do NOT confuse with Dr. Ali Alsughir (0561215077) or Dr. Ali Abdulgani Bin Abdi (0536555977). Match by LAST NAME, not just initial.
 - Example: "Nasser" or "Naseer" in sr_day/sr_night → Dr. Naseer Alenezi (0552221982). Do NOT confuse with Ali Alnasser (different person, different department).
+- Example: "Sara" in sr_day/sr_night → Dr. Sara Alaboud (Resident 3, 0593122843). Do NOT use Sara Alsaffar (Resident 1) — R1 cannot staff Senior columns.
+- Example: "Maha" in sr_day/sr_night → Dr. Maha F. Alblaies (Resident 4, 0561632377). Senior columns MUST be Resident 3 or 4.
+- CRITICAL: When a bare first name appears in sr_day or sr_night, ALWAYS check the Resident level. Pick R3/R4, NEVER R1/R2.
 
 Data:
 {schedule_lines}
@@ -143,7 +146,7 @@ SPECIALTY_CONFIGS['medicine_on_call'] = {
     'prompt': _medicine_prompt,
     'format_row': _medicine_format_row,
     'batch_size': 7,
-    'use_cache': True,
+    'use_cache': False,  # Disabled: too many name collisions (Sara, Ali, Hassan) need fresh resolution with positions data
 }
 
 # ── SURGERY ───────────────────────────────────────────────────
@@ -334,11 +337,8 @@ def resolve_names(specialty, schedule_rows, contacts, positions=None):
         return None
 
     # For medicine_on_call: enrich contact lines with position (Resident 3, etc.)
-    print(f'[LLM-DEBUG] specialty={specialty}, positions_received={positions is not None}, positions_count={len(positions) if positions else 0}')
     if specialty == 'medicine_on_call' and positions:
-        print(f'[LLM-DEBUG] ENRICHING contact_lines with {len(positions)} positions')
         lines = []
-        matched_count = 0
         for name, phone in contacts.items():
             if not phone:
                 continue
@@ -349,18 +349,11 @@ def resolve_names(specialty, schedule_rows, contacts, positions=None):
                     pos = pos_level
                     break
             if pos:
-                matched_count += 1
                 lines.append(f'- {name} ({pos}): {phone}')
             else:
                 lines.append(f'- {name}: {phone}')
         contact_lines = '\n'.join(lines) or '(no contacts extracted)'
-        # Log Sara specifically
-        sara_lines = [l for l in lines if 'sara' in l.lower()]
-        print(f'[LLM-DEBUG] Matched {matched_count}/{len(contacts)} contacts with positions')
-        print(f'[LLM-DEBUG] Sara lines: {sara_lines}')
     else:
-        if specialty == 'medicine_on_call':
-            print(f'[LLM-DEBUG] WARNING: medicine_on_call but positions is {type(positions).__name__}: {positions}')
         contact_lines = '\n'.join(
             f'- {name}: {phone}' for name, phone in contacts.items() if phone
         ) or '(no contacts extracted)'
